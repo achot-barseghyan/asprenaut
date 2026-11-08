@@ -18,6 +18,8 @@ public sealed class EcranDepart : EcranScanBase
     private readonly Pastille _compte = Compteur(Theme.Depart, Theme.DepartClair);
     private readonly ListeMateriel _liste = new(StyleListe.Depart, "Rien n'est encore scanné. Scannez la première étiquette.");
     private readonly BoutonArrondi _valider = new("Valider le départ", StyleBouton.Depart, Icones.Coche, iconeApres: true);
+    private readonly FiltreCategories _filtre = new(Theme.AccentClair) { Margin = new Padding(0, 0, 0, 10) };
+    private IReadOnlyList<LigneSortie> _lignes = [];
     private StatutSortie _statut;
 
     public EcranDepart(ServiceSortie sorties, ServiceScan scan, IHorloge horloge, ServiceReglages reglages, INavigation navigation)
@@ -30,6 +32,7 @@ public sealed class EcranDepart : EcranScanBase
         _valider.Font = Theme.PoliceGrasse(12f);
         _valider.Margin = new Padding(0, 12, 0, 0);
         _valider.Click += (_, _) => Executer(ValiderAsync);
+        _filtre.Changement += (_, _) => AfficherListe();
 
         var gauche = Ui.Colonne(
             (ZoneScan, SizeType.Percent, 100),
@@ -40,6 +43,7 @@ public sealed class EcranDepart : EcranScanBase
         var carteListe = new Carte();
         carteListe.Controls.Add(Ui.Colonne(
             (EnteteListe(Ui.TitreCarte("Matériel de la sortie"), _compte), SizeType.Absolute, HauteurEnteteListe),
+            (_filtre, SizeType.Absolute, 44 + 10),
             (_liste, SizeType.Percent, 100),
             (_valider, SizeType.Absolute, 56 + 12)));
 
@@ -62,9 +66,27 @@ public sealed class EcranDepart : EcranScanBase
         _valider.Style = enPreparation ? StyleBouton.Depart : StyleBouton.Retour;
         _valider.Visible = _statut != StatutSortie.Cloturee;
 
+        _lignes = lignes;
+        _filtre.Afficher(lignes.Count, Categories(lignes, l => true));
+        AfficherListe();
+    }
+
+    /// <summary>Catégories présentes dans la sortie (ordre alphabétique), avec le nombre d'équipements retenus.</summary>
+    internal static IEnumerable<(string, int)> Categories(IEnumerable<LigneSortie> lignes, Func<LigneSortie, bool> compte) =>
+        lignes.GroupBy(l => l.Categorie)
+            .OrderBy(g => g.Key, StringComparer.Create(Libelles.Culture, true))
+            .Select(g => (g.Key, g.Count(compte)));
+
+    private void AfficherListe()
+    {
+        var enPreparation = _statut == StatutSortie.EnPreparation;
         var aujourdHui = _horloge.AujourdHui;
+        _liste.DefinirVide(_filtre.Selection is null
+            ? "Rien n'est encore scanné. Scannez la première étiquette."
+            : "Rien dans cette catégorie.");
         _liste.Afficher(
-            lignes
+            _lignes
+                .Where(l => _filtre.Accepte(l.Categorie))
                 .OrderByDescending(l => l.ScanneDepartLe)
                 .Select(l => new ElementMateriel(
                     l.EquipementId,

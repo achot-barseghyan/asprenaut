@@ -44,6 +44,10 @@ public sealed class ListeMateriel : FlowLayoutPanel
         Natif.ScrollbarsSombres(this);
     }
 
+    /// <summary>Change le message affiché quand la liste est vide (par exemple quand un filtre est actif).</summary>
+    public void DefinirVide(string texte, string? icone = null, Color? couleur = null) =>
+        _vide.Definir(texte, icone, couleur ?? Theme.TexteSecondaire);
+
     /// <summary>Nombre de lignes affichées.</summary>
     public int Nombre => Controls.Count - 1;
 
@@ -95,15 +99,18 @@ public sealed class ListeMateriel : FlowLayoutPanel
     /// <summary>État vide : pictogramme facultatif et texte centrés.</summary>
     private sealed class VideListe : ControleDessine
     {
-        private readonly string? _icone;
-        private readonly Color _couleur;
+        private string? _icone;
+        private Color _couleur;
 
-        public VideListe(string texte, string? icone, Color couleur)
+        public VideListe(string texte, string? icone, Color couleur) => Definir(texte, icone, couleur);
+
+        public void Definir(string texte, string? icone, Color couleur)
         {
             Text = texte;
             AccessibleName = texte;
             _icone = icone;
             _couleur = couleur;
+            Invalidate();
         }
 
         protected override void Peindre(Graphics g)

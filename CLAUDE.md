@@ -56,7 +56,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   `IndicateurEtapes`, `PastilleDate`, `Pastille`, `Picto`, `GrilleAdaptative` (colonnes auto, ajuste sa ligne de TableLayoutPanel),
   `Tuile`, `FilAriane`, `BarreRecherche`, `ChampSaisie`, `ChampDate` (remplace le DateTimePicker, blanc et en anglais),
   `ListeDeroulante`, `ListeMateriel` (styles Depart / ARendre / Rendu), `ScanInput` + `BandeauMessage`, `BandeauAccueil`,
-  `Logo`, `CarteScanner`, `Tableaux` (pastilles et pictogrammes dans les DataGridView).
+  `Logo`, `CarteScanner`, `Tableaux`, `FiltreCategories` (puces « Tout 12 / Blocs 3 » des listes Départ et Retour) (pastilles et pictogrammes dans les DataGridView).
 - **Pictogrammes** : `Apparence/Icones.cs`, chemins SVG 24 × 24 de la maquette lus par `CheminSvg` et tracés en GDI+.
 
 ## Règles métier (chacune a au moins un test dans Core.Tests)

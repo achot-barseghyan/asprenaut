@@ -21,6 +21,8 @@ public sealed class EcranRetour : EcranScanBase
     private readonly Pastille _compteRendu = Compteur(Theme.Retour, Theme.Retour);
     private readonly ListeMateriel _aRendre = new(StyleListe.ARendre, "Tout le matériel est rentré", Icones.CercleCoche, Theme.Retour);
     private readonly ListeMateriel _rendu = new(StyleListe.Rendu, "Rien n'est encore rendu.");
+    private readonly FiltreCategories _filtre = new(Theme.Depart, "Type") { Margin = new Padding(0, 0, 0, 12) };
+    private IReadOnlyList<LigneSortie> _lignes = [];
 
     public EcranRetour(ServiceSortie sorties, ServiceScan scan, ServiceReglages reglages, INavigation navigation)
         : base(navigation, reglages, ModeScan.Retour)
@@ -83,7 +85,9 @@ public sealed class EcranRetour : EcranScanBase
         carteRendu.Controls.Add(Ui.Colonne(
             (EnteteListe(Ui.TitreCarte("Rendu"), _compteRendu), SizeType.Absolute, HauteurEnteteListe),
             (_rendu, SizeType.Percent, 100)));
-        var droite = Ui.Colonnes((carteARendre, SizeType.Percent, 50), (carteRendu, SizeType.Percent, 50));
+        var cartes = Ui.Colonnes((carteARendre, SizeType.Percent, 50), (carteRendu, SizeType.Percent, 50));
+        _filtre.Changement += (_, _) => AfficherListes();
+        var droite = Ui.Colonne((_filtre, SizeType.Absolute, 44 + 12), (cartes, SizeType.Percent, 100));
 
         Composer(Ui.Colonnes((gauche, SizeType.Percent, 40), (droite, SizeType.Percent, 60)));
     }
@@ -117,8 +121,30 @@ public sealed class EcranRetour : EcranScanBase
                 ? "Tout est rentré. Vous pouvez clôturer la sortie."
                 : $"{Libelles.Pluriel(resume.NbDehors, "équipement")} {(resume.NbDehors > 1 ? "seront notés manquants" : "sera noté manquant")} si vous clôturez maintenant.";
 
+        // Puces « Type » : toutes les catégories de la sortie, comptées sur le matériel encore à rendre.
+        _lignes = lignes;
+        _filtre.Afficher(aRendre.Count, EcranDepart.Categories(lignes, l => l.Statut != StatutSortieEquipement.Rendu));
+        AfficherListes();
+    }
+
+    private void AfficherListes()
+    {
+        var aRendre = _lignes.Where(l => l.Statut != StatutSortieEquipement.Rendu && _filtre.Accepte(l.Categorie)).ToList();
+        var rendus = _lignes.Where(l => l.Statut == StatutSortieEquipement.Rendu && _filtre.Accepte(l.Categorie))
+            .OrderByDescending(l => l.ScanneRetourLe).ToList();
         _compteARendre.Text = aRendre.Count.ToString(Libelles.Culture);
         _compteRendu.Text = rendus.Count.ToString(Libelles.Culture);
+
+        if (_filtre.Selection is null)
+        {
+            _aRendre.DefinirVide("Tout le matériel est rentré", Icones.CercleCoche, Theme.Retour);
+            _rendu.DefinirVide("Rien n'est encore rendu.");
+        }
+        else
+        {
+            _aRendre.DefinirVide("Rien à rendre dans cette catégorie", Icones.CercleCoche, Theme.Retour);
+            _rendu.DefinirVide("Rien de rendu dans cette catégorie.");
+        }
 
         _aRendre.Afficher(aRendre.Select(l => new ElementMateriel(
             l.EquipementId,
