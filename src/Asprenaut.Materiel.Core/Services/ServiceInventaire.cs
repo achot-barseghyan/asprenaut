@@ -10,8 +10,29 @@ public sealed class ServiceInventaire(
     IEquipementRepository equipements,
     ICategorieRepository categories,
     IJournalRepository journal,
-    IHorloge horloge)
+    IHorloge horloge,
+    Reglages reglages)
 {
+    /// <summary>
+    /// Révision dépassée, proche (dans <see cref="Reglages.JoursAvantRevision"/> jours) ou à jour.
+    /// Sert au badge jaune / rouge de l'inventaire.
+    /// </summary>
+    public EtatRevision EtatDeRevision(DateOnly? prochaineRevision)
+    {
+        if (prochaineRevision is not { } date)
+        {
+            return EtatRevision.AJour;
+        }
+
+        var aujourdHui = horloge.AujourdHui;
+        if (date < aujourdHui)
+        {
+            return EtatRevision.Depassee;
+        }
+
+        return date <= aujourdHui.AddDays(reglages.JoursAvantRevision) ? EtatRevision.Proche : EtatRevision.AJour;
+    }
+
     public Task<IReadOnlyList<Categorie>> ListerCategoriesAsync(CancellationToken ct = default) =>
         categories.ListerAsync(ct);
 
@@ -21,7 +42,7 @@ public sealed class ServiceInventaire(
     /// <summary>Crée un équipement (par exemple après le scan d'un code inconnu).</summary>
     public async Task<ResultatOperation> CreerAsync(Equipement nouveau, CancellationToken ct = default)
     {
-        var code = CodeScanne.Nettoyer(nouveau.Code);
+        var code = CodeScanne.Nettoyer(nouveau.Code, reglages.PrefixeEtiquette);
         if (code.Length == 0)
         {
             return ResultatOperation.Echec("Indiquez un code.");

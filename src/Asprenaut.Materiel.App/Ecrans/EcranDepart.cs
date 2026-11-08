@@ -20,8 +20,8 @@ public sealed class EcranDepart : EcranScanBase
     private readonly BoutonArrondi _valider = new("Valider le départ", StyleBouton.Depart, Icones.Coche, iconeApres: true);
     private StatutSortie _statut;
 
-    public EcranDepart(ServiceSortie sorties, ServiceScan scan, IHorloge horloge, INavigation navigation)
-        : base(navigation, ModeScan.Depart)
+    public EcranDepart(ServiceSortie sorties, ServiceScan scan, IHorloge horloge, ServiceReglages reglages, INavigation navigation)
+        : base(navigation, reglages, ModeScan.Depart)
     {
         _sorties = sorties;
         _scan = scan;

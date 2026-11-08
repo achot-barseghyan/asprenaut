@@ -118,7 +118,7 @@ public sealed class EcranSorties : EcranBase
 
         foreach (var sortie in enCours)
         {
-            var carte = new CarteSortie(sortie);
+            var carte = new CarteSortie(sortie, _sorties.EstEnRetard(sortie));
             carte.Ouvrir += (_, _) =>
             {
                 if (sortie.Statut == StatutSortie.EnPreparation)
@@ -170,10 +170,16 @@ public sealed class EcranSorties : EcranBase
     /// <summary>Carte d'une sortie en préparation ou en cours.</summary>
     private sealed class CarteSortie : Carte
     {
-        public CarteSortie(SortieResume s)
+        public CarteSortie(SortieResume s, bool enRetard)
         {
             Padding = new Padding(24, 22, 24, 22);
-            AccessibleName = s.Intitule;
+            AccessibleName = enRetard ? $"{s.Intitule}, en retard" : s.Intitule;
+            if (enRetard)
+            {
+                // Réglage « Alerte si non rendu après N jours » : la carte passe en orange.
+                CouleurBordure = Theme.Depart;
+                BackColor = Theme.Teinte(Theme.Depart, 0.06f);
+            }
 
             var enPreparation = s.Statut == StatutSortie.EnPreparation;
             var date = new PastilleDate { Date = s.DateSortie };
@@ -220,7 +226,13 @@ public sealed class EcranSorties : EcranBase
 
             var etat = enPreparation
                 ? new Pastille("En préparation", Theme.Teinte(Theme.Depart, 0.10f), Theme.Depart, Theme.Depart, Theme.PoliceTitre(9.75f), 38)
-                : new Pastille($"{s.NbTotal - s.NbRendus} à rendre", Theme.Teinte(Theme.Depart, 0.10f), Theme.Depart, Theme.Depart, Theme.PoliceTitre(9.75f), 38);
+                : new Pastille(
+                    enRetard ? $"En retard · {s.NbTotal - s.NbRendus} à rendre" : $"{s.NbTotal - s.NbRendus} à rendre",
+                    Theme.Teinte(Theme.Depart, enRetard ? 0.22f : 0.10f),
+                    enRetard ? Theme.DepartClair : Theme.Depart,
+                    Theme.Depart,
+                    Theme.PoliceTitre(9.75f),
+                    38);
             var bouton = enPreparation
                 ? new BoutonArrondi("Continuer le départ", StyleBouton.Depart, Icones.Fleche, iconeApres: true)
                 : new BoutonArrondi("Scanner le retour", StyleBouton.Retour, Icones.Fleche, iconeApres: true);

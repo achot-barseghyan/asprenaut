@@ -13,6 +13,10 @@ public sealed class Contexte
     public ServiceScan Scan { get; }
     public ServiceSortie Sorties { get; }
     public ServiceInventaire Inventaire { get; }
+    public ServiceReglages ServiceReglages { get; }
+    public Reglages Reglages { get; } = new();
+    public StockageReglagesMemoire Stockage { get; } = new();
+    public SauvegardeFactice Sauvegardes { get; } = new();
     public Moniteur Pascal { get; }
 
     public Contexte()
@@ -21,9 +25,10 @@ public sealed class Contexte
         var sorties = new SortieRepositoryMemoire(Db);
         var journal = new JournalRepositoryMemoire(Db);
         var moniteurs = new MoniteurRepositoryMemoire(Db);
-        Scan = new ServiceScan(equipements, sorties, journal, Horloge);
-        Sorties = new ServiceSortie(sorties, moniteurs, journal, Horloge);
-        Inventaire = new ServiceInventaire(equipements, new CategorieRepositoryMemoire(Db), journal, Horloge);
+        Scan = new ServiceScan(equipements, sorties, journal, Horloge, Reglages);
+        Sorties = new ServiceSortie(sorties, moniteurs, journal, Horloge, Reglages);
+        Inventaire = new ServiceInventaire(equipements, new CategorieRepositoryMemoire(Db), journal, Horloge, Reglages);
+        ServiceReglages = new ServiceReglages(Reglages, Stockage, Sauvegardes);
 
         Db.Categories.Add(new Categorie { Id = Db.ProchainId(), Nom = "Blocs" });
         Pascal = new Moniteur { Id = Db.ProchainId(), Prenom = "Pascal", Nom = "Martin", Actif = true };

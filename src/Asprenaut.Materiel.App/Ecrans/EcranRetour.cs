@@ -22,8 +22,8 @@ public sealed class EcranRetour : EcranScanBase
     private readonly ListeMateriel _aRendre = new(StyleListe.ARendre, "Tout le matériel est rentré", Icones.CercleCoche, Theme.Retour);
     private readonly ListeMateriel _rendu = new(StyleListe.Rendu, "Rien n'est encore rendu.");
 
-    public EcranRetour(ServiceSortie sorties, ServiceScan scan, INavigation navigation)
-        : base(navigation, ModeScan.Retour)
+    public EcranRetour(ServiceSortie sorties, ServiceScan scan, ServiceReglages reglages, INavigation navigation)
+        : base(navigation, reglages, ModeScan.Retour)
     {
         _sorties = sorties;
         _scan = scan;
@@ -152,7 +152,7 @@ public sealed class EcranRetour : EcranScanBase
     private async Task CloturerAsync()
     {
         var apercu = await _sorties.ApercuClotureAsync(SortieId);
-        if (!Dialogues.Confirmer(FindForm(), apercu.MessageConfirmation))
+        if (apercu.ConfirmationNecessaire && !Dialogues.Confirmer(FindForm(), apercu.MessageConfirmation))
         {
             return;
         }

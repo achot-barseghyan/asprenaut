@@ -54,4 +54,5 @@ public sealed record ResultatOperation(bool Reussi, string Message, long? Id = n
 }
 
 /// <summary>Ce que la clôture va provoquer, pour la confirmation.</summary>
-public sealed record ApercuCloture(int NbManquants, string MessageConfirmation);
+/// <param name="ConfirmationNecessaire">Demander confirmation avant de clôturer (réglage activé et matériel encore dehors).</param>
+public sealed record ApercuCloture(int NbManquants, string MessageConfirmation, bool ConfirmationNecessaire);

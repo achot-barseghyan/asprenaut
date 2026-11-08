@@ -16,11 +16,18 @@ internal static class Program
         ApplicationConfiguration.Initialize();
         Erreurs.Installer();
 
-        var parametres = ParametresApplication.Charger();
+        ParametresApplication parametres;
         var indexBase = Array.IndexOf(args, "--base");
         if (indexBase >= 0 && indexBase + 1 < args.Length)
         {
-            parametres.CheminBase = Path.GetFullPath(args[indexBase + 1]);
+            // Base d'essai : ses paramètres sont à côté d'elle, les réglages réels du club restent intacts.
+            var cheminBase = Path.GetFullPath(args[indexBase + 1]);
+            parametres = ParametresApplication.Charger(Path.Combine(Path.GetDirectoryName(cheminBase) ?? ".", "parametres.json"));
+            parametres.CheminBase = cheminBase;
+        }
+        else
+        {
+            parametres = ParametresApplication.Charger();
         }
 
         ServiceProvider services;

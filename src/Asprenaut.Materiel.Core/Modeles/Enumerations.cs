@@ -38,6 +38,14 @@ public enum StatutSortieEquipement
     Manquant,
 }
 
+/// <summary>État de la prochaine révision d'un équipement (calculé, non stocké).</summary>
+public enum EtatRevision
+{
+    AJour,
+    Proche,
+    Depassee,
+}
+
 /// <summary>Statut calculé d'un équipement pour l'inventaire.</summary>
 public enum StatutInventaire
 {

@@ -9,10 +9,10 @@ public static class CodeScanne
     public const string Prefixe = "ASP:";
 
     /// <summary>
-    /// Supprime espaces et caractères de contrôle, retire le préfixe "ASP:", passe en majuscules.
-    /// " asp: bloc-031 " → "BLOC-031".
+    /// Supprime espaces et caractères de contrôle, retire le préfixe (par défaut "ASP:"), passe en majuscules.
+    /// " asp: bloc-031 " → "BLOC-031". Un préfixe vide ne retire rien.
     /// </summary>
-    public static string Nettoyer(string? brut)
+    public static string Nettoyer(string? brut, string? prefixe = Prefixe)
     {
         if (string.IsNullOrEmpty(brut))
         {
@@ -29,13 +29,18 @@ public static class CodeScanne
         }
 
         var code = sb.ToString();
-        if (code.StartsWith(Prefixe, StringComparison.Ordinal))
+        var p = NormaliserPrefixe(prefixe);
+        if (p.Length > 0 && code.StartsWith(p, StringComparison.Ordinal))
         {
-            code = code[Prefixe.Length..];
+            code = code[p.Length..];
         }
 
         return code;
     }
+
+    /// <summary>Préfixe sans espaces, en majuscules ("asp: " → "ASP:").</summary>
+    public static string NormaliserPrefixe(string? prefixe) =>
+        string.Concat((prefixe ?? "").Where(c => !char.IsWhiteSpace(c) && !char.IsControl(c))).ToUpperInvariant();
 }
 
 /// <summary>

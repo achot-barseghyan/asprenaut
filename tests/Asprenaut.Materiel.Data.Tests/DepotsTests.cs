@@ -80,8 +80,9 @@ public class DepotsTests : IAsyncLifetime
         var sorties = new SortieRepository(_base.Fabrique);
         var journal = new JournalRepository(_base.Fabrique);
         var moniteurs = new MoniteurRepository(_base.Fabrique);
-        var scan = new ServiceScan(equipements, sorties, journal, horloge);
-        var serviceSortie = new ServiceSortie(sorties, moniteurs, journal, horloge);
+        var reglages = new Reglages();
+        var scan = new ServiceScan(equipements, sorties, journal, horloge, reglages);
+        var serviceSortie = new ServiceSortie(sorties, moniteurs, journal, horloge, reglages);
         Assert.True(await DonneesDemo.ChargerSiVideAsync(_base.Fabrique, horloge.AujourdHui));
         var pascal = (await moniteurs.ListerAsync(true)).Single(m => m.Prenom == "Pascal");
 
@@ -108,7 +109,7 @@ public class DepotsTests : IAsyncLifetime
         var lignes = await serviceSortie.ListerMaterielAsync(id);
         Assert.Equal(StatutSortieEquipement.Manquant, lignes.Single(l => l.Code == "BLOC-033").Statut);
 
-        var inventaire = await new ServiceInventaire(equipements, new CategorieRepository(_base.Fabrique), journal, horloge).ListerAsync("BLOC-033", null);
+        var inventaire = await new ServiceInventaire(equipements, new CategorieRepository(_base.Fabrique), journal, horloge, reglages).ListerAsync("BLOC-033", null);
         Assert.Equal(StatutInventaire.Manquant, Assert.Single(inventaire).Statut);
 
         var retrouve = await scan.ScannerRetourAsync(id, "BLOC-033");

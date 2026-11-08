@@ -110,6 +110,27 @@ public sealed class ScanInput : UserControl, IFondDessine
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool GarderFocus { get; set; } = true;
 
+    /// <summary>Bip au succès, son grave en cas d'erreur.</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool Sons { get; set; } = true;
+
+    /// <summary>Ignore le même code lu deux fois en moins de 800 ms.</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool IgnorerDoublesLectures { get; set; } = true;
+
+    /// <summary>Préfixe des étiquettes, retiré à la lecture.</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public string Prefixe { get; set; } = Saisie.CodeScanne.Prefixe;
+
+    /// <summary>Applique les réglages du pistolet (écran Paramètres).</summary>
+    public void Configurer(Reglages reglages)
+    {
+        Sons = reglages.SonsActifs;
+        GarderFocus = reglages.GarderFocusScan;
+        IgnorerDoublesLectures = reglages.IgnorerDoublesLectures;
+        Prefixe = reglages.PrefixeEtiquette;
+    }
+
     private Color Couleur => _mode == ModeScan.Depart ? Theme.Depart : Theme.Retour;
 
     public void PrendreFocus()
@@ -128,6 +149,11 @@ public sealed class ScanInput : UserControl, IFondDessine
     {
         var detail = code is null ? null : $"{code} · {DateTime.Now.ToString("HH:mm", Libelles.Culture)}";
         Bandeau.Afficher(niveau, message, detail);
+        if (!Sons)
+        {
+            return;
+        }
+
         switch (niveau)
         {
             case NiveauResultat.Succes:
@@ -145,8 +171,14 @@ public sealed class ScanInput : UserControl, IFondDessine
     /// <summary>Simule un scan (tests manuels, saisie au clavier).</summary>
     public void Soumettre(string brut)
     {
-        var code = Saisie.CodeScanne.Nettoyer(brut);
-        if (code.Length == 0 || !_antiRebond.Accepter(code, Environment.TickCount64))
+        var code = Saisie.CodeScanne.Nettoyer(brut, Prefixe);
+        if (code.Length == 0)
+        {
+            return;
+        }
+
+        // L'anti-rebond voit tous les codes (il retient le dernier), mais ne bloque que si le réglage est actif.
+        if (!_antiRebond.Accepter(code, Environment.TickCount64) && IgnorerDoublesLectures)
         {
             return;
         }
@@ -429,6 +461,7 @@ public sealed class BandeauMessage : ControleDessine
 {
     private NiveauResultat? _niveau;
     private string? _detail;
+    private bool _detailEnCode = true;
 
     public BandeauMessage()
     {
@@ -437,10 +470,11 @@ public sealed class BandeauMessage : ControleDessine
         Height = 76;
     }
 
-    public void Afficher(NiveauResultat niveau, string message, string? detail = null)
+    public void Afficher(NiveauResultat niveau, string message, string? detail = null, bool detailEnCode = true)
     {
         _niveau = niveau;
         _detail = detail;
+        _detailEnCode = detailEnCode;
         Text = message;
         AccessibleName = message;
         AccessibleDescription = detail;
@@ -487,7 +521,7 @@ public sealed class BandeauMessage : ControleDessine
         var gauche = (int)(cercle.Right + E(14));
         var largeur = Width - gauche - (int)E(16);
         var police = _niveau is null ? Theme.Police(11f) : Theme.PoliceTitre(11.25f);
-        var policeDetail = Theme.PoliceCode(9.75f);
+        var policeDetail = _detailEnCode ? Theme.PoliceCode(9.75f) : Theme.Police(9.75f);
         var drapeaux = TextFormatFlags.Left | TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding;
         var hMessage = Math.Min(TextRenderer.MeasureText(g, Text, police, new Size(largeur, 0), drapeaux).Height, (int)(Height - E(16)));
         var detail = _detail;

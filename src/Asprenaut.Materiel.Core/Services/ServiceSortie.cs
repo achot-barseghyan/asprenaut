@@ -18,8 +18,19 @@ public sealed class ServiceSortie(
     ISortieRepository sorties,
     IMoniteurRepository moniteurs,
     IJournalRepository journal,
-    IHorloge horloge)
+    IHorloge horloge,
+    Reglages reglages)
 {
+    /// <summary>
+    /// Sortie en cours dont du matériel est encore dehors plus de <see cref="Reglages.JoursAvantAlerteRetour"/> jours
+    /// après la validation du départ : elle est signalée en orange dans la liste.
+    /// </summary>
+    public bool EstEnRetard(SortieResume s) =>
+        s.Statut == StatutSortie.EnCours
+        && s.NbDehors > 0
+        && s.DepartValideLe is { } depart
+        && horloge.MaintenantUtc - depart >= TimeSpan.FromDays(reglages.JoursAvantAlerteRetour);
+
     public Task<IReadOnlyList<SortieResume>> ListerEnCoursAsync(CancellationToken ct = default) =>
         sorties.ListerResumesAsync(cloturees: false, ct);
 
@@ -102,7 +113,8 @@ public sealed class ServiceSortie(
             ? "Tout le matériel est rendu. Clôturer la sortie ?"
             : $"{Libelles.Pluriel(nb, "équipement")} pas encore {(nb > 1 ? "rendus" : "rendu")}. "
               + $"{(nb > 1 ? "Ils seront notés manquants" : "Il sera noté manquant")}. Clôturer quand même ?";
-        return new ApercuCloture(nb, message);
+        // Confirmation seulement s'il reste du matériel dehors, et si le club ne l'a pas désactivée.
+        return new ApercuCloture(nb, message, reglages.ConfirmerCloture && nb > 0);
     }
 
     /// <summary>Clôture : tout ce qui est encore dehors passe à "Manquant".</summary>

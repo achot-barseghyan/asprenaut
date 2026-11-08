@@ -2,6 +2,7 @@ using Asprenaut.Materiel.App.Apparence;
 using Asprenaut.Materiel.App.Controles;
 using Asprenaut.Materiel.App.Navigation;
 using Asprenaut.Materiel.Core.Modeles;
+using Asprenaut.Materiel.Core.Services;
 
 namespace Asprenaut.Materiel.App.Ecrans;
 
@@ -17,12 +18,13 @@ public abstract class EcranScanBase : EcranBase
     private readonly Label _titreSortie = Ui.Libelle("", Theme.PoliceGrasse(21f));
     private readonly Label _infosSortie = Ui.Libelle("", Theme.Police(10.5f), Theme.TexteSecondaireClair);
 
-    protected EcranScanBase(INavigation navigation, ModeScan mode)
+    protected EcranScanBase(INavigation navigation, ServiceReglages reglages, ModeScan mode)
     {
         Navigation = navigation;
         _fil = new FilAriane("Sorties", () => Navigation.AllerA<EcranSorties>());
         Etapes = new IndicateurEtapes { EtapeActive = mode == ModeScan.Depart ? 1 : 2 };
         ZoneScan = new ScanInput { Mode = mode };
+        ZoneScan.Configurer(reglages.Actuels);
         ZoneScan.CodeScanne += (_, e) => Executer(() => TraiterUnParUnAsync(e.Code));
     }
 

@@ -13,12 +13,13 @@ public sealed class ServiceScan(
     IEquipementRepository equipements,
     ISortieRepository sorties,
     IJournalRepository journal,
-    IHorloge horloge)
+    IHorloge horloge,
+    Reglages reglages)
 {
     /// <summary>Scan d'un équipement qui part avec la sortie.</summary>
     public async Task<ResultatScan> ScannerDepartAsync(long sortieId, string codeBrut, CancellationToken ct = default)
     {
-        var code = CodeScanne.Nettoyer(codeBrut);
+        var code = CodeScanne.Nettoyer(codeBrut, reglages.PrefixeEtiquette);
         if (code.Length == 0)
         {
             return ResultatScan.Erreur("Code vide. Scannez à nouveau.");
@@ -65,6 +66,14 @@ public sealed class ServiceScan(
             return ResultatScan.Erreur($"{equipement.Designation} est réformé. Il ne peut pas partir.", equipement);
         }
 
+        // Règle : révision dépassée → refusée si le club l'a décidé dans les réglages (sinon, part avec un avertissement, plus bas).
+        if (!reglages.DepartSiRevisionDepassee && equipement.RevisionDepassee(horloge.AujourdHui))
+        {
+            return ResultatScan.Erreur(
+                $"{equipement.Designation} : révision dépassée depuis le {Libelles.Date(equipement.DateProchaineRevision!.Value)}. Il ne peut pas partir.",
+                equipement);
+        }
+
         // Règle : un équipement n'est dehors que dans une seule sortie à la fois.
         var dehors = await sorties.ObtenirAffectationDehorsAsync(equipement.Id, ct);
         if (dehors is not null)
@@ -100,7 +109,7 @@ public sealed class ServiceScan(
     /// <summary>Scan d'un équipement qui rentre.</summary>
     public async Task<ResultatScan> ScannerRetourAsync(long sortieId, string codeBrut, CancellationToken ct = default)
     {
-        var code = CodeScanne.Nettoyer(codeBrut);
+        var code = CodeScanne.Nettoyer(codeBrut, reglages.PrefixeEtiquette);
         if (code.Length == 0)
         {
             return ResultatScan.Erreur("Code vide. Scannez à nouveau.");

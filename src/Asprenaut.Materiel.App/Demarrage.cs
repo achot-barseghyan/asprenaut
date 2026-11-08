@@ -19,13 +19,26 @@ internal static class Demarrage
 
         // Infrastructure
         services.AddSingleton(parametres);
+        services.AddSingleton(parametres.Reglages);
+        services.AddSingleton<IStockageReglages, StockageReglagesJson>();
         services.AddSingleton<IHorloge, HorlogeSysteme>();
         services.AddSingleton(_ => new FabriqueConnexion(parametres.CheminBase));
         services.AddSingleton<GestionnaireMigrations>();
-        services.AddSingleton<IServiceSauvegarde>(sp => new ServiceSauvegarde(
-            sp.GetRequiredService<FabriqueConnexion>(),
-            ServiceSauvegarde.DossierParDefaut(parametres.CheminBase),
-            () => DateTime.Now));
+        services.AddSingleton<IServiceSauvegarde>(sp =>
+        {
+            var service = new ServiceSauvegarde(
+                sp.GetRequiredService<FabriqueConnexion>(),
+                ServiceSauvegarde.DossierParDefaut(parametres.CheminBase),
+                () => DateTime.Now);
+
+            // Dossier choisi dans Paramètres (clé USB...). S'il est absent (clé débranchée), on reste sur celui par défaut.
+            if (parametres.Reglages.DossierSauvegardes is { } dossier && !service.ChangerDossier(dossier).Reussi)
+            {
+                Erreurs.Journaliser(new IOException($"Dossier de sauvegarde inaccessible : {dossier}. Copie faite dans {service.Dossier}."));
+            }
+
+            return service;
+        });
 
         // Dépôts SQLite (sans état : une connexion par appel)
         services.AddSingleton<ICategorieRepository, CategorieRepository>();
@@ -40,6 +53,7 @@ internal static class Demarrage
         services.AddSingleton<ServiceInventaire>();
         services.AddSingleton<ServiceMoniteurs>();
         services.AddSingleton<ServiceHistorique>();
+        services.AddSingleton<ServiceReglages>();
 
         // Interface. Les écrans ne sont pas enregistrés : ServiceNavigation les crée à la demande.
         services.AddSingleton<ServiceNavigation>();

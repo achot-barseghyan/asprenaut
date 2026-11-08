@@ -1,5 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using Asprenaut.Materiel.Core.Abstractions;
+using Asprenaut.Materiel.Core.Modeles;
 
 namespace Asprenaut.Materiel.App.Infrastructure;
 
@@ -15,20 +18,34 @@ public sealed class ParametresApplication
 
     public static string CheminBaseParDefaut => Path.Combine(DossierApplication, "materiel.db");
 
-    private static string Fichier => Path.Combine(DossierApplication, "parametres.json");
+    public static string FichierParDefaut => Path.Combine(DossierApplication, "parametres.json");
 
-    /// <summary>Chemin de la base SQLite (modifiable depuis l'écran Paramètres).</summary>
+    /// <summary>Chemin de la base SQLite.</summary>
     public string CheminBase { get; set; } = CheminBaseParDefaut;
 
-    public static ParametresApplication Charger()
+    /// <summary>Réglages du club (écran Paramètres).</summary>
+    public Reglages Reglages { get; set; } = new();
+
+    /// <summary>Fichier d'où viennent ces paramètres, et où ils sont réenregistrés.</summary>
+    [JsonIgnore]
+    public string Fichier { get; private set; } = FichierParDefaut;
+
+    /// <summary>
+    /// Charge les paramètres. Avec <c>--base</c>, le fichier est pris à côté de la base d'essai :
+    /// les essais ne modifient jamais les réglages réels du club.
+    /// </summary>
+    public static ParametresApplication Charger(string? fichier = null)
     {
+        fichier ??= FichierParDefaut;
         try
         {
-            if (File.Exists(Fichier))
+            if (File.Exists(fichier))
             {
-                var lus = JsonSerializer.Deserialize<ParametresApplication>(File.ReadAllText(Fichier));
+                var lus = JsonSerializer.Deserialize<ParametresApplication>(File.ReadAllText(fichier));
                 if (lus is not null && !string.IsNullOrWhiteSpace(lus.CheminBase))
                 {
+                    lus.Fichier = fichier;
+                    lus.Reglages ??= new Reglages();
                     return lus;
                 }
             }
@@ -38,13 +55,31 @@ public sealed class ParametresApplication
             Erreurs.Journaliser(ex);
         }
 
-        return new ParametresApplication();
+        return new ParametresApplication { Fichier = fichier };
     }
 
     public void Enregistrer()
     {
-        Directory.CreateDirectory(DossierApplication);
+        Directory.CreateDirectory(Path.GetDirectoryName(Fichier) ?? DossierApplication);
         File.WriteAllText(Fichier, JsonSerializer.Serialize(this, OptionsJson));
+    }
+}
+
+/// <summary>Enregistre les réglages dans parametres.json (avec le reste des paramètres).</summary>
+public sealed class StockageReglagesJson(ParametresApplication parametres) : IStockageReglages
+{
+    public void Enregistrer(Reglages reglages)
+    {
+        parametres.Reglages = reglages;
+        try
+        {
+            parametres.Enregistrer();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Le réglage reste actif jusqu'à la fermeture ; on note seulement l'échec.
+            Erreurs.Journaliser(ex);
+        }
     }
 }
 

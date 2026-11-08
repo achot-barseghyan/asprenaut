@@ -2,7 +2,6 @@ using Asprenaut.Materiel.App.Apparence;
 using Asprenaut.Materiel.App.Controles;
 using Asprenaut.Materiel.App.Infrastructure;
 using Asprenaut.Materiel.App.Navigation;
-using Asprenaut.Materiel.Core.Abstractions;
 using Asprenaut.Materiel.Core.Modeles;
 using Asprenaut.Materiel.Core.Services;
 using Saisie = Asprenaut.Materiel.Core.Saisie;
@@ -13,7 +12,7 @@ namespace Asprenaut.Materiel.App.Ecrans;
 public sealed class EcranInventaire : EcranBase
 {
     private readonly ServiceInventaire _inventaire;
-    private readonly IHorloge _horloge;
+    private readonly ServiceReglages _reglages;
     private readonly BarreRecherche _recherche = new("Rechercher un code, un équipement, une sortie…", "ou scannez");
     private readonly GrilleAdaptative _categories = new() { LargeurMin = 176, HauteurElement = 76, Ecart = 12, Margin = new Padding(0, 0, 0, 20) };
     private readonly List<Tuile> _tuiles = [];
@@ -21,10 +20,10 @@ public sealed class EcranInventaire : EcranBase
     private readonly System.Windows.Forms.Timer _attenteRecherche = new() { Interval = 300 };
     private long? _categorie;
 
-    public EcranInventaire(ServiceInventaire inventaire, IHorloge horloge)
+    public EcranInventaire(ServiceInventaire inventaire, ServiceReglages reglages)
     {
         _inventaire = inventaire;
-        _horloge = horloge;
+        _reglages = reglages;
 
         var ajouter = new BoutonArrondi("Ajouter un équipement", StyleBouton.Principal, Icones.Plus);
         ajouter.Click += (_, _) => Dialogues.Information(FindForm(), "L'ajout d'équipement arrive dans une prochaine version.");
@@ -44,7 +43,7 @@ public sealed class EcranInventaire : EcranBase
             if (e.KeyCode == Keys.Enter)
             {
                 e.SuppressKeyPress = true;
-                var code = Saisie.CodeScanne.Nettoyer(_recherche.Champ.Text);
+                var code = Saisie.CodeScanne.Nettoyer(_recherche.Champ.Text, _reglages.Actuels.PrefixeEtiquette);
                 if (code.Length > 0)
                 {
                     _recherche.Champ.Text = code;
@@ -178,11 +177,6 @@ public sealed class EcranInventaire : EcranBase
             e.CellStyle.Font = Theme.PoliceCode(10f);
             e.CellStyle.ForeColor = e.CellStyle.SelectionForeColor = Theme.Accent;
         }
-        else if (e.ColumnIndex == _grille.Columns["revision"]!.Index && l.DateProchaineRevision is { } d && d < _horloge.AujourdHui)
-        {
-            e.CellStyle.Font = Theme.PoliceTitre(10.5f);
-            e.CellStyle.ForeColor = e.CellStyle.SelectionForeColor = Theme.Avertissement;
-        }
     }
 
     private void PeindreCellule(object? sender, DataGridViewCellPaintingEventArgs e)
@@ -207,6 +201,19 @@ public sealed class EcranInventaire : EcranBase
                 _ => (Theme.TexteSecondaire, Theme.TexteSecondaireClair),
             };
             Tableaux.PeindrePastille(e, Libelles.De(l.Statut), couleur, texte);
+        }
+        else if (e.ColumnIndex == _grille.Columns["revision"]!.Index && l.DateProchaineRevision is { } date)
+        {
+            // Badge : jaune si la révision approche (réglage « Prévenir avant une révision »), rouge si dépassée.
+            switch (_inventaire.EtatDeRevision(date))
+            {
+                case EtatRevision.Proche:
+                    Tableaux.PeindrePastille(e, Libelles.Date(date), Theme.Avertissement);
+                    break;
+                case EtatRevision.Depassee:
+                    Tableaux.PeindrePastille(e, $"{Libelles.Date(date)} · dépassée", Theme.Erreur);
+                    break;
+            }
         }
     }
 }

@@ -68,9 +68,19 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
 5. Retour d'un équipement absent de la sortie → avertir sans rien modifier ; s'il est dehors ailleurs →
    `ActionProposee.RentrerDansAutreSortie` (l'écran rescanne alors dans `AutreSortieId`).
 6. Retrait possible seulement en préparation (`StatutSortie.EnPreparation`).
-7. Clôture : Dehors → Manquant, confirmation avec le nombre (`ApercuClotureAsync`).
+7. Clôture : Dehors → Manquant, confirmation avec le nombre (`ApercuClotureAsync`) s'il reste du matériel dehors
+   (`ApercuCloture.ConfirmationNecessaire`, réglage `ConfirmerCloture`).
 8. Un Manquant scanné plus tard au retour (dans sa sortie ou depuis une autre) → Rendu + journal `ManquantRetrouve`.
-9. Révision dépassée → part quand même, avec avertissement.
+9. Révision dépassée → part quand même, avec avertissement (refusée si le réglage `DepartSiRevisionDepassee` est coupé).
+10. Sortie en cours avec du matériel dehors depuis `JoursAvantAlerteRetour` jours → en retard (`ServiceSortie.EstEnRetard`, carte orange).
+11. Révision dans les `JoursAvantRevision` jours (15/30/60) → badge jaune ; dépassée → badge rouge (`ServiceInventaire.EtatDeRevision`).
+
+Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
+(validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
+à côté de la base d'essai : les essais ne touchent jamais les réglages réels. Préfixe des étiquettes : `CodeScanne.Nettoyer(brut, prefixe)`.
+Sauvegardes : `IServiceSauvegarde` (dossier modifiable, dernière sauvegarde, `RestaurerAsync` qui vérifie le fichier,
+copie les données actuelles en `materiel_…_avant-restauration.db`, puis réapplique les migrations).
+Étiquettes QR : écran prêt (aperçu, format), impression en attente de l'accord pour QRCoder.
 
 Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnCours` (scan retour ; ajout de matériel encore possible)
 → `Cloturer` → `Cloturee` (scan retour encore possible pour les manquants).

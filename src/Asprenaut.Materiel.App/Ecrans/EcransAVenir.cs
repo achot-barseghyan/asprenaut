@@ -27,10 +27,3 @@ public sealed class EcranHistorique() : EcranAVenir("Journal de tous les scans e
 
     public override EntreeMenu Menu => EntreeMenu.Historique;
 }
-
-public sealed class EcranParametres() : EcranAVenir("Emplacement de la base, sauvegardes.")
-{
-    public override string Titre => "Paramètres";
-
-    public override EntreeMenu Menu => EntreeMenu.Parametres;
-}
