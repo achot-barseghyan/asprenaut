@@ -11,7 +11,7 @@ using Saisie = Asprenaut.Materiel.Core.Saisie;
 namespace Asprenaut.Materiel.App.Ecrans;
 
 /// <summary>
-/// Paramètres : pistolet, règles de prêt, étiquettes, données et sauvegardes, club, à propos.
+/// Paramètres : pistolet, règles de prêt, données et sauvegardes, club, à propos.
 /// Chaque changement est enregistré tout de suite (pas de bouton « Enregistrer »).
 /// </summary>
 public sealed class EcranParametres : EcranBase
@@ -43,7 +43,7 @@ public sealed class EcranParametres : EcranBase
         };
         grille.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         grille.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        var cartes = new[] { CartePistolet(), CarteRegles(), CarteEtiquettes(), CarteDonnees(), CarteClub(), CarteAPropos() };
+        var cartes = new[] { CartePistolet(), CarteRegles(), CarteDonnees(), CarteClub(), CarteAPropos() };
         for (var i = 0; i < cartes.Length; i++)
         {
             if (i % 2 == 0)
@@ -67,7 +67,7 @@ public sealed class EcranParametres : EcranBase
         cadre.Controls.Add(grille);
 
         Controls.Add(Ui.Colonne(
-            (Ui.Entete(Ui.Pile(Ui.Titre(Titre), Ui.SousTitre("Pistolet, règles de prêt, étiquettes et sauvegardes."))), SizeType.AutoSize, 0),
+            (Ui.Entete(Ui.Pile(Ui.Titre(Titre), Ui.SousTitre("Pistolet, règles de prêt et sauvegardes."))), SizeType.AutoSize, 0),
             (cadre, SizeType.Percent, 100)));
     }
 
@@ -171,53 +171,6 @@ public sealed class EcranParametres : EcranBase
 
         carte.Ajouter(Interrupteur("Autoriser le départ si révision dépassée", "Le matériel part avec un avertissement jaune", r.DepartSiRevisionDepassee, v => _reglages.Modifier(x => x.DepartSiRevisionDepassee = v)));
         carte.Ajouter(Interrupteur("Confirmer avant de clôturer", "Demande validation s'il reste du matériel dehors", r.ConfirmerCloture, v => _reglages.Modifier(x => x.ConfirmerCloture = v)));
-        return carte;
-    }
-
-    // ---------------------------------------------------------------- Étiquettes
-
-    private CarteSection CarteEtiquettes()
-    {
-        var carte = new CarteSection("Étiquettes QR", Icones.Qr, Theme.AccentClair);
-
-        var format = new ListeDeroulante { AccessibleName = "Format des étiquettes", Margin = new Padding(0, 0, 0, 10) };
-        foreach (var f in ServiceReglages.FormatsEtiquette)
-        {
-            format.Items.Add(f);
-        }
-
-        format.SelectedIndex = Math.Clamp(_reglages.Actuels.FormatEtiquette, 0, format.Items.Count - 1);
-        format.SelectedIndexChanged += (_, _) => _reglages.ChangerFormatEtiquette(format.SelectedIndex);
-        var conseil = Ui.Libelle("Utilisez des étiquettes plastifiées, résistantes à l'eau salée.", Theme.Police(9.75f), Theme.TexteSecondaire);
-        conseil.AutoSize = false;
-        conseil.Height = 40;
-
-        // La liste déroulante prend sa hauteur à l'affichage : ligne de hauteur fixe pour ne pas chevaucher le conseil.
-        var droite = Ui.Colonne(
-            (Ui.LibelleChamp("Format"), SizeType.AutoSize, 0),
-            (format, SizeType.Absolute, Theme.HauteurChamp + 10),
-            (conseil, SizeType.AutoSize, 0));
-        droite.AutoSize = true;
-        droite.Margin = new Padding(20, 0, 0, 0);
-        format.Dock = DockStyle.Top;
-
-        var apercu = new ApercuEtiquette(_reglages.Actuels.NomClub) { Margin = new Padding(0, 0, 0, 18) };
-        var ligne = Ui.Colonnes((apercu, SizeType.Absolute, 220), (droite, SizeType.Percent, 100));
-        ligne.AutoSize = true;
-        ligne.RowStyles[0] = new RowStyle(SizeType.AutoSize);
-        apercu.Dock = DockStyle.None;
-        apercu.Anchor = AnchorStyles.Left | AnchorStyles.Top;
-        carte.Ajouter(ligne);
-
-        // L'impression arrivera avec QRCoder (dépendance à valider).
-        void Bientot() => Dialogues.Information(FindForm(), "L'impression des étiquettes arrive avec l'étape « QR codes ».");
-        var imprimer = new BoutonArrondi("Imprimer des étiquettes", StyleBouton.Principal, Icones.Imprimante) { AutoSize = false, Margin = new Padding(0, 0, 10, 0) };
-        imprimer.Click += (_, _) => Bientot();
-        var pdf = new BoutonArrondi("Aperçu PDF", StyleBouton.Secondaire) { Margin = Padding.Empty };
-        pdf.Click += (_, _) => Bientot();
-        var boutons = Ui.Colonnes((imprimer, SizeType.Percent, 100), (pdf, SizeType.AutoSize, 0));
-        boutons.Height = Theme.HauteurBouton;
-        carte.Ajouter(boutons);
         return carte;
     }
 
@@ -457,40 +410,6 @@ public sealed class EcranParametres : EcranBase
             g.FillPath(fond, chemin);
             using var bord = new Pen(Theme.Sur(BackColor, Theme.Accent, 0.35f), Dessin.Echelle(this, 1)) { DashPattern = [4f, 3f] };
             g.DrawPath(bord, chemin);
-        }
-    }
-
-    /// <summary>Aperçu d'une étiquette blanche : QR (pictogramme), nom du club, code et désignation.</summary>
-    private sealed class ApercuEtiquette : ControleDessine
-    {
-        private readonly string _club;
-
-        public ApercuEtiquette(string club)
-        {
-            _club = club.ToUpper(Libelles.Culture);
-            Size = new Size(220, 112);
-            AccessibleRole = AccessibleRole.Graphic;
-            AccessibleName = "Aperçu d'étiquette";
-        }
-
-        protected override void Peindre(Graphics g)
-        {
-            var r = new RectangleF(0, 0, Width - 1, Height - 1);
-            using (var chemin = Dessin.Arrondi(r, E(16)))
-            using (var blanc = new SolidBrush(Color.White))
-            {
-                g.FillPath(blanc, chemin);
-            }
-
-            var qr = E(84);
-            var x = E(14);
-            var y = (Height - qr) / 2;
-            Icones.Dessiner(g, Icones.Qr, new RectangleF(x, y, qr, qr), Theme.Fond, 2.2f);
-            var gauche = (int)(x + qr + E(12));
-            var largeur = Width - gauche - (int)E(8);
-            Dessin.Texte(g, _club, Theme.PoliceTitre(7.5f), new Rectangle(gauche, (int)(y + E(14)), largeur, (int)E(16)), Theme.BandeauHaut);
-            Dessin.Texte(g, "BLOC-031", Theme.PoliceCode(11f), new Rectangle(gauche, (int)(y + E(32)), largeur, (int)E(22)), Theme.Fond);
-            Dessin.Texte(g, "Bloc 12 L acier", Theme.Police(8.25f), new Rectangle(gauche, (int)(y + E(56)), largeur, (int)E(16)), Theme.SurfaceActive);
         }
     }
 }

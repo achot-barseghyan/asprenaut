@@ -38,11 +38,6 @@ public sealed class Reglages
     /// <summary>Demander une confirmation avant de clôturer s'il reste du matériel dehors.</summary>
     public bool ConfirmerCloture { get; set; } = true;
 
-    // --- Étiquettes ---
-
-    /// <summary>Format choisi pour l'impression des étiquettes (index dans la liste des formats).</summary>
-    public int FormatEtiquette { get; set; }
-
     // --- Données ---
 
     /// <summary>Dossier des sauvegardes ; null = "Sauvegardes" à côté de la base.</summary>

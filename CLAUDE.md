@@ -80,7 +80,7 @@ Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services
 à côté de la base d'essai : les essais ne touchent jamais les réglages réels. Préfixe des étiquettes : `CodeScanne.Nettoyer(brut, prefixe)`.
 Sauvegardes : `IServiceSauvegarde` (dossier modifiable, dernière sauvegarde, `RestaurerAsync` qui vérifie le fichier,
 copie les données actuelles en `materiel_…_avant-restauration.db`, puis réapplique les migrations).
-Étiquettes QR : écran prêt (aperçu, format), impression en attente de l'accord pour QRCoder.
+Étiquettes QR : section retirée de l'écran Paramètres à la demande du demandeur (impression non prévue pour l'instant).
 
 Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnCours` (scan retour ; ajout de matériel encore possible)
 → `Cloturer` → `Cloturee` (scan retour encore possible pour les manquants).

@@ -13,14 +13,6 @@ public sealed class ServiceReglages(Reglages reglages, IStockageReglages stockag
 {
     public const int LongueurMaxPrefixe = 8;
 
-    /// <summary>Formats d'étiquettes proposés (index enregistré dans <see cref="Reglages.FormatEtiquette"/>).</summary>
-    public static readonly IReadOnlyList<string> FormatsEtiquette =
-    [
-        "Planche A4 · 24 étiquettes (64 × 34 mm)",
-        "Planche A4 · 65 étiquettes (38 × 21 mm)",
-        "Imprimante d'étiquettes · 50 × 25 mm",
-    ];
-
     public Reglages Actuels => reglages;
 
     /// <summary>Interrupteurs et choix simples (sons, focus, confirmation...) : aucune validation nécessaire.</summary>
@@ -63,18 +55,6 @@ public sealed class ServiceReglages(Reglages reglages, IStockageReglages stockag
         reglages.PrefixeEtiquette = p;
         stockage.Enregistrer(reglages);
         return ResultatOperation.Ok(p.Length == 0 ? "Aucun préfixe." : $"Préfixe « {p} » enregistré.");
-    }
-
-    public ResultatOperation ChangerFormatEtiquette(int index)
-    {
-        if (index < 0 || index >= FormatsEtiquette.Count)
-        {
-            return ResultatOperation.Echec("Format inconnu.");
-        }
-
-        reglages.FormatEtiquette = index;
-        stockage.Enregistrer(reglages);
-        return ResultatOperation.Ok("Enregistré.");
     }
 
     /// <summary>Nom du club et responsable du matériel (textes libres, espaces superflus retirés).</summary>
