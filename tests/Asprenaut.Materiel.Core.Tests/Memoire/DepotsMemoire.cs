@@ -191,6 +191,7 @@ public sealed class SortieRepositoryMemoire(BaseMemoire db) : ISortieRepository
             Intitule = s.Intitule,
             Lieu = s.Lieu,
             Statut = s.Statut,
+            DepartValideLe = s.DepartValideLe,
             ClotureeLe = s.ClotureeLe,
             MoniteurNom = db.Moniteurs.FirstOrDefault(m => m.Id == s.MoniteurId)?.NomComplet ?? "",
             NbTotal = lignes.Count,

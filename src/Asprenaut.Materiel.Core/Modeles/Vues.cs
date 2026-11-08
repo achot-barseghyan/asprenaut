@@ -12,6 +12,7 @@ public sealed class SortieResume
     public string Lieu { get; set; } = "";
     public StatutSortie Statut { get; set; }
     public string MoniteurNom { get; set; } = "";
+    public DateTime? DepartValideLe { get; set; }
     public DateTime? ClotureeLe { get; set; }
     public int NbTotal { get; set; }
     public int NbRendus { get; set; }

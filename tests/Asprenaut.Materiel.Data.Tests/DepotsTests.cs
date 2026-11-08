@@ -99,6 +99,7 @@ public class DepotsTests : IAsyncLifetime
         var resume = await serviceSortie.ObtenirResumeAsync(id);
         Assert.NotNull(resume);
         Assert.Equal((3, 2, "Pascal Durand"), (resume.NbTotal, resume.NbRendus, resume.MoniteurNom));
+        Assert.Equal(horloge.MaintenantUtc, resume.DepartValideLe); // relu depuis le texte ISO, en UTC
         Assert.Single(await serviceSortie.ListerEnCoursAsync());
 
         Assert.Equal(1, (await serviceSortie.ApercuClotureAsync(id)).NbManquants);
