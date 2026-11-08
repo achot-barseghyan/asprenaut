@@ -38,7 +38,8 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
 ```
 
 - **Core/Services** : `ServiceScan` (scan départ/retour, retrait), `ServiceSortie` (créer, valider départ, aperçu et clôture),
-  `ServiceInventaire`, `ServiceMoniteurs`, `ServiceHistorique`. Toutes les règles métier sont ici.
+  `ServiceInventaire`, `ServiceMoniteurs` (cartes, fiche, ajout/modification, saison au 1er septembre), `ServiceRevisions`
+  (échéancier, contrôles, atelier, séances TIV), `ServiceReglages`, `ServiceHistorique`. Toutes les règles métier sont ici.
 - **Core/Resultats** : `ResultatScan` (Niveau Succes/Avertissement/Erreur, Message, Equipement, `ActionProposee`, Code, AutreSortieId),
   `ResultatOperation`, `ApercuCloture`. Les cas métier ne lèvent pas d'exception : ils retournent un résultat.
 - **Core/Saisie** : `CodeScanne.Nettoyer` (espaces, préfixe `ASP:`, majuscules) et `AntiRebond` — logique pure, testée.
@@ -50,13 +51,15 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   `INavigation.AllerA<TEcran>(parametre)` crée l'écran via `ActivatorUtilities` (non retenu par le conteneur), le met à l'échelle
   de l'écran et dispose le précédent. Écrans dans `Ecrans/` (héritent d'`EcranBase` ; Départ/Retour héritent d'`EcranScanBase`
   qui sérialise les scans et fournit fil d'Ariane + carte d'en-tête via `Composer(corps)`).
-- **Maquette** : https://claude.ai/artifact/3f393354-a628-4fb9-93a6-4eeca2194be3 (5 écrans : Sorties, Nouvelle sortie, Départ,
-  Retour, Inventaire). Polices Sora/Manrope remplacées par Segoe UI Variable ; pas de fond dégradé ni de bulles animées.
+- **Maquette** : https://claude.ai/artifact/8op5sAWFbf4mRQCxzd37aa (Sorties, Nouvelle sortie, Départ, Retour, Inventaire,
+  Moniteurs, Révisions, Paramètres). Polices Sora/Manrope remplacées par Segoe UI Variable ; pas de fond dégradé ni de bulles animées.
 - **Briques d'interface** (`Controles/`) : `Carte`, `ControleDessine` (base des contrôles peints), `AnneauProgression`,
   `IndicateurEtapes`, `PastilleDate`, `Pastille`, `Picto`, `GrilleAdaptative` (colonnes auto, ajuste sa ligne de TableLayoutPanel),
   `Tuile`, `FilAriane`, `BarreRecherche`, `ChampSaisie`, `ChampDate` (remplace le DateTimePicker, blanc et en anglais),
   `ListeDeroulante`, `ListeMateriel` (styles Depart / ARendre / Rendu), `ScanInput` + `BandeauMessage`, `BandeauAccueil`,
-  `Logo`, `CarteScanner`, `Tableaux`, `FiltreCategories` (puces « Tout 12 / Blocs 3 » des listes Départ et Retour) (pastilles et pictogrammes dans les DataGridView).
+  `Logo`, `CarteScanner`, `Tableaux` (pastilles et pictogrammes dans les DataGridView), `FiltreCategories` (puces « Tout 12 /
+  Blocs 3 »), `FenetreFormulaire` (fenêtre modale sombre ; la validation passe par un service et ne ferme qu'en cas de succès),
+  `Interrupteur`, `SelecteurNombre`, `CarteSection`, `LigneReglage`.
 - **Pictogrammes** : `Apparence/Icones.cs`, chemins SVG 24 × 24 de la maquette lus par `CheminSvg` et tracés en GDI+.
 
 ## Règles métier (chacune a au moins un test dans Core.Tests)
@@ -71,9 +74,17 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
 7. Clôture : Dehors → Manquant, confirmation avec le nombre (`ApercuClotureAsync`) s'il reste du matériel dehors
    (`ApercuCloture.ConfirmationNecessaire`, réglage `ConfirmerCloture`).
 8. Un Manquant scanné plus tard au retour (dans sa sortie ou depuis une autre) → Rendu + journal `ManquantRetrouve`.
-9. Révision dépassée → part quand même, avec avertissement (refusée si le réglage `DepartSiRevisionDepassee` est coupé).
+9. Révision (ou TIV) ou requalification dépassée → part quand même, avec avertissement (refusée si le réglage
+   `DepartSiRevisionDepassee` est coupé). `Equipement.RevisionDepassee` / `EcheanceDepassee` tiennent compte des deux dates.
 10. Sortie en cours avec du matériel dehors depuis `JoursAvantAlerteRetour` jours → en retard (`ServiceSortie.EstEnRetard`, carte orange).
 11. Révision dans les `JoursAvantRevision` jours (15/30/60) → badge jaune ; dépassée → badge rouge (`ServiceInventaire.EtatDeRevision`).
+12. Contrôles (`ServiceRevisions.EnregistrerControleAsync`) : TIV et requalification pour les blocs (catégorie « Blocs… »),
+    révision pour le reste. Conforme → TIV/révision + 12 mois, requalification + 6 ans (et TIV + 12 mois) ; à surveiller → + 6 mois ;
+    refusé → HorsService (impossible si l'équipement est dehors). TIV : inspecteur habilité obligatoire. Pas de date future.
+    Délais dans `Reglages` (`MoisEntreTiv`, `AnneesEntreRequalifications`, `MoisEntreRevisions`, `MoisSiASurveiller`).
+13. Échéancier : en retard / ce mois-ci / sous `JoursAPlanifier` (90) jours / à jour (`ServiceRevisions.EtatDe`). Matériel réformé exclu.
+14. Atelier : l'envoi passe l'équipement HorsService (refusé s'il est dehors, déjà en atelier, ou sans prestataire) ; le retour le remet EnService.
+    Séance TIV : date à venir ; blocs à préparer = TIV due au plus tard 30 jours après la séance.
 
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
@@ -88,7 +99,9 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
 ## Base de données
 
 - Fichier : `%LOCALAPPDATA%\Asprenaut\materiel.db` (paramètre `CheminBase` dans `parametres.json`, même dossier).
-- Tables snake_case : categorie, equipement, moniteur, sortie, sortie_equipement, journal, schema_version.
+- Tables snake_case : categorie, equipement, moniteur, sortie, sortie_equipement, journal, schema_version ;
+  depuis 002 : controle, atelier (index partiel `ux_atelier_en_cours`), seance_tiv, colonnes moniteur.telephone / inspecteur_tiv,
+  equipement.date_requalification.
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).

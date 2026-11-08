@@ -104,8 +104,9 @@ public sealed class MainForm : Form
 
         Ajouter<EcranSorties>(EntreeMenu.Sorties, "Sorties", Icones.Sorties);
         Ajouter<EcranInventaire>(EntreeMenu.Inventaire, "Inventaire", Icones.Inventaire);
-        Ajouter<EcranMoniteurs>(EntreeMenu.Moniteurs, "Moniteurs et plongeurs", Icones.Moniteurs);
+        Ajouter<EcranMoniteurs>(EntreeMenu.Moniteurs, "Moniteurs", Icones.Moniteurs);
         Ajouter<EcranHistorique>(EntreeMenu.Historique, "Historique", Icones.Historique);
+        Ajouter<EcranRevisions>(EntreeMenu.Revisions, "Révisions", Icones.Revisions);
         Ajouter<EcranParametres>(EntreeMenu.Parametres, "Paramètres", Icones.Parametres);
 
         var scanner = new CarteScanner { Dock = DockStyle.Bottom };

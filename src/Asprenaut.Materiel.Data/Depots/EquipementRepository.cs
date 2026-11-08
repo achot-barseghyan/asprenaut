@@ -19,7 +19,7 @@ public sealed class CategorieRepository(FabriqueConnexion fabrique) : ICategorie
 public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipementRepository
 {
     private const string Colonnes =
-        "id, code, libelle, categorie_id, taille, etat, date_prochaine_revision, notes, cree_le";
+        "id, code, libelle, categorie_id, taille, etat, date_prochaine_revision, date_requalification, notes, cree_le";
 
     public async Task<Equipement?> ObtenirAsync(long id, CancellationToken ct = default)
     {
@@ -39,7 +39,7 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
     {
         const string sql = """
             SELECT e.id AS equipement_id, e.code, e.libelle, e.categorie_id, c.nom AS categorie,
-                   e.taille, e.etat, e.date_prochaine_revision,
+                   e.taille, e.etat, e.date_prochaine_revision, e.date_requalification,
                    s.id AS sortie_en_cours_id, s.intitule AS sortie_en_cours_intitule,
                    EXISTS (SELECT 1 FROM sortie_equipement m
                            WHERE m.equipement_id = e.id AND m.statut = 'Manquant') AS est_manquant
@@ -60,8 +60,8 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
     public async Task<long> AjouterAsync(Equipement equipement, CancellationToken ct = default)
     {
         const string sql = """
-            INSERT INTO equipement (code, libelle, categorie_id, taille, etat, date_prochaine_revision, notes, cree_le)
-            VALUES (@Code, @Libelle, @CategorieId, @Taille, @Etat, @DateProchaineRevision, @Notes, @CreeLe)
+            INSERT INTO equipement (code, libelle, categorie_id, taille, etat, date_prochaine_revision, date_requalification, notes, cree_le)
+            VALUES (@Code, @Libelle, @CategorieId, @Taille, @Etat, @DateProchaineRevision, @DateRequalification, @Notes, @CreeLe)
             RETURNING id;
             """;
         await using var cx = await fabrique.OuvrirAsync(ct);
@@ -74,7 +74,7 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
         const string sql = """
             UPDATE equipement
             SET code = @Code, libelle = @Libelle, categorie_id = @CategorieId, taille = @Taille, etat = @Etat,
-                date_prochaine_revision = @DateProchaineRevision, notes = @Notes
+                date_prochaine_revision = @DateProchaineRevision, date_requalification = @DateRequalification, notes = @Notes
             WHERE id = @Id;
             """;
         await using var cx = await fabrique.OuvrirAsync(ct);
@@ -89,7 +89,8 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
         e.CategorieId,
         e.Taille,
         Etat = e.Etat.ToString(),
-        e.DateProchaineRevision,
+        DateProchaineRevision = FormatIso.Ecrire(e.DateProchaineRevision),
+        DateRequalification = FormatIso.Ecrire(e.DateRequalification),
         e.Notes,
         CreeLe = FormatIso.Ecrire(e.CreeLe),
     };
@@ -101,14 +102,14 @@ public sealed class MoniteurRepository(FabriqueConnexion fabrique) : IMoniteurRe
     {
         await using var cx = await fabrique.OuvrirAsync(ct);
         return await cx.QuerySingleOrDefaultAsync<Moniteur>(new CommandDefinition(
-            "SELECT id, nom, prenom, niveau, actif FROM moniteur WHERE id = @id;", new { id }, cancellationToken: ct));
+            "SELECT id, nom, prenom, niveau, telephone, inspecteur_tiv, actif FROM moniteur WHERE id = @id;", new { id }, cancellationToken: ct));
     }
 
     public async Task<IReadOnlyList<Moniteur>> ListerAsync(bool actifsSeulement, CancellationToken ct = default)
     {
         await using var cx = await fabrique.OuvrirAsync(ct);
         var lignes = await cx.QueryAsync<Moniteur>(new CommandDefinition(
-            "SELECT id, nom, prenom, niveau, actif FROM moniteur WHERE (@actifsSeulement = 0 OR actif = 1) ORDER BY prenom, nom;",
+            "SELECT id, nom, prenom, niveau, telephone, inspecteur_tiv, actif FROM moniteur WHERE (@actifsSeulement = 0 OR actif = 1) ORDER BY prenom, nom;",
             new { actifsSeulement }, cancellationToken: ct));
         return lignes.AsList();
     }
@@ -117,7 +118,7 @@ public sealed class MoniteurRepository(FabriqueConnexion fabrique) : IMoniteurRe
     {
         await using var cx = await fabrique.OuvrirAsync(ct);
         moniteur.Id = await cx.ExecuteScalarAsync<long>(new CommandDefinition(
-            "INSERT INTO moniteur (nom, prenom, niveau, actif) VALUES (@Nom, @Prenom, @Niveau, @Actif) RETURNING id;",
+            "INSERT INTO moniteur (nom, prenom, niveau, telephone, inspecteur_tiv, actif) VALUES (@Nom, @Prenom, @Niveau, @Telephone, @InspecteurTiv, @Actif) RETURNING id;",
             moniteur, cancellationToken: ct));
         return moniteur.Id;
     }
@@ -126,7 +127,7 @@ public sealed class MoniteurRepository(FabriqueConnexion fabrique) : IMoniteurRe
     {
         await using var cx = await fabrique.OuvrirAsync(ct);
         await cx.ExecuteAsync(new CommandDefinition(
-            "UPDATE moniteur SET nom = @Nom, prenom = @Prenom, niveau = @Niveau, actif = @Actif WHERE id = @Id;",
+            "UPDATE moniteur SET nom = @Nom, prenom = @Prenom, niveau = @Niveau, telephone = @Telephone, inspecteur_tiv = @InspecteurTiv, actif = @Actif WHERE id = @Id;",
             moniteur, cancellationToken: ct));
     }
 }

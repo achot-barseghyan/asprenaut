@@ -52,6 +52,12 @@ public sealed class GrilleAdaptative : Panel
             ? (RangeesVisibles * (hauteur + ecart)) - ecart
             : totale;
 
+        // Grille qui remplit son parent (pas de ligne fixe à ajuster) : elle défile si elle dépasse.
+        if (!LigneAjustable() && totale > ClientSize.Height)
+        {
+            visible = ClientSize.Height;
+        }
+
         AutoScroll = visible < totale;
         if (AutoScroll)
         {
@@ -80,6 +86,11 @@ public sealed class GrilleAdaptative : Panel
         base.OnControlAdded(e);
         PerformLayout();
     }
+
+    private bool LigneAjustable() =>
+        Parent is TableLayoutPanel table
+        && table.GetRow(this) is var ligne && ligne >= 0 && ligne < table.RowStyles.Count
+        && table.RowStyles[ligne].SizeType == SizeType.Absolute;
 
     private void AjusterLigne(int hauteur)
     {

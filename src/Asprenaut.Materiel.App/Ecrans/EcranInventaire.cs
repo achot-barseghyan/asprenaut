@@ -158,12 +158,16 @@ public sealed class EcranInventaire : EcranBase
                 l.Taille ?? "—",
                 Libelles.De(l.Statut),
                 l.SortieEnCoursIntitule ?? "—",
-                l.DateProchaineRevision is { } d ? Libelles.Date(d) : "—");
+                ProchaineEcheance(l) is { } d ? Libelles.Date(d) : "—");
             _grille.Rows[i].Tag = l;
         }
 
         _grille.ResumeLayout();
     }
+
+    /// <summary>Révision (ou TIV) ou requalification : la plus proche.</summary>
+    private static DateOnly? ProchaineEcheance(LigneInventaire l) =>
+        new[] { l.DateProchaineRevision, l.DateRequalification }.Where(d => d is not null).Min();
 
     private void ColorerCellule(object? sender, DataGridViewCellFormattingEventArgs e)
     {
@@ -202,7 +206,7 @@ public sealed class EcranInventaire : EcranBase
             };
             Tableaux.PeindrePastille(e, Libelles.De(l.Statut), couleur, texte);
         }
-        else if (e.ColumnIndex == _grille.Columns["revision"]!.Index && l.DateProchaineRevision is { } date)
+        else if (e.ColumnIndex == _grille.Columns["revision"]!.Index && ProchaineEcheance(l) is { } date)
         {
             // Badge : jaune si la révision approche (réglage « Prévenir avant une révision »), rouge si dépassée.
             switch (_inventaire.EtatDeRevision(date))

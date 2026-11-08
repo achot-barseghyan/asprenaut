@@ -22,4 +22,10 @@ public static class ActionsJournal
     public const string SortieCloturee = "SortieCloturee";
     public const string EquipementCree = "EquipementCree";
     public const string EquipementModifie = "EquipementModifie";
+    public const string ControleEnregistre = "ControleEnregistre";
+    public const string EnvoiAtelier = "EnvoiAtelier";
+    public const string RetourAtelier = "RetourAtelier";
+    public const string SeanceTivPlanifiee = "SeanceTivPlanifiee";
+    public const string MoniteurCree = "MoniteurCree";
+    public const string MoniteurModifie = "MoniteurModifie";
 }

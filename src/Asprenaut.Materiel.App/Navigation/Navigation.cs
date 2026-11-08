@@ -10,6 +10,7 @@ public enum EntreeMenu
     Inventaire,
     Moniteurs,
     Historique,
+    Revisions,
     Parametres,
 }
 

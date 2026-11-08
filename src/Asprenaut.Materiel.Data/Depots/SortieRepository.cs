@@ -14,7 +14,7 @@ public sealed class SortieRepository(FabriqueConnexion fabrique) : ISortieReposi
         "id, sortie_id, equipement_id, scanne_depart_le, scanne_retour_le, statut";
 
     private const string SelectResume = """
-        SELECT s.id, s.date_sortie, s.type, s.intitule, s.lieu, s.statut, s.depart_valide_le, s.cloturee_le,
+        SELECT s.id, s.date_sortie, s.type, s.intitule, s.lieu, s.statut, s.moniteur_id, s.depart_valide_le, s.cloturee_le,
                TRIM(m.prenom || ' ' || m.nom) AS moniteur_nom,
                COUNT(se.id) AS nb_total,
                COALESCE(SUM(se.statut = 'Rendu'), 0) AS nb_rendus,
@@ -70,7 +70,7 @@ public sealed class SortieRepository(FabriqueConnexion fabrique) : ISortieReposi
     {
         const string sql = """
             SELECT se.id AS ligne_id, se.sortie_id, se.equipement_id, e.code, e.libelle, c.nom AS categorie,
-                   e.taille, e.date_prochaine_revision, se.statut, se.scanne_depart_le, se.scanne_retour_le
+                   e.taille, e.date_prochaine_revision, e.date_requalification, se.statut, se.scanne_depart_le, se.scanne_retour_le
             FROM sortie_equipement se
             JOIN equipement e ON e.id = se.equipement_id
             JOIN categorie c ON c.id = e.categorie_id

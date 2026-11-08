@@ -19,7 +19,7 @@ public class SchemaTests : IAsyncLifetime
         var tables = (await cx.QueryAsync<string>("SELECT name FROM sqlite_master WHERE type = 'table';")).ToHashSet();
 
         Assert.Superset(
-            new HashSet<string> { "categorie", "equipement", "moniteur", "sortie", "sortie_equipement", "journal", "schema_version" },
+            new HashSet<string> { "categorie", "equipement", "moniteur", "sortie", "sortie_equipement", "journal", "schema_version", "controle", "atelier", "seance_tiv" },
             tables);
         Assert.Equal(GestionnaireMigrations.VersionCible, await cx.ExecuteScalarAsync<int>("SELECT MAX(version) FROM schema_version;"));
     }
@@ -31,14 +31,30 @@ public class SchemaTests : IAsyncLifetime
 
         await using var cx = await _base.Fabrique.OuvrirAsync();
         Assert.Equal(GestionnaireMigrations.VersionCible, version);
-        Assert.Equal(1, await cx.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM schema_version;"));
+        Assert.Equal(GestionnaireMigrations.ScriptsDisponibles().Count, await cx.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM schema_version;"));
         Assert.Equal(8, await cx.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM categorie;"));
     }
 
     [Fact]
-    public void Script_001_est_embarque()
+    public void Scripts_001_et_002_sont_embarques()
     {
-        Assert.Contains(GestionnaireMigrations.ScriptsDisponibles(), s => s.Version == 1);
+        Assert.Equal([1, 2], GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
+    }
+
+    [Fact]
+    public async Task Un_equipement_n_est_en_atelier_qu_une_fois_a_la_fois()
+    {
+        await using var cx = await _base.Fabrique.OuvrirAsync();
+        await cx.ExecuteAsync("""
+            INSERT INTO equipement (code, libelle, categorie_id, cree_le) VALUES ('DET-001', 'x', 3, '2026-01-01T00:00:00.000Z');
+            INSERT INTO atelier (equipement_id, prestataire, envoye_le, revenu_le) VALUES (1, 'A', '2026-10-01', '2026-10-10');
+            INSERT INTO atelier (equipement_id, prestataire, envoye_le) VALUES (1, 'B', '2026-11-01');
+            """);
+
+        await Assert.ThrowsAsync<SqliteException>(() => cx.ExecuteAsync(
+            "INSERT INTO atelier (equipement_id, prestataire, envoye_le) VALUES (1, 'C', '2026-11-02');"));
+        await Assert.ThrowsAsync<SqliteException>(() => cx.ExecuteAsync(
+            "INSERT INTO controle (equipement_id, type, date_controle, resultat, saisi_le) VALUES (1, 'Tiv', '2026-11-01', 'Bof', '2026-11-01T00:00:00.000Z');"));
     }
 
     [Fact]

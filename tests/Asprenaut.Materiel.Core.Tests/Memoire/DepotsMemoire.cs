@@ -59,6 +59,7 @@ public sealed class EquipementRepositoryMemoire(BaseMemoire db) : IEquipementRep
                     Taille = e.Taille,
                     Etat = e.Etat,
                     DateProchaineRevision = e.DateProchaineRevision,
+                    DateRequalification = e.DateRequalification,
                     SortieEnCoursId = dehors?.SortieId,
                     SortieEnCoursIntitule = dehors is null ? null : db.Sorties.First(s => s.Id == dehors.SortieId).Intitule,
                     EstManquant = db.Affectations.Any(a => a.EquipementId == e.Id && a.Statut == StatutSortieEquipement.Manquant),
@@ -94,7 +95,16 @@ public sealed class MoniteurRepositoryMemoire(BaseMemoire db) : IMoniteurReposit
         return Task.FromResult(moniteur.Id);
     }
 
-    public Task MettreAJourAsync(Moniteur moniteur, CancellationToken ct = default) => Task.CompletedTask;
+    public Task MettreAJourAsync(Moniteur moniteur, CancellationToken ct = default)
+    {
+        var i = db.Moniteurs.FindIndex(m => m.Id == moniteur.Id);
+        if (i >= 0)
+        {
+            db.Moniteurs[i] = moniteur;
+        }
+
+        return Task.CompletedTask;
+    }
 }
 
 public sealed class SortieRepositoryMemoire(BaseMemoire db) : ISortieRepository
@@ -135,6 +145,7 @@ public sealed class SortieRepositoryMemoire(BaseMemoire db) : ISortieRepository
                     Libelle = e.Libelle,
                     Taille = e.Taille,
                     DateProchaineRevision = e.DateProchaineRevision,
+                    DateRequalification = e.DateRequalification,
                     Statut = a.Statut,
                     ScanneDepartLe = a.ScanneDepartLe,
                     ScanneRetourLe = a.ScanneRetourLe,
@@ -193,6 +204,7 @@ public sealed class SortieRepositoryMemoire(BaseMemoire db) : ISortieRepository
             Statut = s.Statut,
             DepartValideLe = s.DepartValideLe,
             ClotureeLe = s.ClotureeLe,
+            MoniteurId = s.MoniteurId,
             MoniteurNom = db.Moniteurs.FirstOrDefault(m => m.Id == s.MoniteurId)?.NomComplet ?? "",
             NbTotal = lignes.Count,
             NbRendus = lignes.Count(a => a.Statut == StatutSortieEquipement.Rendu),

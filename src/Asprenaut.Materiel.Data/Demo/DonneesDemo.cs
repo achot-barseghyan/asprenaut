@@ -27,9 +27,12 @@ public static class DonneesDemo
 
         await using var tx = await cx.BeginTransactionAsync(ct);
 
-        const string sqlMoniteur = "INSERT INTO moniteur (nom, prenom, niveau, actif) VALUES (@nom, @prenom, @niveau, 1);";
-        await cx.ExecuteAsync(sqlMoniteur, new { nom = "Durand", prenom = "Pascal", niveau = "MF1" }, tx);
-        await cx.ExecuteAsync(sqlMoniteur, new { nom = "Lemoine", prenom = "Sophie", niveau = "E3" }, tx);
+        const string sqlMoniteur = """
+            INSERT INTO moniteur (nom, prenom, niveau, telephone, inspecteur_tiv, actif)
+            VALUES (@nom, @prenom, @niveau, @telephone, @tiv, 1);
+            """;
+        await cx.ExecuteAsync(sqlMoniteur, new { nom = "Durand", prenom = "Pascal", niveau = "MF1", telephone = "06 12 34 56 78", tiv = 1 }, tx);
+        await cx.ExecuteAsync(sqlMoniteur, new { nom = "Lemoine", prenom = "Sophie", niveau = "E3", telephone = "", tiv = 0 }, tx);
 
         // (code, libellé, catégorie, taille, état, décalage de révision en jours ou null)
         (string Code, string Libelle, string Categorie, string? Taille, EtatEquipement Etat, int? Revision)[] equipements =
@@ -68,6 +71,26 @@ public static class DonneesDemo
                 creeLe = maintenant,
             }, tx);
         }
+
+        // Révisions : requalification des blocs (jours), une TIV passée, une séance TIV dans deux semaines.
+        (string Code, int Jours)[] requalifications = [("BLOC-031", 900), ("BLOC-032", 60), ("BLOC-033", 420), ("BLOC-034", 1000)];
+        foreach (var (code, jours) in requalifications)
+        {
+            await cx.ExecuteAsync(
+                "UPDATE equipement SET date_requalification = @date WHERE code = @code;",
+                new { code, date = FormatIso.Ecrire(aujourdHui.AddDays(jours)) }, tx);
+        }
+
+        await cx.ExecuteAsync(
+            """
+            INSERT INTO controle (equipement_id, type, date_controle, resultat, inspecteur_id, notes, saisi_le)
+            SELECT e.id, 'Tiv', @date, 'Conforme', (SELECT id FROM moniteur WHERE prenom = 'Pascal'), '', @maintenant
+            FROM equipement e WHERE e.code = 'BLOC-031';
+            """,
+            new { date = FormatIso.Ecrire(aujourdHui.AddDays(200).AddMonths(-12)), maintenant }, tx);
+        await cx.ExecuteAsync(
+            "INSERT INTO seance_tiv (date_seance, heure, lieu) VALUES (@date, '9:00', 'Local du club');",
+            new { date = FormatIso.Ecrire(aujourdHui.AddDays(14)) }, tx);
 
         await cx.ExecuteAsync(
             "INSERT INTO journal (horodatage, action, details) VALUES (@maintenant, 'DonneesDemo', 'Données de démonstration chargées');",

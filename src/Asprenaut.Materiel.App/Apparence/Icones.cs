@@ -14,7 +14,8 @@ public static class Icones
     public const string Inventaire = "M4 4h16v16H4zM4 10h16M10 10v10";
     public const string Moniteurs = "M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 20c0-3 3-5 6-5s6 2 6 5M16 5a3 3 0 0 1 0 6M18 15c2 .6 3 2.4 3 5";
     public const string Historique = "M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 8v4l3 2";
-    public const string Parametres = "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 3v3M12 18v3M3 12h3M18 12h3";
+    public const string Revisions = "M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z";
+    public const string Parametres ="M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 3v3M12 18v3M3 12h3M18 12h3";
 
     // --- Actions ---
     public const string Plus = "M12 5v14M5 12h14";
@@ -38,7 +39,10 @@ public static class Icones
     public const string Base = "M4 5a8 3 0 1 0 16 0 8 3 0 1 0-16 0zM4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6";
     public const string Imprimante = "M7 9V3h10v6M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v7H7z";
     public const string Moins = "M5 12h14";
-
+    public const string Telephone = "M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2";
+    public const string Document = "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5";
+    public const string Calendrier = "M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM3 10h18M8 3v4M16 3v4M12 13v5M9.5 15.5h5";
+    public const string Info = "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v5M12 8h.01";
     // --- Marque : masque et tuba ---
     public const string Logo = "M2.5 9.5a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v2a3 3 0 0 1-3 3h-2.5l-1.5-2h-2l-1.5 2H5.5a3 3 0 0 1-3-3zM21.5 5v9a5 5 0 0 1-5 5h-2";
 

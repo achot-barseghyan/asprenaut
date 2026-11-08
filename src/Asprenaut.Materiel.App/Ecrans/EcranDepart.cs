@@ -93,7 +93,7 @@ public sealed class EcranDepart : EcranScanBase
                     l.Code,
                     string.IsNullOrWhiteSpace(l.Taille) ? l.Libelle : $"{l.Libelle} · {l.Taille}",
                     l.Categorie,
-                    Alerte: l.RevisionDepassee(aujourdHui) ? $"Révision dépassée ({Libelles.Date(l.DateProchaineRevision!.Value)})" : null,
+                    Alerte: l.RevisionDepassee(aujourdHui) ? $"Révision dépassée ({Libelles.Date(l.EcheanceDepassee(aujourdHui)!.Value)})" : null,
                     CouleurAlerte: Theme.Avertissement)),
             enPreparation ? "Retirer" : null,
             Icones.Croix,

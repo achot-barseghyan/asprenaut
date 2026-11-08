@@ -38,6 +38,23 @@ public sealed class Reglages
     /// <summary>Demander une confirmation avant de clôturer s'il reste du matériel dehors.</summary>
     public bool ConfirmerCloture { get; set; } = true;
 
+    // --- Révisions (délais de la maquette « Révisions ») ---
+
+    /// <summary>TIV d'un bloc : au plus tous les 12 mois.</summary>
+    public int MoisEntreTiv { get; set; } = 12;
+
+    /// <summary>Requalification d'un bloc dont la TIV annuelle est faite : tous les 6 ans.</summary>
+    public int AnneesEntreRequalifications { get; set; } = 6;
+
+    /// <summary>Révision des autres équipements (délai du fabricant par défaut).</summary>
+    public int MoisEntreRevisions { get; set; } = 12;
+
+    /// <summary>Contrôle « à surveiller » : contrôle anticipé dans ce nombre de mois.</summary>
+    public int MoisSiASurveiller { get; set; } = 6;
+
+    /// <summary>Échéancier : une échéance dans ce nombre de jours est « à planifier ».</summary>
+    public int JoursAPlanifier { get; set; } = 90;
+
     // --- Données ---
 
     /// <summary>Dossier des sauvegardes ; null = "Sauvegardes" à côté de la base.</summary>

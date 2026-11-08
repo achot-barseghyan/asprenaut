@@ -163,9 +163,15 @@ public sealed class EcranNouvelleSortie : EcranBase
             _moniteur.Items.Add(new Choix<long>(m.Id, m.NomComplet));
         }
 
+        // Ouvert depuis la fiche d'un moniteur : il est déjà choisi.
+        if (parametre is long moniteurId)
+        {
+            _moniteur.SelectedItem = _moniteur.Items.OfType<Choix<long>>().FirstOrDefault(c => c.Valeur == moniteurId);
+        }
+
         if (_moniteur.Items.Count == 0)
         {
-            _message.Text = "Aucun moniteur enregistré. Ajoutez-en un dans « Moniteurs et plongeurs ».";
+            _message.Text = "Aucun moniteur enregistré. Ajoutez-en un dans « Moniteurs ».";
         }
 
         _intitule.Champ.Focus();

@@ -46,6 +46,7 @@ internal static class Demarrage
         services.AddSingleton<IMoniteurRepository, MoniteurRepository>();
         services.AddSingleton<ISortieRepository, SortieRepository>();
         services.AddSingleton<IJournalRepository, JournalRepository>();
+        services.AddSingleton<IRevisionRepository, RevisionRepository>();
 
         // Services métier (Core)
         services.AddSingleton<ServiceScan>();
@@ -54,6 +55,7 @@ internal static class Demarrage
         services.AddSingleton<ServiceMoniteurs>();
         services.AddSingleton<ServiceHistorique>();
         services.AddSingleton<ServiceReglages>();
+        services.AddSingleton<ServiceRevisions>();
 
         // Interface. Les écrans ne sont pas enregistrés : ServiceNavigation les crée à la demande.
         services.AddSingleton<ServiceNavigation>();

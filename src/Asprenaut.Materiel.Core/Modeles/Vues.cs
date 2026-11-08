@@ -11,6 +11,7 @@ public sealed class SortieResume
     public string Intitule { get; set; } = "";
     public string Lieu { get; set; } = "";
     public StatutSortie Statut { get; set; }
+    public long MoniteurId { get; set; }
     public string MoniteurNom { get; set; } = "";
     public DateTime? DepartValideLe { get; set; }
     public DateTime? ClotureeLe { get; set; }
@@ -35,13 +36,28 @@ public sealed class LigneSortie
     public string Categorie { get; set; } = "";
     public string? Taille { get; set; }
     public DateOnly? DateProchaineRevision { get; set; }
+    public DateOnly? DateRequalification { get; set; }
     public StatutSortieEquipement Statut { get; set; }
     public DateTime ScanneDepartLe { get; set; }
     public DateTime? ScanneRetourLe { get; set; }
 
+    /// <summary>Révision, TIV ou requalification dépassée.</summary>
     public bool RevisionDepassee(DateOnly aujourdHui) =>
-        DateProchaineRevision is { } date && date < aujourdHui;
+        (DateProchaineRevision is { } r && r < aujourdHui) || (DateRequalification is { } q && q < aujourdHui);
+
+    /// <summary>Échéance dépassée la plus ancienne (pour le message), ou null.</summary>
+    public DateOnly? EcheanceDepassee(DateOnly aujourdHui) =>
+        new[] { DateProchaineRevision, DateRequalification }.Where(d => d < aujourdHui).Min();
 }
+
+/// <summary>Carte d'un moniteur : sorties de la saison et matériel encore dehors sous sa responsabilité.</summary>
+public sealed record FicheMoniteur(Moniteur Moniteur, int SortiesSaison, int NbDehors);
+
+/// <summary>Sortie en cours d'un moniteur, avec le matériel encore dehors.</summary>
+public sealed record SortieDehors(SortieResume Sortie, IReadOnlyList<LigneSortie> Dehors);
+
+/// <summary>Fiche détaillée : sorties en cours avec matériel dehors, dernières sorties clôturées.</summary>
+public sealed record DetailMoniteur(Moniteur Moniteur, IReadOnlyList<SortieDehors> EnCours, IReadOnlyList<SortieResume> Dernieres);
 
 /// <summary>Une ligne du tableau d'inventaire.</summary>
 public sealed class LigneInventaire
@@ -54,6 +70,7 @@ public sealed class LigneInventaire
     public string? Taille { get; set; }
     public EtatEquipement Etat { get; set; }
     public DateOnly? DateProchaineRevision { get; set; }
+    public DateOnly? DateRequalification { get; set; }
     public long? SortieEnCoursId { get; set; }
     public string? SortieEnCoursIntitule { get; set; }
     public bool EstManquant { get; set; }

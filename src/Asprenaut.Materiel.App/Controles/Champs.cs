@@ -172,7 +172,9 @@ public sealed class ChampDate : Panel
         var cote = Height - (2 * marge);
         _suivant.SetBounds(Width - marge - cote, marge, cote, cote);
         _precedent.SetBounds(_suivant.Left - cote, marge, cote, cote);
-        var largeurJour = (int)Dessin.Echelle(this, 130);
+        // Champ étroit : le jour de la semaine laisse la place à la date.
+        var largeurJour = Width >= Dessin.Echelle(this, 330) ? (int)Dessin.Echelle(this, 130) : 0;
+        _jour.Visible = largeurJour > 0;
         _jour.SetBounds(_precedent.Left - largeurJour - marge, 0, largeurJour, Height);
         var gauche = (int)Dessin.Echelle(this, 16);
         _texte.SetBounds(gauche, (Height - _texte.Height) / 2, Math.Max(20, _jour.Left - gauche), _texte.Height);

@@ -56,6 +56,8 @@ public static class FormatIso
 
     public static string Ecrire(DateOnly valeur) => valeur.ToString(Date, CultureInfo.InvariantCulture);
 
+    public static string? Ecrire(DateOnly? valeur) => valeur is { } v ? Ecrire(v) : null;
+
     public static DateOnly LireDate(string texte) => DateOnly.ParseExact(texte, Date, CultureInfo.InvariantCulture);
 }
 

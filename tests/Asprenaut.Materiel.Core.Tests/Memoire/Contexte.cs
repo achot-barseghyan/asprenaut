@@ -17,6 +17,9 @@ public sealed class Contexte
     public Reglages Reglages { get; } = new();
     public StockageReglagesMemoire Stockage { get; } = new();
     public SauvegardeFactice Sauvegardes { get; } = new();
+    public ServiceRevisions Revisions { get; }
+    public RevisionRepositoryMemoire DepotRevisions { get; }
+    public ServiceMoniteurs Moniteurs { get; }
     public Moniteur Pascal { get; }
 
     public Contexte()
@@ -29,8 +32,13 @@ public sealed class Contexte
         Sorties = new ServiceSortie(sorties, moniteurs, journal, Horloge, Reglages);
         Inventaire = new ServiceInventaire(equipements, new CategorieRepositoryMemoire(Db), journal, Horloge, Reglages);
         ServiceReglages = new ServiceReglages(Reglages, Stockage, Sauvegardes);
+        DepotRevisions = new RevisionRepositoryMemoire(Db);
+        var categories = new CategorieRepositoryMemoire(Db);
+        Revisions = new ServiceRevisions(equipements, categories, sorties, DepotRevisions, moniteurs, journal, Horloge, Reglages);
+        Moniteurs = new ServiceMoniteurs(moniteurs, sorties, journal, Horloge);
 
         Db.Categories.Add(new Categorie { Id = Db.ProchainId(), Nom = "Blocs" });
+        Db.Categories.Add(new Categorie { Id = Db.ProchainId(), Nom = "Détendeurs" });
         Pascal = new Moniteur { Id = Db.ProchainId(), Prenom = "Pascal", Nom = "Martin", Actif = true };
         Db.Moniteurs.Add(Pascal);
     }
@@ -38,16 +46,19 @@ public sealed class Contexte
     public Equipement Equipement(
         string code,
         EtatEquipement etat = EtatEquipement.EnService,
-        DateOnly? revision = null)
+        DateOnly? revision = null,
+        DateOnly? requalification = null,
+        string categorie = "Blocs")
     {
         var e = new Equipement
         {
             Id = Db.ProchainId(),
             Code = code,
-            Libelle = "Bloc 12 L",
-            CategorieId = Db.Categories[0].Id,
+            Libelle = categorie == "Blocs" ? "Bloc 12 L" : "Détendeur",
+            CategorieId = Db.Categories.First(c => c.Nom == categorie).Id,
             Etat = etat,
             DateProchaineRevision = revision,
+            DateRequalification = requalification,
             CreeLe = Maintenant,
         };
         Db.Equipements.Add(e);

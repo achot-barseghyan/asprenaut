@@ -70,7 +70,7 @@ public sealed class ServiceScan(
         if (!reglages.DepartSiRevisionDepassee && equipement.RevisionDepassee(horloge.AujourdHui))
         {
             return ResultatScan.Erreur(
-                $"{equipement.Designation} : révision dépassée depuis le {Libelles.Date(equipement.DateProchaineRevision!.Value)}. Il ne peut pas partir.",
+                $"{equipement.Designation} : révision dépassée depuis le {Libelles.Date(equipement.EcheanceDepassee(horloge.AujourdHui)!.Value)}. Il ne peut pas partir.",
                 equipement);
         }
 
@@ -99,7 +99,7 @@ public sealed class ServiceScan(
         if (equipement.RevisionDepassee(horloge.AujourdHui))
         {
             return ResultatScan.Avertissement(
-                $"{equipement.Designation} ajouté. Attention : révision dépassée depuis le {Libelles.Date(equipement.DateProchaineRevision!.Value)}.",
+                $"{equipement.Designation} ajouté. Attention : révision dépassée depuis le {Libelles.Date(equipement.EcheanceDepassee(horloge.AujourdHui)!.Value)}.",
                 equipement);
         }
 

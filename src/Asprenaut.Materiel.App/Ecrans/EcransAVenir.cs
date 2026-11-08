@@ -14,13 +14,6 @@ public abstract class EcranAVenir : EcranBase
     }
 }
 
-public sealed class EcranMoniteurs() : EcranAVenir("Moniteurs responsables des sorties et plongeurs du club.")
-{
-    public override string Titre => "Moniteurs et plongeurs";
-
-    public override EntreeMenu Menu => EntreeMenu.Moniteurs;
-}
-
 public sealed class EcranHistorique() : EcranAVenir("Journal de tous les scans et changements.")
 {
     public override string Titre => "Historique";

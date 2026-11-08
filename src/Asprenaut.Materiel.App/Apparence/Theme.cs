@@ -63,6 +63,16 @@ public static class Theme
     public static readonly Color Lumiere = Hex("#D9FBFF");
     public static readonly Color LogoCentre = Hex("#2BB7C8");
 
+    // --- Pastilles des moniteurs (dégradés de la maquette, du clair au foncé) ---
+    public static readonly (Color Clair, Color Fonce)[] DegradesAvatar =
+    [
+        (Hex("#8FF3F7"), Hex("#2BB7C8")),
+        (Hex("#FFC6A8"), Hex("#FF9A6B")),
+        (Hex("#A8F5CF"), Hex("#3FD99A")),
+        (Hex("#FFE39A"), Hex("#FFD166")),
+        (Hex("#C9D8FF"), Hex("#7D9CFF")),
+    ];
+
     // --- Dimensions (pixels logiques à 96 dpi, mises à l'échelle par Dessin.Echelle) ---
     public const int HauteurCliquable = 44;
     public const int HauteurBouton = 50;
