@@ -16,7 +16,7 @@
 
   <ItemGroup>
     <!-- Scripts de migration numérotés, embarqués dans l'assembly. -->
-    <EmbeddedResource Include="Migrations\*.sql" />
+    <EmbeddedResource Include="Migrations\*.sql" LogicalName="Migrations.%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>
