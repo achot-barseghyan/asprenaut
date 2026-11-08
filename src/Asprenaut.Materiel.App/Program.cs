@@ -1,16 +1,44 @@
+using Asprenaut.Materiel.App.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
+
 namespace Asprenaut.Materiel.App;
 
-static class Program
+internal static class Program
 {
     /// <summary>
-    ///  The main entry point for the application.
+    /// Point d'entrée. Option : <c>--base &lt;chemin&gt;</c> pour ouvrir une autre base
+    /// (essais, démonstration) sans modifier les paramètres enregistrés.
     /// </summary>
     [STAThread]
-    static void Main()
+    private static void Main(string[] args)
     {
-        // To customize application configuration such as set high DPI settings or default font,
-        // see https://aka.ms/applicationconfiguration.
+        // Applique les réglages du .csproj : HighDpiMode.PerMonitorV2, styles visuels, rendu du texte.
         ApplicationConfiguration.Initialize();
-        Application.Run(new Form1());
-    }    
+        Erreurs.Installer();
+
+        var parametres = ParametresApplication.Charger();
+        var indexBase = Array.IndexOf(args, "--base");
+        if (indexBase >= 0 && indexBase + 1 < args.Length)
+        {
+            parametres.CheminBase = Path.GetFullPath(args[indexBase + 1]);
+        }
+
+        ServiceProvider services;
+        try
+        {
+            services = Demarrage.ConfigurerServices(parametres);
+            Demarrage.PreparerBaseAsync(services).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            Erreurs.Journaliser(ex);
+            Dialogues.Erreur(null, $"Impossible d'ouvrir la base de données :\n{parametres.CheminBase}\n\n{ex.Message}");
+            return;
+        }
+
+        using (services)
+        {
+            Application.Run(services.GetRequiredService<MainForm>());
+        }
+    }
 }

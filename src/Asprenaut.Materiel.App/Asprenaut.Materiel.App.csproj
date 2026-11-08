@@ -10,6 +10,8 @@
     <ApplicationUseCompatibleTextRendering>false</ApplicationUseCompatibleTextRendering>
     <AssemblyName>Asprenaut.Materiel</AssemblyName>
     <RootNamespace>Asprenaut.Materiel.App</RootNamespace>
+    <!-- Publication en un seul fichier : inclut e_sqlite3.dll dans l'exe (sinon il resterait à côté). -->
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
 
   <ItemGroup>
