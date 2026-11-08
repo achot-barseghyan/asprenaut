@@ -1,0 +1,12 @@
+<Project>
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <LangVersion>latest</LangVersion>
+    <Deterministic>true</Deterministic>
+    <Company>Club de plongée Asprenaut</Company>
+    <Product>Asprenaut · Matériel</Product>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+</Project>

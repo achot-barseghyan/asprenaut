@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Data : implémentation SQLite (Dapper), migrations, sauvegardes. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="Dapper" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Asprenaut.Materiel.Core\Asprenaut.Materiel.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Scripts de migration numérotés, embarqués dans l'assembly. -->
+    <EmbeddedResource Include="Migrations\*.sql" />
+  </ItemGroup>
+
+</Project>

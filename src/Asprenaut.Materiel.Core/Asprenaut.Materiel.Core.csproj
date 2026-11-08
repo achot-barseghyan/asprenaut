@@ -1,0 +1,12 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Core : modèles, règles métier, interfaces. Aucune dépendance UI ni SQLite. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Asprenaut.Materiel.Core.Tests" />
+  </ItemGroup>
+
+</Project>
