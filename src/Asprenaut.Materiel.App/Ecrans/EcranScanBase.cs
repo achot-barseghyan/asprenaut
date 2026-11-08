@@ -6,20 +6,21 @@ using Asprenaut.Materiel.Core.Modeles;
 namespace Asprenaut.Materiel.App.Ecrans;
 
 /// <summary>
-/// Base commune aux écrans Départ et Retour : en-tête de la sortie, indicateur d'étapes,
-/// zone de scan, et traitement des scans un par un (jamais deux en parallèle).
+/// Base commune aux écrans Départ et Retour : fil d'Ariane, carte d'en-tête de la sortie (date, intitulé,
+/// moniteur, étapes), zone de scan, et traitement des scans un par un (jamais deux en parallèle).
 /// </summary>
 public abstract class EcranScanBase : EcranBase
 {
     private readonly SemaphoreSlim _unParUn = new(1, 1);
+    private readonly FilAriane _fil;
+    private readonly PastilleDate _date = new();
+    private readonly Label _titreSortie = Ui.Libelle("", Theme.PoliceGrasse(21f));
+    private readonly Label _infosSortie = Ui.Libelle("", Theme.Police(10.5f), Theme.TexteSecondaireClair);
 
     protected EcranScanBase(INavigation navigation, ModeScan mode)
     {
         Navigation = navigation;
-        Retour = new BoutonArrondi("‹  Sorties", StyleBouton.Lien) { Margin = new Padding(0, 0, 0, 4), Padding = new Padding(8, 0, 12, 0) };
-        Retour.Click += (_, _) => Navigation.AllerA<EcranSorties>();
-        TitreSortie = Ui.Titre("");
-        InfosSortie = Ui.SousTitre("");
+        _fil = new FilAriane("Sorties", () => Navigation.AllerA<EcranSorties>());
         Etapes = new IndicateurEtapes { EtapeActive = mode == ModeScan.Depart ? 1 : 2 };
         ZoneScan = new ScanInput { Mode = mode };
         ZoneScan.CodeScanne += (_, e) => Executer(() => TraiterUnParUnAsync(e.Code));
@@ -31,18 +32,32 @@ public abstract class EcranScanBase : EcranBase
 
     protected long SortieId { get; private set; }
 
-    protected BoutonArrondi Retour { get; }
-
-    protected Label TitreSortie { get; }
-
-    protected Label InfosSortie { get; }
-
     protected IndicateurEtapes Etapes { get; }
 
     protected ScanInput ZoneScan { get; }
 
-    /// <summary>En-tête standard : lien retour, intitulé, infos, étapes.</summary>
-    protected Control CreerEntete() => Ui.Entete(Ui.Pile(Retour, TitreSortie, InfosSortie), Etapes);
+    /// <summary>Met en page : fil d'Ariane, carte d'en-tête, puis le corps propre à l'écran.</summary>
+    protected void Composer(Control corps)
+    {
+        _titreSortie.AutoEllipsis = true;
+        _titreSortie.Margin = new Padding(0, 0, 0, 6);
+        _infosSortie.Margin = Padding.Empty;
+        var textes = Ui.Pile(_titreSortie, _infosSortie);
+        textes.Margin = new Padding(18, 0, 12, 0);
+
+        var entete = new Carte { Padding = new Padding(26, 20, 26, 20), Margin = new Padding(0, 0, 0, 22) };
+        var ligne = Ui.Colonnes((_date, SizeType.Absolute, 62), (textes, SizeType.Percent, 100), (Etapes, SizeType.Absolute, 320));
+        _date.Dock = textes.Dock = Etapes.Dock = DockStyle.None;
+        _date.Anchor = AnchorStyles.Left;
+        textes.Anchor = AnchorStyles.Left;
+        Etapes.Anchor = AnchorStyles.Right;
+        entete.Controls.Add(ligne);
+
+        Controls.Add(Ui.Colonne(
+            (_fil, SizeType.AutoSize, 0),
+            (entete, SizeType.Absolute, 112 + 22),
+            (corps, SizeType.Percent, 100)));
+    }
 
     protected sealed override async Task ChargerAsync(object? parametre)
     {
@@ -57,12 +72,37 @@ public abstract class EcranScanBase : EcranBase
     /// <summary>Traite un code scanné (appelé un code à la fois).</summary>
     protected abstract Task TraiterCodeAsync(string code);
 
-    protected void AfficherSortie(SortieResume s)
+    protected void AfficherSortie(SortieResume s, string? complement = null)
     {
-        TitreSortie.Text = s.Intitule;
-        var infos = $"{Libelles.DateLongue(s.DateSortie)}  ·  {s.MoniteurNom}  ·  {Libelles.De(s.Type)}";
-        InfosSortie.Text = string.IsNullOrWhiteSpace(s.Lieu) ? infos : $"{infos}  ·  {s.Lieu}";
+        _fil.Courant = $"{s.DateSortie.ToString("d MMMM", Libelles.Culture)} · {s.Intitule}";
+        _date.Date = s.DateSortie;
+        _titreSortie.Text = s.Intitule;
+        var infos = $"{Libelles.De(s.Type)} · Moniteur : {s.MoniteurNom}";
+        if (!string.IsNullOrWhiteSpace(s.Lieu))
+        {
+            infos += $" · {s.Lieu}";
+        }
+
+        _infosSortie.Text = complement is null ? infos : $"{infos} · {complement}";
     }
+
+    /// <summary>Hauteur de la ligne d'en-tête d'une carte de liste (marge comprise).</summary>
+    protected const int HauteurEnteteListe = 36 + 14;
+
+    /// <summary>En-tête d'une carte de liste : titre à gauche, compteur à droite.</summary>
+    protected static TableLayoutPanel EnteteListe(Label titre, Pastille compteur)
+    {
+        var entete = Ui.Colonnes((titre, SizeType.Percent, 100), (compteur, SizeType.AutoSize, 0));
+        titre.Dock = compteur.Dock = DockStyle.None;
+        titre.Anchor = AnchorStyles.Left;
+        compteur.Anchor = AnchorStyles.Right;
+        entete.Margin = new Padding(0, 0, 0, 14);
+        return entete;
+    }
+
+    /// <summary>Compteur rond d'une liste ("12").</summary>
+    protected static Pastille Compteur(Color couleur, Color couleurTexte) =>
+        new("0", Theme.Teinte(couleur, 0.16f), couleurTexte, police: Theme.PoliceGrasse(11.25f), hauteur: 32, largeurMin: 36);
 
     protected static string Heure(DateTime utc) => utc.ToLocalTime().ToString("HH:mm", Libelles.Culture);
 

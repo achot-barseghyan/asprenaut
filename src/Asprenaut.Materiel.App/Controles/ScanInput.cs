@@ -1,6 +1,8 @@
 using System.ComponentModel;
+using System.Drawing.Drawing2D;
 using System.Media;
 using Asprenaut.Materiel.App.Apparence;
+using Asprenaut.Materiel.Core.Modeles;
 using Asprenaut.Materiel.Core.Resultats;
 using Saisie = Asprenaut.Materiel.Core.Saisie;
 
@@ -25,55 +27,66 @@ public sealed class CodeScanneEventArgs(string code) : EventArgs
 /// - Anti-rebond : le même code reçu deux fois en moins de 800 ms est ignoré.
 /// - Garde le focus : s'il part ailleurs dans l'écran, il revient au champ après 1 seconde
 ///   (sauf si l'utilisateur tape dans un autre champ, ou si une autre fenêtre est active).
-/// - Retour visuel (bandeau vert / jaune / rouge) et sonore (SystemSounds).
+/// - Retour visuel dans <see cref="Bandeau"/> (vert / jaune / rouge) et sonore (SystemSounds).
+/// Le bandeau n'est pas un enfant de la zone : l'écran le place où il veut.
 /// </summary>
-public sealed class ScanInput : UserControl
+public sealed class ScanInput : UserControl, IFondDessine
 {
     private const int DelaiRetourFocusMs = 1000;
+    private const int CycleSonarMs = 2800;
 
     private readonly ChampScan _champ;
-    private readonly Label _consigne;
-    private readonly BandeauMessage _bandeau;
+    private readonly CadreChamp _cadre;
     private readonly System.Windows.Forms.Timer _minuterieFocus = new() { Interval = 200 };
+    private readonly System.Windows.Forms.Timer _animation = new() { Interval = 40 };
     private readonly Saisie.AntiRebond _antiRebond = new(800);
     private long _perteFocusMs;
     private ModeScan _mode;
+    private string _consigne = "";
+    private string _aide = "";
+    private string? _dernierCode;
+    private RectangleF _zoneSonar;
 
     public ScanInput()
     {
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         AutoScaleMode = AutoScaleMode.Inherit;
-        Padding = new Padding(28, 20, 28, 20);
-        Margin = new Padding(0, 0, 0, 16);
-        Height = 240;
+        Margin = Padding.Empty;
+        BackColor = Theme.Surface;
 
-        _consigne = Ui.Libelle("", Theme.PoliceTitre(13f));
         _champ = new ChampScan
         {
             BorderStyle = BorderStyle.None,
-            Font = Theme.Police(20f),
-            BackColor = Theme.Fond,
+            Font = Theme.PoliceCode(13f),
+            TextAlign = HorizontalAlignment.Center,
             ForeColor = Theme.Texte,
-            PlaceholderText = "Scannez ou tapez un code puis Entrée",
+            PlaceholderText = "En attente d'un scan…",
             AccessibleName = "Code scanné",
         };
-        var cadreChamp = new CadreChamp(_champ);
-        _bandeau = new BandeauMessage();
-
-        Controls.Add(Ui.Colonne(
-            (_consigne, SizeType.AutoSize, 0),
-            (cadreChamp, SizeType.Absolute, 76),
-            (_bandeau, SizeType.Absolute, 56)));
+        _cadre = new CadreChamp(_champ);
+        Controls.Add(_cadre);
+        Bandeau = new BandeauMessage();
 
         _champ.KeyDown += SurToucheChamp;
         _champ.Enter += (_, _) => _perteFocusMs = -1;
         _champ.Leave += (_, _) => _perteFocusMs = Environment.TickCount64;
         _minuterieFocus.Tick += (_, _) => RendreFocusSiBesoin();
+        _animation.Tick += (_, _) =>
+        {
+            if (Visible && !_zoneSonar.IsEmpty)
+            {
+                Invalidate(Rectangle.Ceiling(_zoneSonar));
+            }
+        };
         Mode = ModeScan.Depart;
     }
 
     /// <summary>Code nettoyé, après anti-rebond.</summary>
     public event EventHandler<CodeScanneEventArgs>? CodeScanne;
+
+    /// <summary>Bandeau de résultat du scan, à placer par l'écran (sous la zone, en général).</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public BandeauMessage Bandeau { get; }
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public ModeScan Mode
@@ -82,9 +95,13 @@ public sealed class ScanInput : UserControl
         set
         {
             _mode = value;
-            BackColor = value == ModeScan.Depart ? Theme.FondDepart : Theme.FondRetour;
-            _consigne.ForeColor = value == ModeScan.Depart ? Theme.Depart : Theme.Retour;
-            _consigne.Text = value == ModeScan.Depart ? "Scannez le matériel qui part" : "Scannez le matériel qui rentre";
+            _consigne = value == ModeScan.Depart ? "Scannez le matériel qui part" : "Scannez le matériel qui revient";
+            _aide = value == ModeScan.Depart ? "Chaque équipement scanné s'ajoute à cette sortie." : "Il passe de « À rendre » à « Rendu ».";
+            AccessibleName = _consigne;
+            AccessibleDescription = _aide;
+            _champ.BackColor = Theme.Sur(Theme.Surface, Theme.Fond, 0.75f);
+            _cadre.CouleurBordure = Theme.Sur(Theme.Surface, Couleur, 0.35f);
+            PerformLayout();
             Invalidate(true);
         }
     }
@@ -92,6 +109,8 @@ public sealed class ScanInput : UserControl
     /// <summary>Désactive le retour automatique du focus (par exemple pendant une saisie ailleurs).</summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool GarderFocus { get; set; } = true;
+
+    private Color Couleur => _mode == ModeScan.Depart ? Theme.Depart : Theme.Retour;
 
     public void PrendreFocus()
     {
@@ -101,11 +120,14 @@ public sealed class ScanInput : UserControl
         }
     }
 
-    public void AfficherResultat(ResultatScan resultat) => AfficherMessage(resultat.Niveau, resultat.Message);
+    public void AfficherResultat(ResultatScan resultat) =>
+        AfficherMessage(resultat.Niveau, resultat.Message, resultat.Code ?? resultat.Equipement?.Code ?? _dernierCode);
 
-    public void AfficherMessage(NiveauResultat niveau, string message)
+    /// <summary>Affiche un message ; <paramref name="code"/> s'affiche en dessous avec l'heure.</summary>
+    public void AfficherMessage(NiveauResultat niveau, string message, string? code = null)
     {
-        _bandeau.Afficher(niveau, message);
+        var detail = code is null ? null : $"{code} · {DateTime.Now.ToString("HH:mm", Libelles.Culture)}";
+        Bandeau.Afficher(niveau, message, detail);
         switch (niveau)
         {
             case NiveauResultat.Succes:
@@ -129,6 +151,7 @@ public sealed class ScanInput : UserControl
             return;
         }
 
+        _dernierCode = code;
         CodeScanne?.Invoke(this, new CodeScanneEventArgs(code));
     }
 
@@ -137,19 +160,162 @@ public sealed class ScanInput : UserControl
         base.OnHandleCreated(e);
         _perteFocusMs = 0; // Prend le focus dès que l'écran est affiché.
         _minuterieFocus.Start();
+        _animation.Start();
     }
 
-    protected override void OnPaintBackground(PaintEventArgs e) =>
-        Dessin.PeindreFondArrondi(this, e.Graphics, BackColor, _mode == ModeScan.Depart ? Theme.Depart : Theme.Retour, Theme.RayonZoneScan, 2f);
+    protected override void OnLayout(LayoutEventArgs e)
+    {
+        base.OnLayout(e);
+        if (_cadre is null)
+        {
+            return;
+        }
+
+        var (sonar, haut, _, _, champ) = Disposition();
+        _zoneSonar = sonar <= 0
+            ? RectangleF.Empty
+            : RectangleF.Inflate(new RectangleF((Width - sonar) / 2f, haut, sonar, sonar), sonar * 0.32f, sonar * 0.32f);
+        var largeur = (int)Math.Min(Width - E(64), E(440));
+        _cadre.SetBounds((Width - largeur) / 2, (int)champ, largeur, (int)Math.Min(E(56), Math.Max(E(40), Height - E(8))));
+    }
+
+    protected override void OnPaintBackground(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        Dessin.EffacerAvecParent(this, g);
+        Dessin.Qualite(g);
+        var couleur = Couleur;
+        var r = new RectangleF(0.75f, 0.75f, Width - 2.5f, Height - 2.5f);
+        using var chemin = Dessin.Arrondi(r, E(Theme.RayonZoneScan));
+        using (var fond = new SolidBrush(Theme.Surface))
+        {
+            g.FillPath(fond, chemin);
+        }
+
+        // Lueur colorée autour du sonar (radial-gradient de la maquette).
+        var (sonar, haut, _, _, _) = Disposition();
+        var centre = new PointF(Width / 2f, haut + (sonar / 2));
+        var rayon = Math.Max(Width, Height) * 0.55f;
+        using (var lueur = new GraphicsPath())
+        {
+            lueur.AddEllipse(centre.X - rayon, centre.Y - (rayon * 0.8f), rayon * 2, rayon * 1.6f);
+            using var degrade = new PathGradientBrush(lueur)
+            {
+                CenterPoint = centre,
+                CenterColor = Theme.Teinte(couleur, 0.16f),
+                SurroundColors = [Theme.Surface],
+            };
+            g.SetClip(chemin);
+            g.FillPath(degrade, lueur);
+            g.ResetClip();
+        }
+
+        using (var bord = new Pen(Theme.Sur(Theme.Surface, couleur, 0.55f), E(1.5f)))
+        {
+            g.DrawPath(bord, chemin);
+        }
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        Dessin.Qualite(g);
+        var couleur = Couleur;
+        var (sonar, haut, titre, aide, _) = Disposition();
+        var centre = new PointF(Width / 2f, haut + (sonar / 2));
+        var policeTitre = Theme.PoliceGrasse(_mode == ModeScan.Depart ? 19.5f : 18f);
+        if (titre >= 0)
+        {
+            Dessin.Texte(g, _consigne, policeTitre, new Rectangle(0, (int)titre, Width, TextRenderer.MeasureText(_consigne, policeTitre).Height), Theme.Texte, centre: true);
+        }
+
+        if (sonar <= 0)
+        {
+            return; // Mode compact : consigne et champ seulement.
+        }
+
+        // Ondes du sonar : trois cercles qui grandissent et s'effacent, décalés d'un tiers de cycle.
+        using (var clip = Dessin.Arrondi(new RectangleF(1, 1, Width - 3, Height - 3), E(Theme.RayonZoneScan)))
+        {
+            g.SetClip(clip);
+            var temps = Environment.TickCount64;
+            for (var i = 0; i < 3; i++)
+            {
+                var phase = ((temps + (i * CycleSonarMs / 3)) % CycleSonarMs) / (float)CycleSonarMs;
+                var rayon = sonar / 2 * (0.55f + (1.05f * phase));
+                using var onde = new Pen(Theme.Alpha(couleur, 0.75f * (1 - phase)), E(2));
+                g.DrawEllipse(onde, centre.X - rayon, centre.Y - rayon, rayon * 2, rayon * 2);
+            }
+
+            g.ResetClip();
+        }
+
+        // Pastille centrale avec le pictogramme QR.
+        var d = sonar * 0.64f;
+        var pastille = new RectangleF(centre.X - (d / 2), centre.Y - (d / 2), d, d);
+        using (var forme = new GraphicsPath())
+        {
+            forme.AddEllipse(pastille);
+            using var degrade = new PathGradientBrush(forme)
+            {
+                CenterPoint = new PointF(pastille.X + (d * 0.3f), pastille.Y + (d * 0.25f)),
+                CenterColor = Theme.Sur(couleur, Color.White, 0.45f),
+                SurroundColors = [Theme.Assombrir(couleur, 0.12f)],
+            };
+            g.FillPath(degrade, forme);
+        }
+
+        var icone = d * 0.46f;
+        Icones.Dessiner(g, Icones.Qr, new RectangleF(centre.X - (icone / 2), centre.Y - (icone / 2), icone, icone),
+            _mode == ModeScan.Depart ? Theme.TexteSurDepart : Theme.TexteSurRetour);
+
+        // Aide sous la consigne.
+        var policeAide = Theme.Police(11f);
+        Dessin.Texte(g, _aide, policeAide, new Rectangle(0, (int)aide, Width, TextRenderer.MeasureText(_aide, policeAide).Height), Theme.TexteSecondaireClair, centre: true);
+    }
 
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
             _minuterieFocus.Dispose();
+            _animation.Dispose();
         }
 
         base.Dispose(disposing);
+    }
+
+    private float E(float pixelsLogiques) => Dessin.Echelle(this, pixelsLogiques);
+
+    /// <summary>
+    /// Position verticale des éléments : le sonar rétrécit si la zone est basse ; en dessous d'un seuil
+    /// (petit écran), il disparaît avec l'aide : il reste la consigne et le champ, toujours utilisables.
+    /// </summary>
+    private (float Sonar, float Haut, float Titre, float Aide, float Champ) Disposition()
+    {
+        var hTitre = TextRenderer.MeasureText("Ag", Theme.PoliceGrasse(19.5f)).Height;
+        var hAide = TextRenderer.MeasureText("Ag", Theme.Police(11f)).Height;
+        var fixe = E(22) + hTitre + E(6) + hAide + E(22) + E(56);
+        if (Height < hTitre + E(16) + E(56) + E(16))
+        {
+            return (0, 0, -1000, -1000, Math.Max(E(4), (Height - E(56)) / 2)); // Champ seul.
+        }
+
+        if (Height < fixe + E(56) + E(40))
+        {
+            var bloc = hTitre + E(16) + E(56);
+            var hautCompact = Math.Max(E(8), (Height - bloc) / 2);
+            return (0, hautCompact, hautCompact, -1000, hautCompact + hTitre + E(16));
+        }
+
+        var marge = Math.Clamp((Height - fixe - E(150)) / 2, E(20), E(44));
+        var sonar = Math.Clamp(Height - fixe - (2 * marge), E(56), E(150));
+        var total = sonar + fixe;
+        var haut = Math.Max(marge, (Height - total) / 2);
+        var titre = haut + sonar + E(22);
+        var aide = titre + hTitre + E(6);
+        var champ = aide + hAide + E(22);
+        return (sonar, haut, titre, aide, champ);
     }
 
     private void SurToucheChamp(object? sender, KeyEventArgs e)
@@ -220,18 +386,30 @@ public sealed class ScanInput : UserControl
     private sealed class CadreChamp : Panel
     {
         private readonly TextBox _champ;
+        private Color _bordure = Theme.BordureForte;
 
         public CadreChamp(TextBox champ)
         {
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
             _champ = champ;
-            BackColor = Theme.Fond;
-            Margin = new Padding(0, 8, 0, 8);
+            BackColor = Theme.Sur(Theme.Surface, Theme.Fond, 0.75f);
+            Margin = Padding.Empty;
             Cursor = Cursors.IBeam;
             Controls.Add(champ);
             Click += (_, _) => champ.Focus();
             champ.Enter += (_, _) => Invalidate();
             champ.Leave += (_, _) => Invalidate();
+        }
+
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public Color CouleurBordure
+        {
+            get => _bordure;
+            set
+            {
+                _bordure = value;
+                Invalidate();
+            }
         }
 
         protected override void OnLayout(LayoutEventArgs levent)
@@ -242,57 +420,95 @@ public sealed class ScanInput : UserControl
         }
 
         protected override void OnPaintBackground(PaintEventArgs e) =>
-            Dessin.PeindreFondArrondi(this, e.Graphics, BackColor, _champ.Focused ? Theme.Accent : Theme.BordureForte, Theme.RayonBouton, 1.5f);
+            Dessin.PeindreFondArrondi(this, e.Graphics, BackColor, _champ.Focused ? Theme.Accent : _bordure, 16, 1.5f);
     }
 }
 
-/// <summary>Bandeau de message coloré sous la zone de scan.</summary>
-public sealed class BandeauMessage : Control
+/// <summary>Bandeau de résultat du scan : pastille ✓ / ! / ✕, message, puis code et heure.</summary>
+public sealed class BandeauMessage : ControleDessine
 {
     private NiveauResultat? _niveau;
+    private string? _detail;
 
     public BandeauMessage()
     {
-        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-        Font = Theme.PoliceTitre(12f);
-        Margin = Padding.Empty;
-        Text = "En attente d'un scan…";
+        Text = "Aucun scan pour l'instant.";
+        AccessibleRole = AccessibleRole.StatusBar;
+        Height = 76;
     }
 
-    public void Afficher(NiveauResultat niveau, string message)
+    public void Afficher(NiveauResultat niveau, string message, string? detail = null)
     {
         _niveau = niveau;
+        _detail = detail;
         Text = message;
-        AccessibleDescription = message;
+        AccessibleName = message;
+        AccessibleDescription = detail;
         Invalidate();
     }
 
-    protected override void OnPaint(PaintEventArgs e)
+    protected override void Peindre(Graphics g)
     {
-        var g = e.Graphics;
-        if (_niveau is not { } niveau)
-        {
-            g.Clear(Dessin.CouleurParent(this));
-            TextRenderer.DrawText(g, Text, Theme.Police(11f), ClientRectangle, Theme.TexteSecondaireClair,
-                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
-            return;
-        }
-
-        var (fond, texte) = niveau switch
+        var (fond, texte, pastille) = _niveau switch
         {
             NiveauResultat.Succes => Theme.CouleursSucces,
             NiveauResultat.Avertissement => Theme.CouleursAvertissement,
-            _ => Theme.CouleursErreur,
+            NiveauResultat.Erreur => Theme.CouleursErreur,
+            _ => (Theme.Surface, Theme.TexteSecondaireClair, Theme.SurfaceActive),
         };
-        Dessin.PeindreFondArrondi(this, g, fond, texte, Theme.RayonBouton, 1.5f);
-        var icone = niveau switch
+        var r = new RectangleF(0.5f, 0.5f, Width - 2, Height - 2);
+        using (var chemin = Dessin.Arrondi(r, E(18)))
         {
-            NiveauResultat.Succes => "✓",
-            NiveauResultat.Avertissement => "!",
-            _ => "✕",
+            using var pinceau = new SolidBrush(fond);
+            g.FillPath(pinceau, chemin);
+            using var bord = new Pen(_niveau is null ? Theme.Bordure : Theme.Sur(fond, pastille, 0.35f), E(1));
+            g.DrawPath(bord, chemin);
+        }
+
+        // Pastille ronde avec le symbole.
+        var d = E(36);
+        var x = E(18);
+        var cercle = new RectangleF(x, (Height - d) / 2, d, d);
+        using (var plein = new SolidBrush(pastille))
+        {
+            g.FillEllipse(plein, cercle);
+        }
+
+        var (symbole, couleurSymbole, epaisseur) = _niveau switch
+        {
+            NiveauResultat.Succes => (Icones.Coche, Theme.TexteSurRetour, 2.8f),
+            NiveauResultat.Avertissement => (Icones.Exclamation, Theme.TexteSurDepart, 3f),
+            NiveauResultat.Erreur => (Icones.Croix, Theme.TexteSurDepart, 2.8f),
+            _ => (Icones.Qr, Theme.TexteSecondaire, 1.8f),
         };
-        var marge = (int)Dessin.Echelle(this, 16);
-        TextRenderer.DrawText(g, $"{icone}   {Text}", Font, Rectangle.FromLTRB(marge, 0, Width - marge, Height), texte,
-            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis);
+        Icones.Dessiner(g, symbole, RectangleF.Inflate(cercle, -E(8), -E(8)), couleurSymbole, epaisseur);
+
+        // Message (deux lignes au plus) puis détail "CODE · 19:41".
+        var gauche = (int)(cercle.Right + E(14));
+        var largeur = Width - gauche - (int)E(16);
+        var police = _niveau is null ? Theme.Police(11f) : Theme.PoliceTitre(11.25f);
+        var policeDetail = Theme.PoliceCode(9.75f);
+        var drapeaux = TextFormatFlags.Left | TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding;
+        var hMessage = Math.Min(TextRenderer.MeasureText(g, Text, police, new Size(largeur, 0), drapeaux).Height, (int)(Height - E(16)));
+        var detail = _detail;
+        var hDetail = detail is null ? 0 : TextRenderer.MeasureText(g, detail, policeDetail).Height;
+        if (hMessage + hDetail > Height - E(12))
+        {
+            detail = null; // Bandeau trop bas : le message passe avant le code et l'heure.
+            hDetail = 0;
+        }
+
+        var y = (Height - hMessage - hDetail) / 2;
+        TextRenderer.DrawText(g, Text, police, new Rectangle(gauche, y, largeur, hMessage), texte, drapeaux);
+        if (detail is not null)
+        {
+            var couleurDetail = _niveau switch
+            {
+                NiveauResultat.Succes => Theme.RetourClair,
+                NiveauResultat.Avertissement => Theme.Avertissement,
+                _ => Theme.Erreur,
+            };
+            Dessin.Texte(g, detail, policeDetail, new Rectangle(gauche, y + hMessage, largeur, hDetail), couleurDetail);
+        }
     }
 }

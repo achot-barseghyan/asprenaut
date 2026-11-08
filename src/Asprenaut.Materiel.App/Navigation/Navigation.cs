@@ -47,6 +47,7 @@ public sealed class ServiceNavigation(IServiceProvider services) : INavigation
         var ancien = EcranCourant;
 
         hote.SuspendLayout();
+        Apparence.Dessin.MettreALEchelle(ecran, hote); // Écrans construits en pixels logiques (96 dpi).
         ecran.Dock = DockStyle.Fill;
         hote.Controls.Add(ecran);
         if (ancien is not null)

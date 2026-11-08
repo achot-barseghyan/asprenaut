@@ -5,18 +5,19 @@ using Asprenaut.Materiel.App.Navigation;
 using Asprenaut.Materiel.Core.Abstractions;
 using Asprenaut.Materiel.Core.Modeles;
 using Asprenaut.Materiel.Core.Services;
+using Saisie = Asprenaut.Materiel.Core.Saisie;
 
 namespace Asprenaut.Materiel.App.Ecrans;
 
-/// <summary>Inventaire : recherche, filtre par catégorie, tableau du matériel.</summary>
+/// <summary>Inventaire : tuiles de catégories, recherche (ou scan), tableau du matériel.</summary>
 public sealed class EcranInventaire : EcranBase
 {
     private readonly ServiceInventaire _inventaire;
     private readonly IHorloge _horloge;
-    private readonly ChampSaisie _recherche = new() { TexteIndicatif = "Rechercher un code, un nom, une taille…" };
-    private readonly FlowLayoutPanel _filtres;
+    private readonly BarreRecherche _recherche = new("Rechercher un code, un équipement, une sortie…", "ou scannez");
+    private readonly GrilleAdaptative _categories = new() { LargeurMin = 176, HauteurElement = 76, Ecart = 12, Margin = new Padding(0, 0, 0, 20) };
+    private readonly List<Tuile> _tuiles = [];
     private readonly DataGridView _grille = new();
-    private readonly Label _compte = Ui.SousTitre("");
     private readonly System.Windows.Forms.Timer _attenteRecherche = new() { Interval = 300 };
     private long? _categorie;
 
@@ -25,17 +26,31 @@ public sealed class EcranInventaire : EcranBase
         _inventaire = inventaire;
         _horloge = horloge;
 
-        var ajouter = new BoutonArrondi("+  Ajouter un équipement", StyleBouton.Principal);
+        var ajouter = new BoutonArrondi("Ajouter un équipement", StyleBouton.Principal, Icones.Plus);
         ajouter.Click += (_, _) => Dialogues.Information(FindForm(), "L'ajout d'équipement arrive dans une prochaine version.");
-        var exporter = new BoutonArrondi("Exporter CSV", StyleBouton.Secondaire);
+        var exporter = new BoutonArrondi("Exporter CSV", StyleBouton.Secondaire, Icones.Telecharger);
         exporter.Click += (_, _) => Dialogues.Information(FindForm(), "L'export CSV arrive dans une prochaine version.");
 
-        _recherche.Width = 380;
-        _recherche.Margin = new Padding(0, 0, 16, 0);
+        _recherche.Margin = new Padding(0, 0, 0, 20);
         _recherche.Champ.TextChanged += (_, _) =>
         {
             _attenteRecherche.Stop();
             _attenteRecherche.Start();
+        };
+
+        // Le pistolet tape le code puis Entrée : on nettoie le code ("asp:bloc-031" → "BLOC-031") et on cherche tout de suite.
+        _recherche.Champ.KeyDown += (_, e) =>
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                e.SuppressKeyPress = true;
+                var code = Saisie.CodeScanne.Nettoyer(_recherche.Champ.Text);
+                if (code.Length > 0)
+                {
+                    _recherche.Champ.Text = code;
+                    _recherche.Champ.SelectAll();
+                }
+            }
         };
         _attenteRecherche.Tick += (_, _) =>
         {
@@ -43,41 +58,26 @@ public sealed class EcranInventaire : EcranBase
             Executer(RechargerAsync);
         };
 
-        // Filtres par catégorie : "puces" qui passent à la ligne ; la hauteur de la rangée suit le contenu.
-        _filtres = new FlowLayoutPanel { WrapContents = true, BackColor = Theme.Fond, Margin = new Padding(0, 0, 0, 8) };
-        var barreRecherche = Ui.Rangee(true, _recherche);
-        barreRecherche.Margin = new Padding(0, 0, 0, 12);
-
-        Theme.AppliquerGrille(_grille);
-        _grille.Columns.Add("code", "Code");
-        _grille.Columns.Add("equipement", "Équipement");
-        _grille.Columns.Add("taille", "Taille");
-        _grille.Columns.Add("statut", "Statut");
-        _grille.Columns.Add("sortie", "Sortie en cours");
-        _grille.Columns.Add("revision", "Prochaine révision");
-        _grille.Columns["equipement"]!.FillWeight = 180;
-        _grille.Columns["taille"]!.FillWeight = 60;
-        _grille.Columns["revision"]!.FillWeight = 130;
+        Theme.AppliquerGrille(_grille, hauteurLigne: 60);
+        _grille.AccessibleName = "Matériel du club";
+        Tableaux.AjouterColonne(_grille, "equipement", "Équipement", 190);
+        Tableaux.AjouterColonne(_grille, "code", "Code", 90);
+        Tableaux.AjouterColonne(_grille, "taille", "Taille", 60);
+        Tableaux.AjouterColonne(_grille, "statut", "Statut", 110);
+        Tableaux.AjouterColonne(_grille, "sortie", "Sortie en cours", 140);
+        Tableaux.AjouterColonne(_grille, "revision", "Prochaine révision", 110);
         _grille.CellFormatting += ColorerCellule;
+        _grille.CellPainting += PeindreCellule;
 
-        var carteGrille = new Carte { Padding = new Padding(12), Margin = Padding.Empty };
+        var carteGrille = new Carte { Padding = new Padding(8, 6, 8, 8), Rayon = 22 };
         _grille.Dock = DockStyle.Fill;
         carteGrille.Controls.Add(_grille);
 
-        var colonne = Ui.Colonne(
-            (Ui.Entete(Ui.Pile(Ui.Titre(Titre), _compte), ajouter, exporter), SizeType.AutoSize, 0),
-            (barreRecherche, SizeType.AutoSize, 0),
-            (_filtres, SizeType.Absolute, 60),
-            (carteGrille, SizeType.Percent, 100));
-        _filtres.Layout += (_, _) =>
-        {
-            var hauteur = _filtres.GetPreferredSize(new Size(_filtres.Width, 0)).Height + _filtres.Margin.Vertical;
-            if (Math.Abs(colonne.RowStyles[2].Height - hauteur) > 1)
-            {
-                colonne.RowStyles[2].Height = hauteur;
-            }
-        };
-        Controls.Add(colonne);
+        Controls.Add(Ui.Colonne(
+            (Ui.Entete(Ui.Pile(Ui.Titre(Titre), Ui.SousTitre("Tout le matériel du club, son état et sa prochaine révision.")), ajouter, exporter), SizeType.AutoSize, 0),
+            (_categories, SizeType.Absolute, 76 + 20),
+            (_recherche, SizeType.Absolute, 54 + 20),
+            (carteGrille, SizeType.Percent, 100)));
     }
 
     public override string Titre => "Inventaire";
@@ -87,14 +87,21 @@ public sealed class EcranInventaire : EcranBase
     protected override async Task ChargerAsync(object? parametre)
     {
         var categories = await _inventaire.ListerCategoriesAsync();
-        _filtres.Controls.Clear();
-        AjouterFiltre("Toutes", null);
-        foreach (var c in categories)
+        var tout = await _inventaire.ListerAsync(null, null);
+        if (IsDisposed)
         {
-            AjouterFiltre(c.Nom, c.Id);
+            return;
         }
 
-        await RechargerAsync();
+        _categories.SuspendLayout();
+        AjouterTuile("Tout", Icones.Tout, null, tout.Count);
+        foreach (var c in categories)
+        {
+            AjouterTuile(c.Nom, Icones.PourCategorie(c.Nom), c.Id, tout.Count(l => l.CategorieId == c.Id));
+        }
+
+        _categories.ResumeLayout(true);
+        Afficher(tout);
         _recherche.Champ.Focus();
     }
 
@@ -108,45 +115,47 @@ public sealed class EcranInventaire : EcranBase
         base.Dispose(disposing);
     }
 
-    private void AjouterFiltre(string texte, long? categorieId)
+    private void AjouterTuile(string texte, string icone, long? categorieId, int nombre)
     {
-        var bouton = new BoutonArrondi(texte, categorieId == _categorie ? StyleBouton.Principal : StyleBouton.Secondaire)
+        var tuile = new Tuile(texte, icone, DispositionTuile.Horizontale)
         {
-            Margin = new Padding(0, 0, 8, 8),
-            Padding = new Padding(14, 0, 14, 0),
+            Compte = nombre,
+            Selectionne = categorieId == _categorie,
             Tag = categorieId,
+            AccessibleName = $"{texte} : {nombre}",
         };
-        bouton.Click += (_, _) =>
+        tuile.Click += (_, _) =>
         {
             _categorie = categorieId;
-            foreach (Control c in _filtres.Controls)
+            foreach (var t in _tuiles)
             {
-                if (c is BoutonArrondi b)
-                {
-                    b.Style = (long?)b.Tag == _categorie ? StyleBouton.Principal : StyleBouton.Secondaire;
-                }
+                t.Selectionne = (long?)t.Tag == _categorie;
             }
 
             Executer(RechargerAsync);
         };
-        _filtres.Controls.Add(bouton);
+        _tuiles.Add(tuile);
+        _categories.Controls.Add(tuile);
     }
 
     private async Task RechargerAsync()
     {
-        var lignes = await _inventaire.ListerAsync(_recherche.Valeur, _categorie);
-        if (IsDisposed)
+        var lignes = await _inventaire.ListerAsync(_recherche.Champ.Text, _categorie);
+        if (!IsDisposed)
         {
-            return;
+            Afficher(lignes);
         }
+    }
 
+    private void Afficher(IReadOnlyList<LigneInventaire> lignes)
+    {
         _grille.SuspendLayout();
         _grille.Rows.Clear();
         foreach (var l in lignes)
         {
             var i = _grille.Rows.Add(
+                l.Libelle,
                 l.Code,
-                $"{l.Libelle} ({l.Categorie})",
                 l.Taille ?? "—",
                 Libelles.De(l.Statut),
                 l.SortieEnCoursIntitule ?? "—",
@@ -155,7 +164,6 @@ public sealed class EcranInventaire : EcranBase
         }
 
         _grille.ResumeLayout();
-        _compte.Text = Libelles.Pluriel(lignes.Count, "équipement");
     }
 
     private void ColorerCellule(object? sender, DataGridViewCellFormattingEventArgs e)
@@ -165,23 +173,40 @@ public sealed class EcranInventaire : EcranBase
             return;
         }
 
-        if (e.ColumnIndex == _grille.Columns["statut"]!.Index)
+        if (e.ColumnIndex == _grille.Columns["code"]!.Index)
         {
-            e.CellStyle.ForeColor = e.CellStyle.SelectionForeColor = l.Statut switch
-            {
-                StatutInventaire.Disponible => Theme.Retour,
-                StatutInventaire.Dehors => Theme.Depart,
-                StatutInventaire.Manquant => Theme.Erreur,
-                _ => Theme.TexteSecondaire,
-            };
+            e.CellStyle.Font = Theme.PoliceCode(10f);
+            e.CellStyle.ForeColor = e.CellStyle.SelectionForeColor = Theme.Accent;
         }
         else if (e.ColumnIndex == _grille.Columns["revision"]!.Index && l.DateProchaineRevision is { } d && d < _horloge.AujourdHui)
         {
+            e.CellStyle.Font = Theme.PoliceTitre(10.5f);
             e.CellStyle.ForeColor = e.CellStyle.SelectionForeColor = Theme.Avertissement;
         }
-        else if (e.ColumnIndex == _grille.Columns["code"]!.Index)
+    }
+
+    private void PeindreCellule(object? sender, DataGridViewCellPaintingEventArgs e)
+    {
+        if (e.RowIndex < 0 || _grille.Rows[e.RowIndex].Tag is not LigneInventaire l)
         {
-            e.CellStyle.Font = Theme.PoliceTitre(10.5f);
+            return;
+        }
+
+        if (e.ColumnIndex == _grille.Columns["equipement"]!.Index)
+        {
+            Tableaux.PeindreIconeTexte(e, Icones.PourCategorie(l.Categorie), l.Libelle);
+        }
+        else if (e.ColumnIndex == _grille.Columns["statut"]!.Index)
+        {
+            var (couleur, texte) = l.Statut switch
+            {
+                StatutInventaire.Disponible => (Theme.Retour, Theme.Retour),
+                StatutInventaire.Dehors => (Theme.Depart, Theme.DepartClair),
+                StatutInventaire.Manquant => (Theme.Erreur, Theme.Erreur),
+                StatutInventaire.HorsService => (Theme.Avertissement, Theme.Avertissement),
+                _ => (Theme.TexteSecondaire, Theme.TexteSecondaireClair),
+            };
+            Tableaux.PeindrePastille(e, Libelles.De(l.Statut), couleur, texte);
         }
     }
 }

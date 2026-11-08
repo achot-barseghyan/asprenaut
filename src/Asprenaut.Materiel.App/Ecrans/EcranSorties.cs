@@ -1,74 +1,92 @@
 using Asprenaut.Materiel.App.Apparence;
 using Asprenaut.Materiel.App.Controles;
 using Asprenaut.Materiel.App.Navigation;
+using Asprenaut.Materiel.Core.Abstractions;
 using Asprenaut.Materiel.Core.Modeles;
 using Asprenaut.Materiel.Core.Services;
 
 namespace Asprenaut.Materiel.App.Ecrans;
 
-/// <summary>Accueil : sorties en cours (cartes) et sorties clôturées (tableau).</summary>
+/// <summary>Accueil : bandeau, sorties en cours (cartes) et sorties clôturées (tableau).</summary>
 public sealed class EcranSorties : EcranBase
 {
     private readonly ServiceSortie _sorties;
+    private readonly IHorloge _horloge;
     private readonly INavigation _navigation;
-    private readonly FlowLayoutPanel _cartes;
-    private readonly Label _aucuneEnCours;
-    private readonly DataGridView _cloturees;
+    private readonly Label _date = Ui.Libelle("", Theme.PoliceTitre(9.75f), Theme.AccentClair);
+    private readonly Label _resume = Ui.Libelle("", Theme.Police(11.25f), Theme.TexteDoux);
+    private readonly GrilleAdaptative _cartes = new() { LargeurMin = 400, HauteurElement = 196, Ecart = 18, RangeesVisibles = 1, Margin = new Padding(0, 0, 0, 30) };
+    private readonly DataGridView _cloturees = new();
 
-    public EcranSorties(ServiceSortie sorties, INavigation navigation)
+    public EcranSorties(ServiceSortie sorties, IHorloge horloge, INavigation navigation)
     {
         _sorties = sorties;
+        _horloge = horloge;
         _navigation = navigation;
 
-        var nouvelle = new BoutonArrondi("+  Nouvelle sortie", StyleBouton.Principal);
-        nouvelle.Click += (_, _) => _navigation.AllerA<EcranNouvelleSortie>();
-
-        _aucuneEnCours = Ui.Libelle("Aucune sortie en cours. Cliquez sur « Nouvelle sortie » pour commencer.", Theme.Police(11f), Theme.TexteSecondaire);
-        _cartes = new FlowLayoutPanel
-        {
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            AutoScroll = true,
-            BackColor = Theme.Fond,
-            Margin = new Padding(0, 4, 0, 16),
-        };
-        _cartes.Controls.Add(_aucuneEnCours);
-        Natif.ScrollbarsSombres(_cartes);
-
-        _cloturees = new DataGridView();
         Theme.AppliquerGrille(_cloturees);
-        _cloturees.Columns.Add("date", "Date");
-        _cloturees.Columns.Add("intitule", "Intitulé");
-        _cloturees.Columns.Add("type", "Type");
-        _cloturees.Columns.Add("moniteur", "Moniteur");
-        _cloturees.Columns.Add("rendus", "Rendus");
-        _cloturees.Columns.Add("manquants", "Manquants");
-        _cloturees.Columns["intitule"]!.FillWeight = 200;
+        Tableaux.AjouterColonne(_cloturees, "date", "Date", 70);
+        Tableaux.AjouterColonne(_cloturees, "intitule", "Sortie", 170);
+        Tableaux.AjouterColonne(_cloturees, "moniteur", "Moniteur", 110);
+        Tableaux.AjouterColonne(_cloturees, "materiel", "Matériel", 90);
+        Tableaux.AjouterColonne(_cloturees, "bilan", "Bilan", 90);
+        _cloturees.AccessibleName = "Sorties clôturées";
         _cloturees.CellDoubleClick += (_, e) =>
         {
-            if (e.RowIndex >= 0 && _cloturees.Rows[e.RowIndex].Tag is long id)
+            if (e.RowIndex >= 0 && _cloturees.Rows[e.RowIndex].Tag is SortieResume s)
             {
-                _navigation.AllerA<EcranRetour>(id);
+                _navigation.AllerA<EcranRetour>(s.Id);
             }
         };
         _cloturees.CellFormatting += (_, e) =>
         {
-            if (e.ColumnIndex == _cloturees.Columns["manquants"]!.Index && e.Value is int n && n > 0)
+            if (e.ColumnIndex == _cloturees.Columns["intitule"]!.Index && e.CellStyle is not null)
             {
-                e.CellStyle!.ForeColor = e.CellStyle.SelectionForeColor = Theme.Erreur;
+                e.CellStyle.Font = Theme.PoliceTitre(10.5f);
+                e.CellStyle.ForeColor = Theme.Texte;
+            }
+        };
+        _cloturees.CellPainting += (_, e) =>
+        {
+            if (e.RowIndex >= 0 && e.ColumnIndex == _cloturees.Columns["bilan"]!.Index && _cloturees.Rows[e.RowIndex].Tag is SortieResume s)
+            {
+                if (s.NbManquants == 0)
+                {
+                    Tableaux.PeindrePastille(e, "Tout rendu", Theme.Retour);
+                }
+                else
+                {
+                    Tableaux.PeindrePastille(e, Libelles.Pluriel(s.NbManquants, "manquant"), Theme.Depart);
+                }
             }
         };
 
-        var carteCloturees = new Carte { Padding = new Padding(12), Margin = Padding.Empty };
+        var carteCloturees = new Carte { Padding = new Padding(8, 6, 8, 8), Rayon = 22 };
         _cloturees.Dock = DockStyle.Fill;
         carteCloturees.Controls.Add(_cloturees);
 
-        Controls.Add(Ui.Colonne(
-            (Ui.Entete(Ui.Pile(Ui.Titre(Titre), Ui.SousTitre("Préparez le départ du matériel, puis scannez son retour.")), nouvelle), SizeType.AutoSize, 0),
-            (Ui.TitreSection("En cours"), SizeType.AutoSize, 0),
-            (_cartes, SizeType.Absolute, 260),
+        var titreEnCours = Ui.TitreSection("Sorties en cours");
+        var precision = Ui.Libelle("matériel encore dehors", Theme.Police(10.5f), Theme.TexteSecondaire);
+        precision.Margin = new Padding(10, 7, 0, 0);
+
+        var colonne = Ui.Colonne(
+            (CreerBandeau(), SizeType.Absolute, 230 + 30),
+            (Ui.Rangee(true, titreEnCours, precision), SizeType.AutoSize, 0),
+            (_cartes, SizeType.Absolute, 196 + 30),
             (Ui.TitreSection("Sorties clôturées"), SizeType.AutoSize, 0),
-            (carteCloturees, SizeType.Percent, 100)));
+            (carteCloturees, SizeType.Percent, 100));
+        Controls.Add(colonne);
+
+        // Écran peu haut : bandeau plus bas, pour garder de la place au tableau des sorties clôturées.
+        colonne.Resize += (_, _) =>
+        {
+            var hauteur = colonne.Height < Dessin.Echelle(colonne, 760) ? 196 : 230;
+            var voulue = Dessin.Echelle(colonne, hauteur + 30);
+            if (Math.Abs(colonne.RowStyles[0].Height - voulue) > 0.5f)
+            {
+                colonne.RowStyles[0].Height = voulue;
+            }
+        };
     }
 
     public override string Titre => "Sorties";
@@ -79,12 +97,22 @@ public sealed class EcranSorties : EcranBase
     {
         var enCours = await _sorties.ListerEnCoursAsync();
         var cloturees = await _sorties.ListerClotureesAsync();
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        _date.Text = _horloge.AujourdHui.ToString("dddd d MMMM", Libelles.Culture).ToUpper(Libelles.Culture);
+        var dehors = enCours.Sum(s => s.NbDehors);
+        _resume.Text = enCours.Count == 0
+            ? "Aucune sortie en cours : tout le matériel est rangé."
+            : $"{Libelles.Pluriel(enCours.Count, "sortie")} en cours · {Libelles.Pluriel(dehors, "équipement")} encore dehors";
 
         _cartes.SuspendLayout();
-        while (_cartes.Controls.Count > 1)
+        while (_cartes.Controls.Count > 0)
         {
-            var c = _cartes.Controls[1];
-            _cartes.Controls.RemoveAt(1);
+            var c = _cartes.Controls[0];
+            _cartes.Controls.RemoveAt(0);
             c.Dispose();
         }
 
@@ -105,15 +133,38 @@ public sealed class EcranSorties : EcranBase
             _cartes.Controls.Add(carte);
         }
 
-        _aucuneEnCours.Visible = enCours.Count == 0;
+        if (enCours.Count == 0)
+        {
+            _cartes.Controls.Add(new CarteAucune());
+        }
+
         _cartes.ResumeLayout(true);
 
         _cloturees.Rows.Clear();
         foreach (var s in cloturees)
         {
-            var i = _cloturees.Rows.Add(Libelles.Date(s.DateSortie), s.Intitule, Libelles.De(s.Type), s.MoniteurNom, $"{s.NbRendus} / {s.NbTotal}", s.NbManquants);
-            _cloturees.Rows[i].Tag = s.Id;
+            var i = _cloturees.Rows.Add(Libelles.Date(s.DateSortie), s.Intitule, s.MoniteurNom, Libelles.Pluriel(s.NbTotal, "équipement"), "");
+            _cloturees.Rows[i].Tag = s;
         }
+    }
+
+    private BandeauAccueil CreerBandeau()
+    {
+        var bandeau = new BandeauAccueil { Margin = new Padding(0, 0, 0, 30) };
+        var titre = Ui.Libelle("Bonne plongée, l'équipe !", Theme.PoliceGrasse(25.5f));
+        _date.Margin = new Padding(0, 0, 0, 10);
+        titre.Margin = new Padding(0, 0, 0, 8);
+        _resume.Margin = new Padding(2, 0, 0, 18);
+
+        var nouvelle = new BoutonArrondi("Nouvelle sortie", StyleBouton.Principal, Icones.Plus) { Margin = Padding.Empty };
+        nouvelle.Click += (_, _) => _navigation.AllerA<EcranNouvelleSortie>();
+        var inventaire = new BoutonArrondi("Voir l'inventaire", StyleBouton.Verre) { Margin = new Padding(12, 0, 0, 0) };
+        inventaire.Click += (_, _) => _navigation.AllerA<EcranInventaire>();
+
+        var contenu = Ui.Pile(_date, titre, _resume, Ui.Rangee(true, nouvelle, inventaire));
+        bandeau.Controls.Add(contenu);
+        bandeau.Layout += (_, _) => contenu.Location = new Point(bandeau.Padding.Left, Math.Max(bandeau.Padding.Top / 2, (bandeau.Height - contenu.Height) / 2));
+        return bandeau;
     }
 
     /// <summary>Carte d'une sortie en préparation ou en cours.</summary>
@@ -121,36 +172,86 @@ public sealed class EcranSorties : EcranBase
     {
         public CarteSortie(SortieResume s)
         {
-            Size = new Size(360, 236);
-            Padding = new Padding(20, 18, 20, 18);
-            Margin = new Padding(0, 0, 16, 0);
+            Padding = new Padding(24, 22, 24, 22);
+            AccessibleName = s.Intitule;
 
             var enPreparation = s.Statut == StatutSortie.EnPreparation;
-            var progression = enPreparation
-                ? $"En préparation · {Libelles.Pluriel(s.NbTotal, "équipement")} scanné{(s.NbTotal > 1 ? "s" : "")}"
-                : $"{s.NbRendus} rendu{(s.NbRendus > 1 ? "s" : "")} sur {s.NbTotal}";
+            var date = new PastilleDate { Date = s.DateSortie };
+            var type = new Pastille(Libelles.De(s.Type).ToUpper(Libelles.Culture), Theme.Teinte(Theme.Accent, 0.12f), Theme.AccentClair, police: Theme.PoliceTitre(7.5f), hauteur: 24)
+            {
+                Margin = new Padding(0, 0, 0, 6),
+            };
+            var titre = Ui.Libelle(s.Intitule, Theme.PoliceTitre(15f));
+            titre.AutoSize = false;
+            titre.AutoEllipsis = true;
+            titre.Height = 32;
+            var moniteur = Ui.Libelle(
+                string.IsNullOrWhiteSpace(s.Lieu) ? $"Moniteur : {s.MoniteurNom}" : $"Moniteur : {s.MoniteurNom} · {s.Lieu}",
+                Theme.Police(9.75f),
+                Theme.TexteSecondaireClair);
+            moniteur.AutoSize = false;
+            moniteur.AutoEllipsis = true;
+            moniteur.Height = 22;
 
-            var barre = new BarreProgression { Valeur = s.Progression, Couleur = Theme.Retour };
+            var infos = Ui.Colonne((type, SizeType.AutoSize, 0), (titre, SizeType.AutoSize, 0), (moniteur, SizeType.AutoSize, 0));
+            type.Dock = DockStyle.None;
+            type.Anchor = AnchorStyles.Left;
+            infos.Margin = new Padding(18, 0, 12, 0);
+
+            var anneau = new AnneauProgression(84);
+            if (enPreparation)
+            {
+                anneau.Couleur = Theme.Depart;
+                anneau.Valeur = s.NbTotal > 0 ? 1 : 0;
+                anneau.Nombre = s.NbTotal.ToString(Libelles.Culture);
+                anneau.Legende = s.NbTotal > 1 ? "scannés" : "scanné";
+            }
+            else
+            {
+                anneau.Valeur = s.Progression;
+                anneau.Nombre = s.NbRendus.ToString(Libelles.Culture);
+                anneau.Total = $"/{s.NbTotal}";
+                anneau.Legende = s.NbRendus > 1 ? "rendus" : "rendu";
+            }
+
+            var haut = Ui.Colonnes((date, SizeType.Absolute, 62), (infos, SizeType.Percent, 100), (anneau, SizeType.Absolute, 84));
+            date.Dock = anneau.Dock = DockStyle.None;
+            date.Anchor = anneau.Anchor = AnchorStyles.None;
+
+            var etat = enPreparation
+                ? new Pastille("En préparation", Theme.Teinte(Theme.Depart, 0.10f), Theme.Depart, Theme.Depart, Theme.PoliceTitre(9.75f), 38)
+                : new Pastille($"{s.NbTotal - s.NbRendus} à rendre", Theme.Teinte(Theme.Depart, 0.10f), Theme.Depart, Theme.Depart, Theme.PoliceTitre(9.75f), 38);
             var bouton = enPreparation
-                ? new BoutonArrondi("Continuer le départ", StyleBouton.Depart)
-                : new BoutonArrondi("Ouvrir et scanner le retour", StyleBouton.Retour);
+                ? new BoutonArrondi("Continuer le départ", StyleBouton.Depart, Icones.Fleche, iconeApres: true)
+                : new BoutonArrondi("Scanner le retour", StyleBouton.Retour, Icones.Fleche, iconeApres: true);
             bouton.AutoSize = false;
-            bouton.Margin = new Padding(0, 8, 0, 0);
+            bouton.Margin = new Padding(12, 0, 0, 0);
+            bouton.Font = Theme.PoliceTitre(10.5f);
             bouton.Click += (_, _) => Ouvrir?.Invoke(this, EventArgs.Empty);
 
-            var titre = Ui.Libelle(s.Intitule, Theme.PoliceTitre(14f));
-            titre.AutoEllipsis = true;
-            var colonne = Ui.Colonne(
-                (Ui.Libelle(Libelles.DateLongue(s.DateSortie), Theme.Police(10f), Theme.TexteSecondaire), SizeType.AutoSize, 0),
-                (titre, SizeType.AutoSize, 0),
-                (Ui.Libelle($"{s.MoniteurNom} · {Libelles.De(s.Type)}", Theme.Police(10.5f), Theme.TexteSecondaireClair), SizeType.AutoSize, 0),
-                (Ui.Libelle(progression, Theme.PoliceTitre(10.5f), enPreparation ? Theme.Depart : Theme.Retour), SizeType.AutoSize, 0),
-                (barre, SizeType.Absolute, 22),
-                (bouton, SizeType.Percent, 100));
-            colonne.BackColor = Theme.Surface;
+            var bas = Ui.Colonnes((etat, SizeType.AutoSize, 0), (bouton, SizeType.Percent, 100));
+            etat.Dock = DockStyle.None;
+            etat.Anchor = AnchorStyles.Left;
+
+            var colonne = Ui.Colonne((haut, SizeType.Absolute, 86), (bas, SizeType.Percent, 100));
+            bas.Margin = new Padding(0, 18, 0, 0);
             Controls.Add(colonne);
         }
 
         public event EventHandler? Ouvrir;
+    }
+
+    /// <summary>Carte affichée quand aucune sortie n'est en cours.</summary>
+    private sealed class CarteAucune : Carte
+    {
+        public CarteAucune()
+        {
+            Padding = new Padding(28);
+            var texte = Ui.Libelle("Aucune sortie en cours.\nCliquez sur « Nouvelle sortie » pour préparer le départ du matériel.", Theme.Police(11f), Theme.TexteSecondaireClair);
+            texte.AutoSize = false;
+            texte.Dock = DockStyle.Fill;
+            texte.TextAlign = ContentAlignment.MiddleLeft;
+            Controls.Add(texte);
+        }
     }
 }

@@ -10,6 +10,8 @@ public sealed class MainForm : Form
 {
     private readonly ServiceNavigation _navigation;
     private readonly Dictionary<EntreeMenu, BoutonArrondi> _menu = [];
+    private readonly Panel _menuPanneau;
+    private readonly Panel _contenu;
 
     public MainForm(ServiceNavigation navigation)
     {
@@ -26,8 +28,10 @@ public sealed class MainForm : Form
         WindowState = FormWindowState.Maximized;
         KeyPreview = false;
 
-        var contenu = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Fond, Padding = new Padding(36, 28, 36, 24) };
+        var contenu = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Fond, Padding = new Padding(40, 28, 40, 28) };
         var menu = CreerMenu();
+        _menuPanneau = menu;
+        _contenu = contenu;
 
         Controls.Add(contenu);
         Controls.Add(menu);
@@ -55,53 +59,79 @@ public sealed class MainForm : Form
         // Taille minimale 1280 x 800 en pixels, bornée à l'écran pour les petits portables.
         var zone = Screen.FromControl(this).WorkingArea;
         MinimumSize = new Size(Math.Min(1280, zone.Width), Math.Min(800, zone.Height));
+
+        // Menu et marges construits en pixels logiques : mis à l'échelle de l'écran (125 %, 150 %...).
+        Dessin.MettreALEchelle(_menuPanneau, this);
+        var f = DeviceDpi / 96f;
+        _contenu.Padding = new Padding((int)(40 * f), (int)(28 * f), (int)(40 * f), (int)(28 * f));
         _navigation.AllerA<EcranSorties>();
     }
 
     private Panel CreerMenu()
     {
-        var panneau = new Panel { Dock = DockStyle.Left, Width = Theme.LargeurMenu, BackColor = Theme.Surface, Padding = new Padding(16, 24, 16, 20) };
+        var panneau = new PanneauMenu { Dock = DockStyle.Left, Width = Theme.LargeurMenu, BackColor = Theme.FondMenu, Padding = new Padding(18, 28, 18, 18) };
 
-        var marque = Ui.Pile(
-            Ui.Libelle("Asprenaut", Theme.PoliceTitre(17f), Theme.Accent),
-            Ui.Libelle("Suivi du matériel", Theme.Police(10f), Theme.TexteSecondaire));
-        marque.Margin = new Padding(8, 0, 0, 28);
+        // Marque : pastille ronde du logo, nom du club.
+        var nom = Ui.Pile(
+            Ui.Libelle("Asprenaut", Theme.PoliceGrasse(13.5f)),
+            Ui.Libelle("Matériel du club", Theme.Police(9f), Theme.TexteSecondaire));
+        var logo = new Logo { Margin = Padding.Empty };
+        var marque = Ui.Rangee(true, logo, nom);
+        marque.Margin = new Padding(6, 0, 0, 34);
+        nom.Margin = new Padding(12, (46 - nom.PreferredSize.Height) / 2, 0, 0);
 
         var entrees = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.TopDown,
             WrapContents = false,
-            BackColor = Theme.Surface,
+            BackColor = Theme.FondMenu,
         };
         entrees.Controls.Add(marque);
 
-        void Ajouter<TEcran>(EntreeMenu entree, string texte)
+        void Ajouter<TEcran>(EntreeMenu entree, string texte, string icone)
             where TEcran : EcranBase
         {
-            var bouton = new BoutonArrondi(texte, StyleBouton.Menu)
+            var bouton = new BoutonArrondi(texte, StyleBouton.Menu, icone)
             {
-                Width = Theme.LargeurMenu - 32,
-                Height = Theme.HauteurBouton,
-                Margin = new Padding(0, 0, 0, 6),
+                Width = Theme.LargeurMenu - 36,
+                Margin = new Padding(0, 0, 0, 4),
             };
             bouton.Click += (_, _) => _navigation.AllerA<TEcran>();
             _menu[entree] = bouton;
             entrees.Controls.Add(bouton);
         }
 
-        Ajouter<EcranSorties>(EntreeMenu.Sorties, "Sorties");
-        Ajouter<EcranInventaire>(EntreeMenu.Inventaire, "Inventaire");
-        Ajouter<EcranMoniteurs>(EntreeMenu.Moniteurs, "Moniteurs et plongeurs");
-        Ajouter<EcranHistorique>(EntreeMenu.Historique, "Historique");
-        Ajouter<EcranParametres>(EntreeMenu.Parametres, "Paramètres");
+        Ajouter<EcranSorties>(EntreeMenu.Sorties, "Sorties", Icones.Sorties);
+        Ajouter<EcranInventaire>(EntreeMenu.Inventaire, "Inventaire", Icones.Inventaire);
+        Ajouter<EcranMoniteurs>(EntreeMenu.Moniteurs, "Moniteurs et plongeurs", Icones.Moniteurs);
+        Ajouter<EcranHistorique>(EntreeMenu.Historique, "Historique", Icones.Historique);
+        Ajouter<EcranParametres>(EntreeMenu.Parametres, "Paramètres", Icones.Parametres);
 
-        var version = Ui.Libelle($"Version {Application.ProductVersion.Split('+')[0]}", Theme.Police(9f), Theme.TexteSecondaire);
+        var scanner = new CarteScanner { Dock = DockStyle.Bottom };
+        var version = Ui.Libelle($"Version {Application.ProductVersion.Split('+')[0]}", Theme.Police(8.25f), Theme.TexteSecondaire);
         version.Dock = DockStyle.Bottom;
-        version.Padding = new Padding(8, 0, 0, 0);
+        version.Padding = new Padding(6, 10, 0, 0);
 
         panneau.Controls.Add(entrees);
+        panneau.Controls.Add(scanner);
         panneau.Controls.Add(version);
         return panneau;
+    }
+
+    /// <summary>Menu latéral : fond légèrement plus sombre, filet turquoise à droite.</summary>
+    private sealed class PanneauMenu : Panel
+    {
+        public PanneauMenu()
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            e.Graphics.Clear(BackColor);
+            using var filet = new Pen(Theme.Sur(BackColor, Theme.Accent, 0.10f));
+            e.Graphics.DrawLine(filet, Width - 1, 0, Width - 1, Height);
+        }
     }
 }

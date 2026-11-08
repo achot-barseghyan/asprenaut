@@ -7,31 +7,48 @@ public sealed record ElementMateriel(
     long EquipementId,
     string Code,
     string Libelle,
-    string Details,
+    string? Categorie = null,
+    string? Detail = null,
     string? Alerte = null,
     Color? CouleurAlerte = null);
 
-/// <summary>Liste verticale défilante de lignes de matériel, avec bouton d'action optionnel par ligne.</summary>
+public enum StyleListe
+{
+    /// <summary>Matériel de la sortie au départ : pictogramme de catégorie, code en turquoise.</summary>
+    Depart,
+
+    /// <summary>Matériel encore dehors : point orange.</summary>
+    ARendre,
+
+    /// <summary>Matériel rentré : coche verte, fond vert sombre.</summary>
+    Rendu,
+}
+
+/// <summary>Liste verticale défilante de lignes de matériel, avec bouton optionnel par ligne (pictogramme seul).</summary>
 public sealed class ListeMateriel : FlowLayoutPanel
 {
-    private readonly Label _vide;
+    private readonly StyleListe _style;
+    private readonly VideListe _vide;
 
-    public ListeMateriel(string texteVide)
+    public ListeMateriel(StyleListe style, string texteVide, string? iconeVide = null, Color? couleurVide = null)
     {
+        _style = style;
         FlowDirection = FlowDirection.TopDown;
         WrapContents = false;
         AutoScroll = true;
-        BackColor = Theme.Fond;
+        BackColor = Theme.Surface;
         Margin = Padding.Empty;
-        Padding = new Padding(0, 4, 0, 0);
-        _vide = Ui.Libelle(texteVide, Theme.Police(11f), Theme.TexteSecondaire);
-        _vide.Margin = new Padding(4, 12, 0, 0);
+        Padding = Padding.Empty;
+        _vide = new VideListe(texteVide, iconeVide, couleurVide ?? Theme.TexteSecondaire) { Margin = Padding.Empty };
         Controls.Add(_vide);
         Natif.ScrollbarsSombres(this);
     }
 
-    /// <summary>Remplace le contenu. <paramref name="libelleAction"/> null = pas de bouton.</summary>
-    public void Afficher(IEnumerable<ElementMateriel> elements, string? libelleAction = null, Action<ElementMateriel>? action = null)
+    /// <summary>Nombre de lignes affichées.</summary>
+    public int Nombre => Controls.Count - 1;
+
+    /// <summary>Remplace le contenu. <paramref name="action"/> null = pas de bouton.</summary>
+    public void Afficher(IEnumerable<ElementMateriel> elements, string? libelleAction = null, string? iconeAction = null, Action<ElementMateriel>? action = null)
     {
         SuspendLayout();
         while (Controls.Count > 1)
@@ -41,15 +58,26 @@ public sealed class ListeMateriel : FlowLayoutPanel
             c.Dispose();
         }
 
-        var nombre = 0;
         foreach (var element in elements)
         {
-            Controls.Add(new LigneMateriel(element, libelleAction, action) { Width = LargeurLigne() });
-            nombre++;
+            var ligne = new LigneMateriel(_style, element, libelleAction, iconeAction, action);
+            Controls.Add(ligne);
+            ligne.Width = LargeurLigne(); // Après l'ajout, qui met la ligne à l'échelle de l'écran.
         }
 
-        _vide.Visible = nombre == 0;
+        _vide.Visible = Controls.Count == 1;
+        _vide.Size = new Size(LargeurLigne(), (int)Dessin.Echelle(this, 120));
         ResumeLayout(true);
+    }
+
+    protected override void OnControlAdded(ControlEventArgs e)
+    {
+        if (e.Control is { } enfant)
+        {
+            Dessin.MettreALEchelleSiAjoutTardif(this, enfant);
+        }
+
+        base.OnControlAdded(e);
     }
 
     protected override void OnClientSizeChanged(EventArgs e)
@@ -58,47 +86,182 @@ public sealed class ListeMateriel : FlowLayoutPanel
         var largeur = LargeurLigne();
         foreach (Control c in Controls)
         {
-            if (c is LigneMateriel)
-            {
-                c.Width = largeur;
-            }
+            c.Width = largeur;
         }
     }
 
-    private int LargeurLigne() => Math.Max(200, ClientSize.Width - Padding.Horizontal - 2);
+    private int LargeurLigne() => Math.Max(120, ClientSize.Width - Padding.Horizontal - 1);
 
-    private sealed class LigneMateriel : Carte
+    /// <summary>État vide : pictogramme facultatif et texte centrés.</summary>
+    private sealed class VideListe : ControleDessine
     {
-        public LigneMateriel(ElementMateriel element, string? libelleAction, Action<ElementMateriel>? action)
+        private readonly string? _icone;
+        private readonly Color _couleur;
+
+        public VideListe(string texte, string? icone, Color couleur)
         {
-            Height = 72;
-            Margin = new Padding(0, 0, 0, 8);
-            Padding = new Padding(16, 8, 12, 8);
-            Rayon = Theme.RayonBouton;
+            Text = texte;
+            AccessibleName = texte;
+            _icone = icone;
+            _couleur = couleur;
+        }
 
-            var table = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Theme.Surface, Margin = Padding.Empty };
-            table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-
-            var titre = Ui.Libelle($"{element.Code}  ·  {element.Libelle}", Theme.PoliceTitre(11f));
-            titre.AutoEllipsis = true;
-            var details = Ui.Libelle(element.Details, Theme.Police(9.5f), Theme.TexteSecondaire);
-            var pile = Ui.Pile(titre, details);
-            if (element.Alerte is { } alerte)
+        protected override void Peindre(Graphics g)
+        {
+            var police = _icone is null ? Theme.Police(10.5f) : Theme.PoliceTitre(11.25f);
+            if (_icone is null)
             {
-                pile.Controls.Add(Ui.Libelle(alerte, Theme.PoliceTitre(9.5f), element.CouleurAlerte ?? Theme.Avertissement));
-                Height = 92;
+                TextRenderer.DrawText(g, Text, police, new Rectangle(4, (int)E(8), Width - 8, Height), Theme.TexteSecondaire,
+                    TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix);
+                return;
             }
 
-            table.Controls.Add(pile, 0, 0);
+            var t = E(40);
+            var y = (Height - t - E(8) - police.Height) / 2;
+            Icones.Dessiner(g, _icone, new RectangleF((Width - t) / 2, y, t, t), _couleur);
+            Dessin.Texte(g, Text, police, new Rectangle(0, (int)(y + t + E(8)), Width, police.Height + 4), _couleur, centre: true);
+        }
+    }
+
+    /// <summary>Une ligne : dessinée d'un bloc, avec un éventuel bouton à droite.</summary>
+    private sealed class LigneMateriel : ControleDessine
+    {
+        private readonly StyleListe _style;
+        private readonly ElementMateriel _element;
+        private readonly BoutonArrondi? _bouton;
+
+        public LigneMateriel(StyleListe style, ElementMateriel element, string? libelleAction, string? iconeAction, Action<ElementMateriel>? action)
+        {
+            _style = style;
+            _element = element;
+            // Couleur de la ligne : sert aussi aux coins du bouton posé dessus.
+            BackColor = style == StyleListe.Rendu
+                ? Theme.Sur(Theme.Surface, Theme.FondRetour, 0.6f)
+                : Theme.Sur(Theme.Surface, Theme.Fond, 0.4f);
+            Margin = new Padding(0, 0, 0, 6);
+            Height = element.Alerte is not null && style == StyleListe.Depart ? 70 : 52;
+            AccessibleRole = AccessibleRole.ListItem;
+            AccessibleName = $"{element.Code} {element.Libelle}" + (element.Alerte is null ? "" : $", {element.Alerte}");
+
             if (libelleAction is not null && action is not null)
             {
-                var bouton = new BoutonArrondi(libelleAction, StyleBouton.Secondaire) { Anchor = AnchorStyles.Right };
-                bouton.Click += (_, _) => action(element);
-                table.Controls.Add(bouton, 1, 0);
+                _bouton = new BoutonArrondi($"{libelleAction} {element.Code}", StyleBouton.Icone, iconeAction ?? Icones.Croix)
+                {
+                    Margin = Padding.Empty,
+                };
+                _bouton.Click += (_, _) => action(element);
+                Controls.Add(_bouton);
+            }
+        }
+
+        protected override void OnLayout(LayoutEventArgs levent)
+        {
+            base.OnLayout(levent);
+            if (_bouton is not null)
+            {
+                var marge = (int)E(4);
+                _bouton.Location = new Point(Width - _bouton.Width - marge, (Height - _bouton.Height) / 2);
+            }
+        }
+
+        protected override void Peindre(Graphics g)
+        {
+            var fond = BackColor;
+            using (var chemin = Dessin.Arrondi(new RectangleF(0, 0, Width - 1, Height - 1), E(14)))
+            using (var pinceau = new SolidBrush(fond))
+            {
+                g.FillPath(pinceau, chemin);
             }
 
-            Controls.Add(table);
+            var x = E(10);
+            var haut = E(52) / 2;
+            switch (_style)
+            {
+                case StyleListe.Depart:
+                    {
+                        var cote = E(34);
+                        var boite = new RectangleF(x, haut - (cote / 2), cote, cote);
+                        using (var chemin = Dessin.Arrondi(boite, E(10)))
+                        using (var pinceau = new SolidBrush(Theme.FondAccent))
+                        {
+                            g.FillPath(pinceau, chemin);
+                        }
+
+                        Icones.Dessiner(g, Icones.PourCategorie(_element.Categorie), RectangleF.Inflate(boite, -E(8), -E(8)), Theme.AccentClair);
+                        x = boite.Right + E(12);
+                        break;
+                    }
+
+                case StyleListe.ARendre:
+                    {
+                        var d = E(8);
+                        using (var halo = new SolidBrush(Theme.Alpha(Theme.Depart, 0.25f)))
+                        {
+                            g.FillEllipse(halo, x - E(2), haut - (d / 2) - E(2), d + E(4), d + E(4));
+                        }
+
+                        using (var point = new SolidBrush(Theme.Depart))
+                        {
+                            g.FillEllipse(point, x, haut - (d / 2), d, d);
+                        }
+
+                        x += d + E(12);
+                        break;
+                    }
+
+                default:
+                    {
+                        var d = E(22);
+                        var cercle = new RectangleF(x, haut - (d / 2), d, d);
+                        using (var pinceau = new SolidBrush(Theme.Sur(fond, Theme.Retour, 0.18f)))
+                        {
+                            g.FillEllipse(pinceau, cercle);
+                        }
+
+                        Icones.Dessiner(g, Icones.Coche, RectangleF.Inflate(cercle, -E(5), -E(5)), Theme.Retour, 3f);
+                        x = cercle.Right + E(12);
+                        break;
+                    }
+            }
+
+            var droite = _bouton is null ? Width - (int)E(12) : _bouton.Left - (int)E(6);
+            var pastille = _style != StyleListe.Depart && _element.Alerte is { } alerteADroite ? alerteADroite : null;
+            if (pastille is not null)
+            {
+                // Statut à droite ("Manquant") sous forme de pastille.
+                var police = Theme.PoliceTitre(8.5f);
+                var largeur = TextRenderer.MeasureText(pastille, police).Width + (int)E(16);
+                var r = new RectangleF(droite - largeur, haut - E(13), largeur, E(26));
+                var couleur = _element.CouleurAlerte ?? Theme.Erreur;
+                using (var chemin = Dessin.Arrondi(r, r.Height / 2))
+                using (var pinceau = new SolidBrush(Theme.Sur(fond, couleur, 0.16f)))
+                {
+                    g.FillPath(pinceau, chemin);
+                }
+
+                Dessin.Texte(g, pastille, police, Rectangle.Round(r), couleur, centre: true);
+                droite = (int)(r.Left - E(8));
+            }
+
+            var nom = _style == StyleListe.Rendu ? Theme.Police(10.5f) : Theme.PoliceTitre(10.5f);
+            var code = Theme.PoliceCode(9f);
+            var hNom = TextRenderer.MeasureText(g, "Ag", nom, Size.Empty, TextFormatFlags.NoPadding).Height;
+            var hCode = TextRenderer.MeasureText(g, "Ag", code, Size.Empty, TextFormatFlags.NoPadding).Height;
+            var y = (int)(haut - ((hNom + hCode + E(2)) / 2));
+            var gauche = (int)x;
+            Dessin.Texte(g, _element.Libelle, nom, new Rectangle(gauche, y, droite - gauche, hNom), _style == StyleListe.Rendu ? Theme.TexteDoux : Theme.Texte);
+            var ligneCode = _element.Detail is null ? _element.Code : $"{_element.Code} · {_element.Detail}";
+            Dessin.Texte(g, ligneCode, code, new Rectangle(gauche, y + hNom + (int)E(2), droite - gauche, hCode), _style == StyleListe.Depart ? Theme.Accent : Theme.TexteSecondaire);
+
+            if (_style == StyleListe.Depart && _element.Alerte is { } alerte)
+            {
+                var police = Theme.PoliceTitre(9f);
+                var couleur = _element.CouleurAlerte ?? Theme.Avertissement;
+                var t = E(14);
+                var ya = E(52);
+                Icones.Dessiner(g, Icones.Exclamation, new RectangleF(gauche - E(2), ya, t, t), couleur, 2.6f);
+                Dessin.Texte(g, alerte, police, new Rectangle(gauche + (int)E(14), (int)ya - 2, droite - gauche - (int)E(14), (int)t + 4), couleur);
+            }
         }
     }
 }

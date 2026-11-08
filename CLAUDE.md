@@ -47,8 +47,17 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   `GestionnaireMigrations` selon `schema_version`, chacun dans sa transaction. Active le mode WAL.
 - **Data/Connexion** : `FabriqueConnexion` (une connexion par appel, `Foreign Keys=True`), `ConfigurationDapper`, `FormatIso`.
 - **App** : `Program.cs` → `Demarrage` (DI, sauvegarde, migrations, démo en DEBUG) → `MainForm` (menu latéral + zone de contenu).
-  `INavigation.AllerA<TEcran>(parametre)` crée l'écran via `ActivatorUtilities` (non retenu par le conteneur) et dispose le précédent.
-  Écrans dans `Ecrans/` (héritent d'`EcranBase` ; Départ/Retour héritent d'`EcranScanBase` qui sérialise les scans).
+  `INavigation.AllerA<TEcran>(parametre)` crée l'écran via `ActivatorUtilities` (non retenu par le conteneur), le met à l'échelle
+  de l'écran et dispose le précédent. Écrans dans `Ecrans/` (héritent d'`EcranBase` ; Départ/Retour héritent d'`EcranScanBase`
+  qui sérialise les scans et fournit fil d'Ariane + carte d'en-tête via `Composer(corps)`).
+- **Maquette** : https://claude.ai/artifact/3f393354-a628-4fb9-93a6-4eeca2194be3 (5 écrans : Sorties, Nouvelle sortie, Départ,
+  Retour, Inventaire). Polices Sora/Manrope remplacées par Segoe UI Variable ; pas de fond dégradé ni de bulles animées.
+- **Briques d'interface** (`Controles/`) : `Carte`, `ControleDessine` (base des contrôles peints), `AnneauProgression`,
+  `IndicateurEtapes`, `PastilleDate`, `Pastille`, `Picto`, `GrilleAdaptative` (colonnes auto, ajuste sa ligne de TableLayoutPanel),
+  `Tuile`, `FilAriane`, `BarreRecherche`, `ChampSaisie`, `ChampDate` (remplace le DateTimePicker, blanc et en anglais),
+  `ListeDeroulante`, `ListeMateriel` (styles Depart / ARendre / Rendu), `ScanInput` + `BandeauMessage`, `BandeauAccueil`,
+  `Logo`, `CarteScanner`, `Tableaux` (pastilles et pictogrammes dans les DataGridView).
+- **Pictogrammes** : `Apparence/Icones.cs`, chemins SVG 24 × 24 de la maquette lus par `CheminSvg` et tracés en GDI+.
 
 ## Règles métier (chacune a au moins un test dans Core.Tests)
 
@@ -88,7 +97,15 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   Les écrans passent par les services, jamais directement par les dépôts.
 - **Aucune couleur en dur dans les écrans** : tout vient de `Apparence/Theme.cs` (couleurs, polices, rayons, hauteurs).
   Contrôles cliquables ≥ 44 px (`Theme.HauteurCliquable`), contraste ≥ 4.5:1.
-- Dimensions en pixels logiques 96 dpi (`AutoScaleMode.Dpi` sur `MainForm`) ; dans le dessin, utiliser `Dessin.Echelle`.
+- **Dimensions en pixels logiques 96 dpi.** WinForms ne met PAS à l'échelle les contrôles créés par code (ce poste est à 125 %) :
+  les polices (en points) grandissent, pas les `Size`/`Padding`/`Margin`/lignes fixes. D'où :
+  `ServiceNavigation` appelle `Dessin.MettreALEchelle(ecran, hote)` une fois par écran ; `MainForm.OnLoad` fait de même pour le menu ;
+  un conteneur qui reçoit des enfants après l'affichage appelle `Dessin.MettreALEchelleSiAjoutTardif` dans `OnControlAdded`
+  (voir `GrilleAdaptative`, `ListeMateriel`). Dans le dessin et les `OnLayout`, convertir avec `Dessin.Echelle` / `E(...)`.
+  Les hauteurs de lignes des DataGridView sont fixées par `Theme.AppliquerGrille(grille, hauteurLigne)`.
+- Boutons `AutoSize` : ne jamais repartir de `base.GetPreferredSize` (en GrowOnly, il inclut la taille actuelle → la largeur grandit
+  à chaque mise en page).
+- Petits écrans : `ScanInput` passe en mode compact (sans sonar, puis champ seul) ; le champ de scan reste toujours visible.
 - Propriétés publiques des contrôles : `[DesignerSerializationVisibility(Hidden)]`, sinon l'analyseur WinForms WFO1000 casse le build.
 - Pas de concepteur WinForms : les écrans sont construits en code (`Ui.Colonne`, `Ui.Entete`, `Ui.Rangee`, `Ui.Pile`).
 - Dans un constructeur de contrôle, créer les enfants avant de modifier `Height`/`Size`, car `OnLayout` est appelé immédiatement.
@@ -100,4 +117,6 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
 
 L'application peut être pilotée sans intervention : lancer l'exe avec `--base <fichier temporaire>`, cliquer via UI Automation
 (clic souris aux coordonnées de `BoundingRectangle`) et simuler le pistolet avec `SendKeys.SendWait("BLOC-031{ENTER}")`,
-puis capturer la fenêtre. Après une erreur, consulter `erreurs.log`.
+puis capturer la fenêtre. Après une erreur, consulter `erreurs.log`. Pour comparer à la maquette (1440 × 900 px CSS), donner
+à la fenêtre 1800 × 1125 px à 125 % ; vérifier aussi la taille minimale 1280 × 800. Champs à trouver par nom + type Edit
+(le premier champ texte de « Nouvelle sortie » est la date).
