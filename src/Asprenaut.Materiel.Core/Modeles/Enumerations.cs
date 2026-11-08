@@ -1,0 +1,49 @@
+namespace Asprenaut.Materiel.Core.Modeles;
+
+// Les valeurs sont stockées en texte dans la base (nom exact du membre).
+// Ne jamais renommer un membre sans migration SQL.
+
+/// <summary>État physique d'un équipement.</summary>
+public enum EtatEquipement
+{
+    EnService,
+    HorsService,
+    Reforme,
+}
+
+/// <summary>Type de sortie.</summary>
+public enum TypeSortie
+{
+    Piscine,
+    Fosse,
+    Mer,
+    Lac,
+    Bapteme,
+    Autre,
+}
+
+/// <summary>Cycle de vie d'une sortie : préparation (scan départ) → en cours (scan retour) → clôturée.</summary>
+public enum StatutSortie
+{
+    EnPreparation,
+    EnCours,
+    Cloturee,
+}
+
+/// <summary>Statut d'un équipement dans une sortie.</summary>
+public enum StatutSortieEquipement
+{
+    Dehors,
+    Rendu,
+    Manquant,
+}
+
+/// <summary>Statut calculé d'un équipement pour l'inventaire.</summary>
+public enum StatutInventaire
+{
+    Disponible,
+    Dehors,
+    Manquant,
+    HorsService,
+    Reforme,
+}
