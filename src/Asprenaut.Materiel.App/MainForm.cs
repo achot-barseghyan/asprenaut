@@ -46,19 +46,8 @@ public sealed class MainForm : Form
         };
     }
 
-    /// <summary>
-    /// WS_EX_COMPOSITED : Windows peint toute la fenêtre (avec ses dizaines de contrôles enfants) hors écran,
-    /// puis l'affiche d'un coup. Supprime le clignotement des écrans faits de nombreux contrôles transparents.
-    /// </summary>
-    protected override CreateParams CreateParams
-    {
-        get
-        {
-            var parametres = base.CreateParams;
-            parametres.ExStyle |= 0x02000000; // WS_EX_COMPOSITED
-            return parametres;
-        }
-    }
+    // Pas de WS_EX_COMPOSITED : avec lui, chaque petite animation (point « Prêt à scanner », sonar) faisait
+    // repeindre presque toute la fenêtre ; sur les écrans chargés (Paramètres), la fenêtre clignotait en continu.
 
     protected override void OnHandleCreated(EventArgs e)
     {

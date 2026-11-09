@@ -43,10 +43,7 @@ internal static class Natif
         {
             SendMessage(controle.Handle, WmSetRedraw, new IntPtr(1), IntPtr.Zero);
 
-            // Redessin demandé à la fenêtre entière : avec WS_EX_COMPOSITED, c'est elle qui peint tous ses enfants
-            // dans une même image hors écran, présentée d'un bloc.
-            var fenetre = controle.FindForm() is { IsHandleCreated: true } f ? f.Handle : controle.Handle;
-            RedrawWindow(fenetre, IntPtr.Zero, IntPtr.Zero, RdwInvalidate | RdwErase | RdwAllChildren | RdwUpdateNow | RdwFrame);
+            RedrawWindow(controle.Handle, IntPtr.Zero, IntPtr.Zero, RdwInvalidate | RdwErase | RdwAllChildren | RdwUpdateNow | RdwFrame);
         }
     }
 
