@@ -18,6 +18,11 @@ public abstract class EcranBase : UserControl
         Font = Theme.Police();
         DoubleBuffered = true;
         Margin = Padding.Empty;
+
+        // Taille provisoire réaliste (pixels logiques) : l'écran se construit avant d'être placé dans la fenêtre.
+        // À la taille par défaut d'un UserControl (150 × 150), les colonnes fixes et les grilles se tassaient
+        // (date de l'en-tête rétrécie en « 0… », grille de tuiles calculée sur 6 rangées) et ne regrandissaient pas.
+        Size = new Size(1500, 950);
     }
 
     /// <summary>Titre de l'écran.</summary>

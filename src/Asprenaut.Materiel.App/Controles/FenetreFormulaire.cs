@@ -28,6 +28,7 @@ public sealed class FenetreFormulaire : Form
         MaximizeBox = false;
         MinimizeBox = false;
         ShowInTaskbar = false;
+        Icon = Icones.IconeFenetre;
         StartPosition = FormStartPosition.CenterParent;
         AutoScaleMode = AutoScaleMode.None;
         AutoSize = true;
@@ -108,7 +109,7 @@ public sealed class FenetreFormulaire : Form
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
-        Natif.BarreDeTitreSombre(this);
+        Natif.BarreDeTitre(this);
     }
 
     protected override void OnLoad(EventArgs e)

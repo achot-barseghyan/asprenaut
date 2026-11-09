@@ -82,6 +82,22 @@ public sealed class SortieRepository(FabriqueConnexion fabrique) : ISortieReposi
         return lignes.AsList();
     }
 
+    public async Task<IReadOnlyList<PassageSortie>> ListerPassagesAsync(long equipementId, CancellationToken ct = default)
+    {
+        const string sql = """
+            SELECT se.sortie_id, s.intitule, s.date_sortie, TRIM(m.prenom || ' ' || m.nom) AS moniteur_nom, s.cloturee_le,
+                   se.statut, se.scanne_depart_le, se.scanne_retour_le
+            FROM sortie_equipement se
+            JOIN sortie s ON s.id = se.sortie_id
+            JOIN moniteur m ON m.id = s.moniteur_id
+            WHERE se.equipement_id = @equipementId
+            ORDER BY se.scanne_depart_le DESC, se.id DESC;
+            """;
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        var lignes = await cx.QueryAsync<PassageSortie>(new CommandDefinition(sql, new { equipementId }, cancellationToken: ct));
+        return lignes.AsList();
+    }
+
     public async Task<IReadOnlyList<SortieEquipement>> ListerAffectationsAsync(long sortieId, CancellationToken ct = default)
     {
         await using var cx = await fabrique.OuvrirAsync(ct);

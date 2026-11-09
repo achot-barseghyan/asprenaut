@@ -36,9 +36,9 @@ public class SchemaTests : IAsyncLifetime
     }
 
     [Fact]
-    public void Scripts_001_et_002_sont_embarques()
+    public void Scripts_001_a_003_sont_embarques()
     {
-        Assert.Equal([1, 2], GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
+        Assert.Equal([1, 2, 3], GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
     }
 
     [Fact]

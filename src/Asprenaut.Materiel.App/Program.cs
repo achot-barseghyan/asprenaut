@@ -30,6 +30,9 @@ internal static class Program
             parametres = ParametresApplication.Charger();
         }
 
+        // Thème choisi dans Paramètres : avant toute fenêtre, les contrôles lisent leurs couleurs à la construction.
+        Apparence.Theme.Appliquer(parametres.Reglages.Affichage);
+
         ServiceProvider services;
         try
         {

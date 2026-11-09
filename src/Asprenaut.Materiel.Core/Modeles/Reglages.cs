@@ -60,6 +60,11 @@ public sealed class Reglages
     /// <summary>Dossier des sauvegardes ; null = "Sauvegardes" à côté de la base.</summary>
     public string? DossierSauvegardes { get; set; }
 
+    // --- Affichage ---
+
+    /// <summary>Thème de l'interface : sombre (par défaut) ou clair.</summary>
+    public ModeAffichage Affichage { get; set; } = ModeAffichage.Sombre;
+
     // --- Club ---
 
     public string NomClub { get; set; } = "Asprenaut";

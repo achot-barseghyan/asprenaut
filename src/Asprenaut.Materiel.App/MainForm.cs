@@ -10,7 +10,7 @@ public sealed class MainForm : Form
 {
     private readonly ServiceNavigation _navigation;
     private readonly Dictionary<EntreeMenu, BoutonArrondi> _menu = [];
-    private readonly Panel _menuPanneau;
+    private Panel _menuPanneau;
     private readonly Panel _contenu;
 
     public MainForm(ServiceNavigation navigation)
@@ -20,6 +20,7 @@ public sealed class MainForm : Form
         AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
         Text = "Asprenaut · Matériel";
+        Icon = Icones.IconeFenetre;
         BackColor = Theme.Fond;
         ForeColor = Theme.Texte;
         Font = Theme.Police();
@@ -37,13 +38,59 @@ public sealed class MainForm : Form
         Controls.Add(menu);
 
         _navigation.Attacher(contenu);
-        _navigation.EcranChange += (_, ecran) =>
+        _navigation.EcranChange += (_, ecran) => SelectionnerMenu(ecran.Menu);
+        Theme.Changement += ChangerTheme;
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
         {
-            foreach (var (entree, bouton) in _menu)
+            Theme.Changement -= ChangerTheme;
+        }
+
+        base.Dispose(disposing);
+    }
+
+    private void SelectionnerMenu(EntreeMenu menu)
+    {
+        foreach (var (entree, bouton) in _menu)
+        {
+            bouton.Selectionne = entree == menu;
+        }
+    }
+
+    /// <summary>
+    /// Nouveau thème : fond, barre de titre et menu refaits tout de suite. L'écran courant est recréé par
+    /// celui qui a changé le thème (Paramètres), qui sait où se replacer.
+    /// </summary>
+    private void ChangerTheme(object? sender, EventArgs e)
+    {
+        Natif.Geler(this);
+        try
+        {
+            SuspendLayout();
+            BackColor = _contenu.BackColor = Theme.Fond;
+            ForeColor = Theme.Texte;
+            var ancien = _menuPanneau;
+            _menu.Clear();
+            _menuPanneau = CreerMenu();
+            Dessin.MettreALEchelle(_menuPanneau, this);
+            Controls.Remove(ancien);
+            Controls.Add(_menuPanneau);
+            ancien.Dispose();
+            if (_navigation.EcranCourant is { } ecran)
             {
-                bouton.Selectionne = entree == ecran.Menu;
+                SelectionnerMenu(ecran.Menu);
             }
-        };
+
+            ResumeLayout(true);
+            Natif.BarreDeTitre(this);
+        }
+        finally
+        {
+            Natif.Degeler(this);
+        }
     }
 
     // Pas de WS_EX_COMPOSITED : avec lui, chaque petite animation (point « Prêt à scanner », sonar) faisait
@@ -52,7 +99,7 @@ public sealed class MainForm : Form
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
-        Natif.BarreDeTitreSombre(this);
+        Natif.BarreDeTitre(this);
     }
 
     protected override void OnLoad(EventArgs e)

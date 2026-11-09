@@ -52,6 +52,9 @@ public interface ISortieRepository
 
     Task<IReadOnlyList<LigneSortie>> ListerLignesAsync(long sortieId, CancellationToken ct = default);
 
+    /// <summary>Toutes les sorties où cet équipement est passé, la plus récente d'abord.</summary>
+    Task<IReadOnlyList<PassageSortie>> ListerPassagesAsync(long equipementId, CancellationToken ct = default);
+
     Task<IReadOnlyList<SortieEquipement>> ListerAffectationsAsync(long sortieId, CancellationToken ct = default);
 
     Task<SortieEquipement?> ObtenirAffectationAsync(long sortieId, long equipementId, CancellationToken ct = default);
@@ -93,6 +96,9 @@ public interface IRevisionRepository
 
     Task<IReadOnlyList<LigneAtelier>> ListerAtelierEnCoursAsync(CancellationToken ct = default);
 
+    /// <summary>Tous les passages en atelier de cet équipement, le plus récent d'abord.</summary>
+    Task<IReadOnlyList<PassageAtelier>> ListerPassagesAtelierAsync(long equipementId, CancellationToken ct = default);
+
     Task<long> AjouterSeanceAsync(SeanceTiv seance, CancellationToken ct = default);
 
     /// <summary>Première séance à partir de cette date, ou null.</summary>
@@ -104,4 +110,10 @@ public interface IJournalRepository
     Task AjouterAsync(EntreeJournal entree, CancellationToken ct = default);
 
     Task<IReadOnlyList<EntreeJournal>> ListerRecentsAsync(int nombre, CancellationToken ct = default);
+
+    /// <summary>
+    /// Entrées depuis <paramref name="depuisUtc"/> (tout si null), les plus récentes d'abord, au plus <paramref name="nombreMax"/>,
+    /// avec l'équipement, la sortie et son moniteur.
+    /// </summary>
+    Task<IReadOnlyList<LigneJournal>> ListerAsync(DateTime? depuisUtc, int nombreMax, CancellationToken ct = default);
 }

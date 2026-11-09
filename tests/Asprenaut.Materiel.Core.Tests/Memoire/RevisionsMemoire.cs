@@ -51,6 +51,9 @@ public sealed class RevisionRepositoryMemoire(BaseMemoire db) : IRevisionReposit
             })
             .ToList());
 
+    public Task<IReadOnlyList<PassageAtelier>> ListerPassagesAtelierAsync(long equipementId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<PassageAtelier>>(Passages.Where(p => p.EquipementId == equipementId).OrderByDescending(p => p.EnvoyeLe).ToList());
+
     public Task<long> AjouterSeanceAsync(SeanceTiv seance, CancellationToken ct = default)
     {
         seance.Id = db.ProchainId();

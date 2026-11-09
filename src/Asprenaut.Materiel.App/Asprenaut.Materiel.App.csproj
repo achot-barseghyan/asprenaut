@@ -12,7 +12,15 @@
     <RootNamespace>Asprenaut.Materiel.App</RootNamespace>
     <!-- Publication en un seul fichier : inclut e_sqlite3.dll dans l'exe (sinon il resterait à côté). -->
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <!-- Icône du .exe (Explorateur, raccourcis). Source : Ressources\Asprenaut.png (1024 px). -->
+    <ApplicationIcon>Ressources\Asprenaut.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Même icône pour la barre de titre et la barre des tâches (Form.Icon). -->
+    <EmbeddedResource Include="Ressources\Asprenaut.ico" LogicalName="Asprenaut.ico" />
+    <None Remove="Ressources\Asprenaut.png" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />

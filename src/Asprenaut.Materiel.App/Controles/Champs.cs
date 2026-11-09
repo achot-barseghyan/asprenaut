@@ -8,7 +8,7 @@ namespace Asprenaut.Materiel.App.Controles;
 public sealed class ChampSaisie : Panel
 {
     /// <summary>Fond des champs : plus sombre que la carte qui les porte.</summary>
-    public static readonly Color FondChamp = Theme.Sur(Theme.Surface, Theme.Fond, 0.6f);
+    public static Color FondChamp => Theme.Sur(Theme.Surface, Theme.Fond, 0.6f);
 
     public ChampSaisie(bool multiligne = false)
     {
@@ -26,7 +26,7 @@ public sealed class ChampSaisie : Panel
         if (multiligne)
         {
             Champ.Dock = DockStyle.Fill;
-            Natif.ScrollbarsSombres(Champ);
+            Natif.ScrollbarsDuTheme(Champ);
         }
 
         Controls.Add(Champ);
@@ -52,18 +52,30 @@ public sealed class ChampSaisie : Panel
         set => Champ.PlaceholderText = value;
     }
 
+    /// <summary>Pictogramme à gauche du texte (champ mono-ligne), ou null.</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public string? Icone { get; set; }
+
     protected override void OnLayout(LayoutEventArgs levent)
     {
         base.OnLayout(levent);
         if (!Champ.Multiline)
         {
             // Centre verticalement la zone de texte mono-ligne.
-            Champ.SetBounds(Padding.Left, (Height - Champ.Height) / 2, Width - Padding.Horizontal, Champ.Height);
+            var icone = Icone is null ? 0 : (int)Dessin.Echelle(this, 30);
+            Champ.SetBounds(Padding.Left + icone, (Height - Champ.Height) / 2, Width - Padding.Horizontal - icone, Champ.Height);
         }
     }
 
-    protected override void OnPaintBackground(PaintEventArgs e) =>
+    protected override void OnPaintBackground(PaintEventArgs e)
+    {
         Dessin.PeindreFondArrondi(this, e.Graphics, BackColor, Champ.Focused ? Theme.Accent : Theme.BordureForte, Theme.RayonBouton, 1.2f);
+        if (Icone is { } icone && !Champ.Multiline)
+        {
+            var t = Dessin.Echelle(this, 20);
+            Icones.Dessiner(e.Graphics, icone, new RectangleF(Padding.Left, (Height - t) / 2, t, t), Theme.AccentClair);
+        }
+    }
 }
 
 /// <summary>Liste déroulante thémée (sélection seule), d'environ 52 px de haut.</summary>
@@ -86,6 +98,60 @@ public sealed class ListeDeroulante : ComboBox
     {
         base.OnHandleCreated(e);
         ItemHeight = (int)Dessin.Echelle(this, 44); // La hauteur de la liste suit celle des éléments.
+    }
+
+    protected override void OnGotFocus(EventArgs e)
+    {
+        base.OnGotFocus(e);
+        Invalidate();
+    }
+
+    protected override void OnLostFocus(EventArgs e)
+    {
+        base.OnLostFocus(e);
+        Invalidate();
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        base.WndProc(ref m);
+        const int WmPaint = 0x000F;
+        if (m.Msg == WmPaint && IsHandleCreated)
+        {
+            using var g = Graphics.FromHwnd(Handle);
+            PeindreCadre(g);
+        }
+    }
+
+    /// <summary>
+    /// Par-dessus le dessin de Windows (cadre et bouton clairs en style Flat) : coins arrondis, bordure du thème,
+    /// bouton sombre et chevron, comme les champs de saisie.
+    /// </summary>
+    private void PeindreCadre(Graphics g)
+    {
+        Dessin.Qualite(g);
+        var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
+        using var chemin = Dessin.Arrondi(r, Dessin.Echelle(this, Theme.RayonBouton));
+        using (var exterieur = new Region(ClientRectangle))
+        using (var parent = new SolidBrush(Dessin.CouleurParent(this)))
+        {
+            exterieur.Exclude(chemin);
+            g.FillRegion(parent, exterieur);
+        }
+
+        var largeurBouton = Dessin.Echelle(this, 34);
+        using (var interieur = new Region(chemin))
+        using (var fond = new SolidBrush(BackColor))
+        {
+            interieur.Intersect(new RectangleF(Width - largeurBouton - 2, 0, largeurBouton + 2, Height));
+            g.FillRegion(fond, interieur);
+        }
+
+        var t = Dessin.Echelle(this, 18);
+        Icones.Dessiner(g, Icones.ChevronBas, new RectangleF(Width - largeurBouton + ((largeurBouton - t) / 2) - Dessin.Echelle(this, 4), (Height - t) / 2, t, t),
+            Enabled ? Theme.TexteSecondaireClair : Theme.TexteSecondaire, 2f);
+        using var bord = new Pen(Focused || DroppedDown ? Theme.Accent : Theme.BordureForte, Dessin.Echelle(this, 1.2f));
+        g.DrawPath(bord, chemin);
     }
 
     protected override void OnDrawItem(DrawItemEventArgs e)

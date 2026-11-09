@@ -131,7 +131,7 @@ public sealed class EcranNouvelleSortie : EcranBase
         cadre.AutoScroll = false;
         cadre.VerticalScroll.Visible = false;
         cadre.AutoScroll = true;
-        Natif.ScrollbarsSombres(cadre);
+        Natif.ScrollbarsDuTheme(cadre);
         cadre.Controls.Add(carte);
         void Placer()
         {

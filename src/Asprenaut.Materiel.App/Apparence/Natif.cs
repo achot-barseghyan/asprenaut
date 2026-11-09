@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 
 namespace Asprenaut.Materiel.App.Apparence;
 
-/// <summary>Appels Windows pour la barre de titre sombre et les barres de défilement sombres.</summary>
+/// <summary>Appels Windows : barre de titre et barres de défilement assorties au thème, gel de l'affichage.</summary>
 internal static class Natif
 {
     // DWMWA_USE_IMMERSIVE_DARK_MODE : 20 depuis Windows 10 20H1, 19 sur les versions antérieures.
@@ -47,27 +47,28 @@ internal static class Natif
         }
     }
 
-    /// <summary>Passe la barre de titre Windows en sombre (sans effet sur les versions non prises en charge).</summary>
-    public static void BarreDeTitreSombre(Form fenetre)
+    /// <summary>Barre de titre Windows sombre ou claire selon le thème (sans effet sur les versions non prises en charge).</summary>
+    public static void BarreDeTitre(Form fenetre)
     {
-        var actif = 1;
+        var actif = Theme.EstSombre ? 1 : 0;
         if (DwmSetWindowAttribute(fenetre.Handle, DwmwaUseImmersiveDarkMode, ref actif, sizeof(int)) != 0)
         {
             DwmSetWindowAttribute(fenetre.Handle, DwmwaUseImmersiveDarkModeAncien, ref actif, sizeof(int));
         }
     }
 
-    /// <summary>Barres de défilement sombres (thème "DarkMode_Explorer") pour un contrôle et ses barres internes.</summary>
-    public static void ScrollbarsSombres(Control controle)
+    /// <summary>Barres de défilement du thème ("DarkMode_Explorer" en sombre, "Explorer" en clair), barres internes comprises.</summary>
+    public static void ScrollbarsDuTheme(Control controle)
     {
         void Appliquer(Control c)
         {
-            SetWindowTheme(c.Handle, "DarkMode_Explorer", null);
+            var theme = Theme.EstSombre ? "DarkMode_Explorer" : "Explorer";
+            SetWindowTheme(c.Handle, theme, null);
             foreach (Control enfant in c.Controls)
             {
                 if (enfant is ScrollBar)
                 {
-                    SetWindowTheme(enfant.Handle, "DarkMode_Explorer", null);
+                    SetWindowTheme(enfant.Handle, theme, null);
                 }
             }
         }

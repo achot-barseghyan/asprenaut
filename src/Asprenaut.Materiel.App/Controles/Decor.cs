@@ -113,18 +113,18 @@ public sealed class Logo : ControleDessine
             using var degrade = new PathGradientBrush(forme)
             {
                 CenterPoint = new PointF(Width * 0.3f, Height * 0.25f),
-                CenterColor = Theme.AccentClair,
-                SurroundColors = [Theme.BandeauHaut],
+                CenterColor = Theme.LogoClair,
+                SurroundColors = [Theme.LogoFonce],
             };
             degrade.InterpolationColors = new ColorBlend
             {
-                Colors = [Theme.BandeauHaut, Theme.LogoCentre, Theme.AccentClair],
+                Colors = [Theme.LogoFonce, Theme.LogoCentre, Theme.LogoClair],
                 Positions = [0f, 0.55f, 1f],
             };
             g.FillPath(degrade, forme);
         }
 
-        Icones.Dessiner(g, Icones.Logo, RectangleF.Inflate(r, -E(10), -E(10)), Theme.TexteSurAccent, 1.9f);
+        Icones.Dessiner(g, Icones.Logo, RectangleF.Inflate(r, -E(10), -E(10)), Theme.TexteSurLogo, 1.9f);
     }
 }
 

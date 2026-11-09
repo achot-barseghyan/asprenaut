@@ -122,7 +122,7 @@ public class DepotsTests : IAsyncLifetime
             SELECT scanne_depart_le FROM sortie_equipement
             UNION ALL SELECT scanne_retour_le FROM sortie_equipement WHERE scanne_retour_le IS NOT NULL
             UNION ALL SELECT depart_valide_le FROM sortie UNION ALL SELECT cloturee_le FROM sortie
-            UNION ALL SELECT horodatage FROM journal WHERE action <> 'DonneesDemo';
+            UNION ALL SELECT horodatage FROM journal WHERE action NOT IN ('DonneesDemo', 'EquipementCree');
             """);
         Assert.All(horodatages, h => Assert.Equal("2026-11-06T18:30:00.000Z", h));
         Assert.Equal("2026-11-06", await cx.ExecuteScalarAsync<string>("SELECT date_sortie FROM sortie;"));

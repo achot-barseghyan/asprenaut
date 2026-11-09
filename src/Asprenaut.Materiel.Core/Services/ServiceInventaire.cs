@@ -173,6 +173,7 @@ public sealed class ServiceInventaire(
             Horodatage = horloge.MaintenantUtc,
             Action = ActionsJournal.EquipementCree,
             Details = $"{code} « {nouveau.Libelle} » créé",
+            EquipementId = id,
         }, ct);
         return ResultatOperation.Ok($"{code} · {nouveau.Libelle} ajouté à l'inventaire.", id);
     }

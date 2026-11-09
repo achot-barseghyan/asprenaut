@@ -118,7 +118,7 @@ public sealed class EcranRevisions : EcranBase
         defilement.AutoScroll = false;
         defilement.VerticalScroll.Visible = false;
         defilement.AutoScroll = true;
-        Natif.ScrollbarsSombres(defilement);
+        Natif.ScrollbarsDuTheme(defilement);
         defilement.Controls.Add(_droite);
 
         Controls.Add(Ui.Colonne(

@@ -31,7 +31,7 @@ public sealed class EcranMoniteurs : EcranBase
         var ajouter = new BoutonArrondi("Ajouter un moniteur", StyleBouton.Principal, Icones.Plus);
         ajouter.Click += (_, _) => Executer(() => ModifierAsync(null));
 
-        Natif.ScrollbarsSombres(_fiche);
+        Natif.ScrollbarsDuTheme(_fiche);
         _fiche.Dock = DockStyle.Fill;
         _carteFiche.Controls.Add(_fiche);
 
@@ -343,7 +343,7 @@ public sealed class EcranMoniteurs : EcranBase
                 g.FillEllipse(pinceau, r);
             }
 
-            Dessin.Texte(g, initiales, Theme.PoliceGrasse(r.Height * 72 / c.DeviceDpi / 2.9f), Rectangle.Round(r), Theme.Fond, centre: true);
+            Dessin.Texte(g, initiales, Theme.PoliceGrasse(r.Height * 72 / c.DeviceDpi / 2.9f), Rectangle.Round(r), Theme.TexteSurAvatar, centre: true);
         }
     }
 

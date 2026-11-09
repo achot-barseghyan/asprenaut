@@ -10,6 +10,33 @@ public class ReglagesTests
 {
     private readonly Contexte _ctx = new();
 
+    // --- Affichage ---
+
+    [Fact]
+    public void Le_theme_est_sombre_par_defaut_et_le_choix_est_enregistre()
+    {
+        Assert.Equal(ModeAffichage.Sombre, _ctx.Reglages.Affichage);
+        var avant = _ctx.Stockage.Enregistrements;
+
+        var r = _ctx.ServiceReglages.ChangerAffichage(ModeAffichage.Clair);
+
+        Assert.True(r.Reussi);
+        Assert.Equal(ModeAffichage.Clair, _ctx.Reglages.Affichage);
+        Assert.Equal(avant + 1, _ctx.Stockage.Enregistrements);
+        Assert.False(_ctx.ServiceReglages.ChangerAffichage((ModeAffichage)42).Reussi);
+        Assert.Equal(ModeAffichage.Clair, _ctx.Reglages.Affichage);
+    }
+
+    [Fact]
+    public void Le_theme_est_ecrit_en_texte_dans_le_json()
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(new Reglages { Affichage = ModeAffichage.Clair });
+
+        Assert.Contains("\"Affichage\":\"Clair\"", json, StringComparison.Ordinal);
+        Assert.Equal(ModeAffichage.Clair, System.Text.Json.JsonSerializer.Deserialize<Reglages>(json)!.Affichage);
+        Assert.Equal(ModeAffichage.Sombre, System.Text.Json.JsonSerializer.Deserialize<Reglages>("{}")!.Affichage); // Ancien fichier.
+    }
+
     // --- Préfixe des étiquettes ---
 
     [Theory]

@@ -79,6 +79,15 @@ public sealed class RevisionRepository(FabriqueConnexion fabrique) : IRevisionRe
             $"SELECT {ColonnesAtelier} FROM atelier WHERE id = @id;", new { id }, cancellationToken: ct));
     }
 
+    public async Task<IReadOnlyList<PassageAtelier>> ListerPassagesAtelierAsync(long equipementId, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        var lignes = await cx.QueryAsync<PassageAtelier>(new CommandDefinition(
+            $"SELECT {ColonnesAtelier} FROM atelier WHERE equipement_id = @equipementId ORDER BY envoye_le DESC, id DESC;",
+            new { equipementId }, cancellationToken: ct));
+        return lignes.AsList();
+    }
+
     public async Task MettreAJourPassageAsync(PassageAtelier passage, CancellationToken ct = default)
     {
         const string sql = """

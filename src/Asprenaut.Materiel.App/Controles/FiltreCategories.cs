@@ -37,6 +37,14 @@ public sealed class FiltreCategories : Panel
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public string? Selection { get; private set; }
 
+    /// <summary>Unité lue par le lecteur d'écran : « Blocs : 3 équipements ».</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public string Unite { get; set; } = "équipement";
+
+    /// <summary>Couleur du petit point devant le libellé d'une catégorie (aucun point si null).</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Func<string, Color?>? CouleurPoint { get; set; }
+
     /// <summary>Vrai si l'élément de cette catégorie passe le filtre.</summary>
     public bool Accepte(string? categorie) => Selection is null || string.Equals(categorie, Selection, StringComparison.Ordinal);
 
@@ -108,7 +116,8 @@ public sealed class FiltreCategories : Panel
 
     private void Ajouter(string libelle, string? categorie, int nombre)
     {
-        var puce = new PuceFiltre(libelle, nombre, _couleurBadge) { Selectionne = categorie == Selection };
+        var point = categorie is null ? null : CouleurPoint?.Invoke(categorie);
+        var puce = new PuceFiltre(libelle, nombre, _couleurBadge, point, Unite) { Selectionne = categorie == Selection };
         puce.Click += (_, _) =>
         {
             Selection = categorie;
@@ -135,23 +144,36 @@ public sealed class FiltreCategories : Panel
             return;
         }
 
-        var voulue = hauteur + Margin.Vertical;
-        if (Math.Abs(table.RowStyles[ligne].Height - voulue) > 0.5f && IsHandleCreated)
+        _hauteurVoulue = hauteur + Margin.Vertical;
+        if (Math.Abs(table.RowStyles[ligne].Height - _hauteurVoulue) > 0.5f && IsHandleCreated)
         {
-            BeginInvoke(() => table.RowStyles[ligne].Height = voulue);
+            // Relit la dernière hauteur calculée : un calcul fait à une largeur provisoire ne doit pas gagner.
+            BeginInvoke(() =>
+            {
+                var l = table.GetRow(this);
+                if (l >= 0 && l < table.RowStyles.Count)
+                {
+                    table.RowStyles[l].Height = _hauteurVoulue;
+                }
+            });
         }
     }
+
+    private int _hauteurVoulue;
 
     /// <summary>Une puce : libellé et compteur ; claire quand elle est choisie.</summary>
     private sealed class PuceFiltre : Button
     {
         private readonly int _nombre;
+        private const int Point = 8;
         private readonly Color _couleurBadge;
+        private readonly Color? _point;
         private bool _selectionne;
         private bool _survol;
 
-        public PuceFiltre(string libelle, int nombre, Color couleurBadge)
+        public PuceFiltre(string libelle, int nombre, Color couleurBadge, Color? point, string unite)
         {
+            _point = point;
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
             FlatStyle = FlatStyle.Flat;
             FlatAppearance.BorderSize = 0;
@@ -162,7 +184,7 @@ public sealed class FiltreCategories : Panel
             Font = Theme.PoliceTitre(9f);
             _nombre = nombre;
             _couleurBadge = couleurBadge;
-            AccessibleName = $"{libelle} : {Libelles.Pluriel(nombre, "équipement")}";
+            AccessibleName = $"{libelle} : {Libelles.Pluriel(nombre, unite)}";
         }
 
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -181,7 +203,8 @@ public sealed class FiltreCategories : Panel
         {
             var texte = TextRenderer.MeasureText(Text, Font, Size.Empty, TextFormatFlags.NoPadding).Width;
             var badge = LargeurBadge();
-            return new Size((int)(texte + badge + Dessin.Echelle(this, 12 + 8 + 6)), Height);
+            var point = _point is null ? 0 : Dessin.Echelle(this, Point + 8);
+            return new Size((int)(texte + badge + point + Dessin.Echelle(this, 12 + 8 + 6)), Height);
         }
 
         protected override void OnMouseEnter(EventArgs e)
@@ -227,6 +250,14 @@ public sealed class FiltreCategories : Panel
             }
 
             var x = (int)Dessin.Echelle(this, 12);
+            if (_point is { } couleurPoint)
+            {
+                var d = Dessin.Echelle(this, Point);
+                using var pinceau = new SolidBrush(_selectionne ? Theme.Sur(Theme.Texte, couleurPoint, 0.85f) : couleurPoint);
+                g.FillEllipse(pinceau, x, (Height - d) / 2, d, d);
+                x += (int)Dessin.Echelle(this, Point + 8);
+            }
+
             // Mesure et dessin avec les mêmes options (sans marge interne), sinon le texte est coupé par « … ».
             const TextFormatFlags drapeaux = TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix;
             var tailleTexte = TextRenderer.MeasureText(g, Text, Font, Size.Empty, drapeaux);

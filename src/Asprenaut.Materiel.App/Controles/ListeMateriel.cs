@@ -41,7 +41,7 @@ public sealed class ListeMateriel : FlowLayoutPanel
         Padding = Padding.Empty;
         _vide = new VideListe(texteVide, iconeVide, couleurVide ?? Theme.TexteSecondaire) { Margin = Padding.Empty };
         Controls.Add(_vide);
-        Natif.ScrollbarsSombres(this);
+        Natif.ScrollbarsDuTheme(this);
     }
 
     /// <summary>Change le message affiché quand la liste est vide (par exemple quand un filtre est actif).</summary>

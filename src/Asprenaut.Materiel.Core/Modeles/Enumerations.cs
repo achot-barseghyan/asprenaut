@@ -55,3 +55,11 @@ public enum StatutInventaire
     HorsService,
     Reforme,
 }
+
+/// <summary>Thème de l'interface, choisi dans Paramètres (enregistré en texte dans parametres.json).</summary>
+[System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<ModeAffichage>))]
+public enum ModeAffichage
+{
+    Sombre,
+    Clair,
+}

@@ -23,6 +23,11 @@ public sealed class EcranParametres : EcranBase
     private readonly BandeauMessage _etatSauvegarde = new() { Margin = new Padding(0, 0, 0, 18) };
     private readonly ChampSaisie _dossier = new();
     private readonly Label _dernierCode = Ui.Libelle("", Theme.Police(9.75f), Theme.RetourClair);
+    private readonly Panel _cadre = new() { BackColor = Theme.Fond, Margin = new Padding(0, 4, 0, 0) };
+    private CarteSection? _carteAffichage;
+
+    /// <summary>Paramètre de navigation : rouvrir l'écran sur la carte « Affichage » (après un changement de thème).</summary>
+    public const string VersAffichage = "affichage";
 
     public EcranParametres(ServiceReglages reglages, IServiceSauvegarde sauvegardes, INavigation navigation, ParametresApplication parametres)
     {
@@ -43,7 +48,7 @@ public sealed class EcranParametres : EcranBase
         };
         grille.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         grille.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        var cartes = new[] { CartePistolet(), CarteRegles(), CarteDonnees(), CarteClub(), CarteAPropos() };
+        var cartes = new[] { CartePistolet(), CarteRegles(), CarteDonnees(), CarteClub(), CarteAffichage(), CarteAPropos() };
         for (var i = 0; i < cartes.Length; i++)
         {
             if (i % 2 == 0)
@@ -58,12 +63,12 @@ public sealed class EcranParametres : EcranBase
         }
 
         // Cadre défilant vertical (la page est plus haute que l'écran).
-        var cadre = new Panel { BackColor = Theme.Fond, Margin = new Padding(0, 4, 0, 0) };
+        var cadre = _cadre;
         cadre.HorizontalScroll.Maximum = 0;
         cadre.AutoScroll = false;
         cadre.VerticalScroll.Visible = false;
         cadre.AutoScroll = true;
-        Natif.ScrollbarsSombres(cadre);
+        Natif.ScrollbarsDuTheme(cadre);
         cadre.Controls.Add(grille);
 
         Controls.Add(Ui.Colonne(
@@ -75,10 +80,91 @@ public sealed class EcranParametres : EcranBase
 
     public override EntreeMenu Menu => EntreeMenu.Parametres;
 
-    protected override Task ChargerAsync(object? parametre)
+    protected override async Task ChargerAsync(object? parametre)
     {
         AfficherEtatSauvegarde();
-        return Task.CompletedTask;
+        if (parametre is VersAffichage && _carteAffichage is { } carte)
+        {
+            // L'écran vient d'être recréé dans le nouveau thème : on revient sur la carte du choix, une fois que
+            // les cartes ont pris leur hauteur (ajustements différés), et avant que l'écran soit montré.
+            _versAffichage = true;
+            for (var i = 0; i < 4 && !IsDisposed; i++)
+            {
+                await Task.Yield();
+                PerformLayout();
+            }
+
+            AllerALaCarteAffichage(carte);
+        }
+    }
+
+    private bool _versAffichage;
+
+    /// <summary>Une fois l'écran en place (Dock = Fill), on vérifie qu'il est bien positionné sur la carte « Affichage ».</summary>
+    protected override void OnDockChanged(EventArgs e)
+    {
+        base.OnDockChanged(e);
+        if (_versAffichage && Dock == DockStyle.Fill && _carteAffichage is { } carte && IsHandleCreated)
+        {
+            _versAffichage = false;
+            BeginInvoke(() => AllerALaCarteAffichage(carte));
+        }
+    }
+
+    private void AllerALaCarteAffichage(Control carte)
+    {
+        if (IsDisposed || carte.Parent is not { } grille)
+        {
+            return;
+        }
+
+        // Position de la carte dans la page qui défile (la grille est décalée de la position de défilement).
+        var haut = grille.Top - _cadre.AutoScrollPosition.Y + carte.Top;
+        _cadre.AutoScrollPosition = new Point(0, Math.Max(0, haut - (int)Dessin.Echelle(this, 8)));
+    }
+
+    // ---------------------------------------------------------------- Affichage
+
+    private CarteSection CarteAffichage()
+    {
+        var carte = new CarteSection("Affichage", Theme.EstSombre ? Icones.Lune : Icones.Soleil, Theme.AccentClair);
+        carte.Ajouter(Ui.LibelleChamp("Thème de l'écran"));
+        var aide = Ui.Libelle("Le thème clair se lit mieux en plein jour ou près d'une fenêtre.", Theme.Police(9.75f), Theme.TexteSecondaire);
+        aide.Margin = new Padding(0, 0, 0, 14);
+        carte.Ajouter(aide);
+
+        var sombre = new ApercuTheme(ModeAffichage.Sombre) { Margin = new Padding(0, 0, 8, 0) };
+        var clair = new ApercuTheme(ModeAffichage.Clair) { Margin = new Padding(8, 0, 0, 0) };
+        foreach (var apercu in new[] { sombre, clair })
+        {
+            var mode = apercu.Mode;
+            apercu.Click += (_, _) => ChoisirTheme(mode);
+        }
+
+        var choix = Ui.Colonnes((sombre, SizeType.Percent, 50), (clair, SizeType.Percent, 50));
+        choix.Height = ApercuTheme.Hauteur;
+        carte.Ajouter(choix);
+        _carteAffichage = carte;
+        return carte;
+    }
+
+    private void ChoisirTheme(ModeAffichage mode)
+    {
+        if (mode == Theme.Mode)
+        {
+            return;
+        }
+
+        var resultat = _reglages.ChangerAffichage(mode);
+        if (!resultat.Reussi)
+        {
+            Dialogues.Erreur(FindForm(), resultat.Message);
+            return;
+        }
+
+        // Le menu se refait tout de suite (MainForm) ; cet écran est recréé dans le nouveau thème.
+        Theme.Appliquer(mode);
+        _navigation.AllerA<EcranParametres>(VersAffichage);
     }
 
     // ---------------------------------------------------------------- Pistolet
@@ -377,6 +463,141 @@ public sealed class EcranParametres : EcranBase
         var bouton = new Controles.Interrupteur(libelle) { Checked = valeur };
         bouton.CheckedChanged += (_, _) => changement(bouton.Checked);
         return new LigneReglage(libelle, aide, bouton, filet);
+    }
+
+    /// <summary>
+    /// Choix d'un thème : une mini-fenêtre dessinée avec les couleurs de ce thème (menu, cartes, bouton),
+    /// son nom et une coche s'il est actif. Le cadre de sélection suit le thème actuel.
+    /// </summary>
+    private sealed class ApercuTheme : Button
+    {
+        public const int Hauteur = 176;
+        private bool _survol;
+
+        public ApercuTheme(ModeAffichage mode)
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            FlatStyle = FlatStyle.Flat;
+            FlatAppearance.BorderSize = 0;
+            Cursor = Cursors.Hand;
+            Mode = mode;
+            Text = mode == ModeAffichage.Clair ? "Clair" : "Sombre";
+            AccessibleRole = AccessibleRole.RadioButton;
+            AccessibleName = $"Thème {Text.ToLower(Libelles.Culture)}";
+            AccessibleDescription = Actif ? "Thème actuel" : null;
+        }
+
+        public ModeAffichage Mode { get; }
+
+        private bool Actif => Mode == Theme.Mode;
+
+        protected override void OnMouseEnter(EventArgs e)
+        {
+            _survol = true;
+            Invalidate();
+            base.OnMouseEnter(e);
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            _survol = false;
+            Invalidate();
+            base.OnMouseLeave(e);
+        }
+
+        protected override void OnPaint(PaintEventArgs pevent)
+        {
+            var g = pevent.Graphics;
+            float E(float v) => Dessin.Echelle(this, v);
+            Dessin.EffacerAvecParent(this, g);
+            Dessin.Qualite(g);
+            var p = Theme.PaletteDe(Mode);
+
+            // Cadre : accent du thème actuel si choisi, bordure sinon.
+            var hLegende = E(44);
+            var cadre = new RectangleF(E(1), E(1), Width - E(3), Height - hLegende - E(4));
+            using (var chemin = Dessin.Arrondi(cadre, E(16)))
+            {
+                using var fond = new SolidBrush(p.Fond);
+                g.FillPath(fond, chemin);
+                var couleur = Actif ? Theme.Accent : _survol ? Theme.Sur(Theme.Surface, Theme.Accent, 0.5f) : Theme.BordureForte;
+                using var bord = new Pen(couleur, E(Actif ? 2.5f : 1.2f));
+                g.DrawPath(bord, chemin);
+            }
+
+            // Mini-fenêtre : menu à gauche, deux cartes, un bouton.
+            var interieur = RectangleF.Inflate(cadre, -E(10), -E(10));
+            using var decoupe = Dessin.Arrondi(interieur, E(10));
+            g.SetClip(decoupe);
+            using (var menu = new SolidBrush(p.FondMenu))
+            {
+                g.FillRectangle(menu, interieur.X, interieur.Y, interieur.Width * 0.27f, interieur.Height);
+            }
+
+            Barre(g, p.Accent, interieur.X + E(8), interieur.Y + E(12), interieur.Width * 0.27f - E(16), E(8));
+            for (var i = 0; i < 3; i++)
+            {
+                Barre(g, p.TexteSecondaire, interieur.X + E(8), interieur.Y + E(30 + (i * 15)), (interieur.Width * 0.27f) - E(24), E(5));
+            }
+
+            var x = interieur.X + (interieur.Width * 0.27f) + E(10);
+            var largeurCarte = (interieur.Right - x - E(18)) / 2;
+            Barre(g, p.Texte, x, interieur.Y + E(10), largeurCarte, E(8));
+            for (var i = 0; i < 2; i++)
+            {
+                var c = new RectangleF(x + (i * (largeurCarte + E(8))), interieur.Y + E(28), largeurCarte, interieur.Bottom - interieur.Y - E(38));
+                using (var chemin = Dessin.Arrondi(c, E(7)))
+                {
+                    using var surface = new SolidBrush(p.Surface);
+                    g.FillPath(surface, chemin);
+                    using var bord = new Pen(p.Bordure, E(1));
+                    g.DrawPath(bord, chemin);
+                }
+
+                Barre(g, p.Texte, c.X + E(8), c.Y + E(10), c.Width * 0.6f, E(6));
+                Barre(g, p.TexteSecondaire, c.X + E(8), c.Y + E(22), c.Width * 0.75f, E(5));
+                Barre(g, i == 0 ? p.Depart : p.Retour, c.X + E(8), c.Y + E(33), c.Width * 0.4f, E(5));
+                Barre(g, p.Accent, c.X + E(8), c.Bottom - E(18), c.Width - E(16), E(10));
+            }
+
+            g.ResetClip();
+
+            // Légende : pictogramme, nom, coche si actif.
+            var y = cadre.Bottom + E(6);
+            var t = E(20);
+            Icones.Dessiner(g, Mode == ModeAffichage.Clair ? Icones.Soleil : Icones.Lune, new RectangleF(E(4), y + ((hLegende - t) / 2), t, t), Actif ? Theme.Accent : Theme.TexteSecondaireClair);
+            Dessin.Texte(g, Text, Actif ? Theme.PoliceTitre(10.5f) : Theme.Police(10.5f), new Rectangle((int)E(32), (int)y, Width - (int)E(70), (int)hLegende), Theme.Texte);
+            if (Actif)
+            {
+                var d = E(24);
+                var rond = new RectangleF(Width - d - E(4), y + ((hLegende - d) / 2), d, d);
+                using (var pinceau = new SolidBrush(Theme.Accent))
+                {
+                    g.FillEllipse(pinceau, rond);
+                }
+
+                Icones.Dessiner(g, Icones.Coche, RectangleF.Inflate(rond, -E(5), -E(5)), Theme.TexteSurAccent, 2.4f);
+            }
+
+            if (Focused && ShowFocusCues)
+            {
+                using var chemin = Dessin.Arrondi(RectangleF.Inflate(cadre, -E(4), -E(4)), E(12));
+                using var focus = new Pen(Theme.Accent, E(1.5f)) { DashPattern = [3f, 2f] };
+                g.DrawPath(focus, chemin);
+            }
+        }
+
+        private static void Barre(Graphics g, Color couleur, float x, float y, float largeur, float hauteur)
+        {
+            if (largeur <= 0)
+            {
+                return;
+            }
+
+            using var chemin = Dessin.Arrondi(new RectangleF(x, y, largeur, hauteur), hauteur / 2);
+            using var pinceau = new SolidBrush(couleur);
+            g.FillPath(pinceau, chemin);
+        }
     }
 
     /// <summary>Encadré à bordure pointillée (zone d'essai du pistolet).</summary>

@@ -7,6 +7,12 @@ public sealed class EntreeJournal
     public DateTime Horodatage { get; set; }
     public string Action { get; set; } = "";
     public string Details { get; set; } = "";
+
+    /// <summary>Équipement concerné (scan, contrôle, atelier...), ou null.</summary>
+    public long? EquipementId { get; set; }
+
+    /// <summary>Sortie concernée (création, scans, validation, clôture), ou null.</summary>
+    public long? SortieId { get; set; }
 }
 
 /// <summary>Noms d'actions utilisés dans le journal.</summary>

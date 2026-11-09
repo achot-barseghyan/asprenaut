@@ -138,16 +138,45 @@ public sealed class JournalRepository(FabriqueConnexion fabrique) : IJournalRepo
     {
         await using var cx = await fabrique.OuvrirAsync(ct);
         entree.Id = await cx.ExecuteScalarAsync<long>(new CommandDefinition(
-            "INSERT INTO journal (horodatage, action, details) VALUES (@Horodatage, @Action, @Details) RETURNING id;",
-            new { Horodatage = FormatIso.Ecrire(entree.Horodatage), entree.Action, entree.Details }, cancellationToken: ct));
+            """
+            INSERT INTO journal (horodatage, action, details, equipement_id, sortie_id)
+            VALUES (@Horodatage, @Action, @Details, @EquipementId, @SortieId)
+            RETURNING id;
+            """,
+            new { Horodatage = FormatIso.Ecrire(entree.Horodatage), entree.Action, entree.Details, entree.EquipementId, entree.SortieId },
+            cancellationToken: ct));
     }
 
     public async Task<IReadOnlyList<EntreeJournal>> ListerRecentsAsync(int nombre, CancellationToken ct = default)
     {
         await using var cx = await fabrique.OuvrirAsync(ct);
         var lignes = await cx.QueryAsync<EntreeJournal>(new CommandDefinition(
-            "SELECT id, horodatage, action, details FROM journal ORDER BY id DESC LIMIT @nombre;",
+            "SELECT id, horodatage, action, details, equipement_id, sortie_id FROM journal ORDER BY id DESC LIMIT @nombre;",
             new { nombre }, cancellationToken: ct));
+        return lignes.AsList();
+    }
+
+    public async Task<IReadOnlyList<LigneJournal>> ListerAsync(DateTime? depuisUtc, int nombreMax, CancellationToken ct = default)
+    {
+        const string sql = """
+            SELECT j.id, j.horodatage, j.action, j.details, j.equipement_id, j.sortie_id,
+                   e.code, e.libelle, c.nom AS categorie,
+                   s.intitule AS sortie_intitule, s.date_sortie AS sortie_date, s.type AS sortie_type, s.lieu AS sortie_lieu,
+                   TRIM(m.prenom || ' ' || m.nom) AS moniteur_nom,
+                   (SELECT COUNT(*) FROM sortie_equipement se WHERE se.sortie_id = j.sortie_id) AS sortie_nb_equipements,
+                   (SELECT COUNT(*) FROM sortie_equipement se WHERE se.sortie_id = j.sortie_id AND se.statut = 'Manquant') AS sortie_nb_manquants
+            FROM journal j
+            LEFT JOIN equipement e ON e.id = j.equipement_id
+            LEFT JOIN categorie c ON c.id = e.categorie_id
+            LEFT JOIN sortie s ON s.id = j.sortie_id
+            LEFT JOIN moniteur m ON m.id = s.moniteur_id
+            WHERE @depuis IS NULL OR j.horodatage >= @depuis
+            ORDER BY j.horodatage DESC, j.id DESC
+            LIMIT @nombreMax;
+            """;
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        var lignes = await cx.QueryAsync<LigneJournal>(new CommandDefinition(
+            sql, new { depuis = FormatIso.Ecrire(depuisUtc), nombreMax }, cancellationToken: ct));
         return lignes.AsList();
     }
 }

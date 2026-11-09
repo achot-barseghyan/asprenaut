@@ -272,7 +272,7 @@ public class BoutonArrondi : Button
             g.DrawPath(stylo, chemin);
         }
 
-        var couleur = _selectionne ? Color.White : Theme.TexteSecondaireClair;
+        var couleur = _selectionne ? Theme.TexteActif : Theme.TexteSecondaireClair;
         var t = Dessin.Echelle(this, 20);
         var x = Dessin.Echelle(this, 14);
         if (_icone is not null)

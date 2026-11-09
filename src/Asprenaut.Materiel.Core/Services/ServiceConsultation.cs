@@ -105,10 +105,3 @@ public sealed class ServiceMoniteurs(IMoniteurRepository moniteurs, ISortieRepos
     private Task JournaliserAsync(string action, string details, CancellationToken ct) =>
         journal.AjouterAsync(new EntreeJournal { Horodatage = horloge.MaintenantUtc, Action = action, Details = details }, ct);
 }
-
-/// <summary>Historique : lecture du journal.</summary>
-public sealed class ServiceHistorique(IJournalRepository journal)
-{
-    public Task<IReadOnlyList<EntreeJournal>> ListerRecentsAsync(int nombre = 500, CancellationToken ct = default) =>
-        journal.ListerRecentsAsync(nombre, ct);
-}

@@ -16,7 +16,7 @@ public sealed class GrilleAdaptative : Panel
         Margin = Padding.Empty;
         Padding = Padding.Empty;
         DoubleBuffered = true;
-        Natif.ScrollbarsSombres(this);
+        Natif.ScrollbarsDuTheme(this);
     }
 
     /// <summary>Largeur minimale d'une colonne (pixels logiques).</summary>
@@ -105,12 +105,39 @@ public sealed class GrilleAdaptative : Panel
             return;
         }
 
-        var voulue = hauteur + Margin.Vertical;
-        if (Math.Abs(table.RowStyles[ligne].Height - voulue) > 0.5f)
+        _hauteurVoulue = hauteur + Margin.Vertical;
+        if (Math.Abs(table.RowStyles[ligne].Height - _hauteurVoulue) > 0.5f)
         {
             // Différé : on ne change pas la mise en page du parent pendant sa propre mise en page.
-            BeginInvokeSiPossible(() => table.RowStyles[ligne].Height = voulue);
+            // L'action relit la DERNIÈRE hauteur calculée : un calcul fait à une largeur provisoire (écran en construction)
+            // ne doit pas écraser, en passant après, la hauteur calculée à la bonne largeur.
+            BeginInvokeSiPossible(() =>
+            {
+                var l = table.GetRow(this);
+                if (l >= 0 && l < table.RowStyles.Count && Math.Abs(table.RowStyles[l].Height - _hauteurVoulue) > 0.5f)
+                {
+                    table.RowStyles[l].Height = _hauteurVoulue;
+                }
+            });
         }
+    }
+
+    private int _hauteurVoulue;
+
+    /// <summary>
+    /// Écran préparé hors de vue : la hauteur de ligne a pu être posée avant que les fenêtres existent, sans que le parent
+    /// refasse sa mise en page. On la lui redemande une fois la fenêtre créée.
+    /// </summary>
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        BeginInvoke(() =>
+        {
+            if (!IsDisposed && Parent is TableLayoutPanel table)
+            {
+                table.PerformLayout();
+            }
+        });
     }
 
     private void BeginInvokeSiPossible(Action action)

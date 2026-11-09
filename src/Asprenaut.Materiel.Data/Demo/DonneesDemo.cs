@@ -95,6 +95,12 @@ public static class DonneesDemo
         await cx.ExecuteAsync(
             "INSERT INTO journal (horodatage, action, details) VALUES (@maintenant, 'DonneesDemo', 'Données de démonstration chargées');",
             new { maintenant }, tx);
+        await cx.ExecuteAsync(
+            """
+            INSERT INTO journal (horodatage, action, details, equipement_id)
+            SELECT cree_le, 'EquipementCree', code || ' « ' || libelle || ' » créé', id FROM equipement ORDER BY id;
+            """,
+            transaction: tx);
         await tx.CommitAsync(ct);
         return true;
     }

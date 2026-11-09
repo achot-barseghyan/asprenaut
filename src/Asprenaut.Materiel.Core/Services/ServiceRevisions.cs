@@ -218,7 +218,7 @@ public sealed class ServiceRevisions(
 
         await equipements.MettreAJourAsync(equipement, ct);
         await JournaliserAsync(ActionsJournal.ControleEnregistre,
-            $"{equipement.Code} : {LibelleControle(type, categorie)} du {Libelles.Date(date)}, {LibelleResultat(resultat)}", ct);
+            $"{equipement.Code} : {LibelleControle(type, categorie)} du {Libelles.Date(date)}, {LibelleResultat(resultat)}", ct, equipement.Id);
 
         return ResultatOperation.Ok(resultat switch
         {
@@ -290,7 +290,7 @@ public sealed class ServiceRevisions(
         }, ct);
         equipement.Etat = EtatEquipement.HorsService;
         await equipements.MettreAJourAsync(equipement, ct);
-        await JournaliserAsync(ActionsJournal.EnvoiAtelier, $"{equipement.Code} envoyé chez {prestataire.Trim()}", ct);
+        await JournaliserAsync(ActionsJournal.EnvoiAtelier, $"{equipement.Code} envoyé chez {prestataire.Trim()}", ct, equipement.Id);
         return ResultatOperation.Ok($"{equipement.Designation} envoyé en atelier. Il est hors service jusqu'à son retour.", id);
     }
 
@@ -312,7 +312,7 @@ public sealed class ServiceRevisions(
         }
 
         var code = equipement?.Code ?? $"Équipement {passage.EquipementId}";
-        await JournaliserAsync(ActionsJournal.RetourAtelier, $"{code} revenu de chez {passage.Prestataire}", ct);
+        await JournaliserAsync(ActionsJournal.RetourAtelier, $"{code} revenu de chez {passage.Prestataire}", ct, passage.EquipementId);
         return ResultatOperation.Ok($"{code} revenu d'atelier : de nouveau en service.", passage.EquipementId);
     }
 
@@ -363,6 +363,6 @@ public sealed class ServiceRevisions(
 
     private static string Mois(DateOnly date) => date.ToString("MM/yyyy", Libelles.Culture);
 
-    private Task JournaliserAsync(string action, string details, CancellationToken ct) =>
-        journal.AjouterAsync(new EntreeJournal { Horodatage = horloge.MaintenantUtc, Action = action, Details = details }, ct);
+    private Task JournaliserAsync(string action, string details, CancellationToken ct, long? equipementId = null, long? sortieId = null) =>
+        journal.AjouterAsync(new EntreeJournal { Horodatage = horloge.MaintenantUtc, Action = action, Details = details, EquipementId = equipementId, SortieId = sortieId }, ct);
 }

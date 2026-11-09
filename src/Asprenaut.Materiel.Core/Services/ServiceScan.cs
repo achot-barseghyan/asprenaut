@@ -93,7 +93,7 @@ public sealed class ServiceScan(
             ScanneDepartLe = horloge.MaintenantUtc,
             Statut = StatutSortieEquipement.Dehors,
         }, ct);
-        await JournaliserAsync(ActionsJournal.ScanDepart, $"{equipement.Code} part avec la sortie {sortie.Id} « {sortie.Intitule} »", ct);
+        await JournaliserAsync(ActionsJournal.ScanDepart, $"{equipement.Code} part avec la sortie {sortie.Id} « {sortie.Intitule} »", ct, equipement.Id, sortie.Id);
 
         // Règle : révision dépassée → part quand même, avec un avertissement visible.
         if (equipement.RevisionDepassee(horloge.AujourdHui))
@@ -142,12 +142,12 @@ public sealed class ServiceScan(
 
                 case StatutSortieEquipement.Dehors:
                     await MarquerRenduAsync(affectation, ct);
-                    await JournaliserAsync(ActionsJournal.ScanRetour, $"{equipement.Code} rendu (sortie {sortieId})", ct);
+                    await JournaliserAsync(ActionsJournal.ScanRetour, $"{equipement.Code} rendu (sortie {sortieId})", ct, equipement.Id, sortieId);
                     return ResultatScan.Succes($"{equipement.Designation} rendu.", equipement);
 
                 default: // Manquant dans cette sortie (déjà clôturée) → retrouvé.
                     await MarquerRenduAsync(affectation, ct);
-                    await JournaliserAsync(ActionsJournal.ManquantRetrouve, $"{equipement.Code} retrouvé et rendu (sortie {sortieId})", ct);
+                    await JournaliserAsync(ActionsJournal.ManquantRetrouve, $"{equipement.Code} retrouvé et rendu (sortie {sortieId})", ct, equipement.Id, sortieId);
                     return ResultatScan.Succes($"{equipement.Designation} était manquant. Il est maintenant rendu.", equipement);
             }
         }
@@ -172,7 +172,7 @@ public sealed class ServiceScan(
         if (manquant is not null)
         {
             await MarquerRenduAsync(manquant, ct);
-            await JournaliserAsync(ActionsJournal.ManquantRetrouve, $"{equipement.Code} retrouvé et rendu (sortie {manquant.SortieId})", ct);
+            await JournaliserAsync(ActionsJournal.ManquantRetrouve, $"{equipement.Code} retrouvé et rendu (sortie {manquant.SortieId})", ct, equipement.Id, manquant.SortieId);
             return ResultatScan.Succes($"{equipement.Designation} était manquant. Il est maintenant rendu.", equipement);
         }
 
@@ -202,7 +202,7 @@ public sealed class ServiceScan(
         await sorties.SupprimerAffectationAsync(affectation.Id, ct);
         var equipement = await equipements.ObtenirAsync(equipementId, ct);
         var code = equipement?.Code ?? equipementId.ToString(Libelles.Culture);
-        await JournaliserAsync(ActionsJournal.RetraitDepart, $"{code} retiré de la sortie {sortieId}", ct);
+        await JournaliserAsync(ActionsJournal.RetraitDepart, $"{code} retiré de la sortie {sortieId}", ct, equipementId, sortieId);
         return ResultatOperation.Ok($"{code} retiré.");
     }
 
@@ -213,6 +213,6 @@ public sealed class ServiceScan(
         return sorties.MettreAJourAffectationAsync(affectation, ct);
     }
 
-    private Task JournaliserAsync(string action, string details, CancellationToken ct) =>
-        journal.AjouterAsync(new EntreeJournal { Horodatage = horloge.MaintenantUtc, Action = action, Details = details }, ct);
+    private Task JournaliserAsync(string action, string details, CancellationToken ct, long? equipementId = null, long? sortieId = null) =>
+        journal.AjouterAsync(new EntreeJournal { Horodatage = horloge.MaintenantUtc, Action = action, Details = details, EquipementId = equipementId, SortieId = sortieId }, ct);
 }

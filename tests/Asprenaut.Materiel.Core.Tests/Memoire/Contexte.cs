@@ -20,6 +20,7 @@ public sealed class Contexte
     public ServiceRevisions Revisions { get; }
     public RevisionRepositoryMemoire DepotRevisions { get; }
     public ServiceMoniteurs Moniteurs { get; }
+    public ServiceHistorique Historique { get; }
     public Moniteur Pascal { get; }
 
     public Contexte()
@@ -36,6 +37,7 @@ public sealed class Contexte
         var categories = new CategorieRepositoryMemoire(Db);
         Revisions = new ServiceRevisions(equipements, categories, sorties, DepotRevisions, moniteurs, journal, Horloge, Reglages);
         Moniteurs = new ServiceMoniteurs(moniteurs, sorties, journal, Horloge);
+        Historique = new ServiceHistorique(journal, equipements, categories, sorties, DepotRevisions, moniteurs, Horloge, Reglages);
 
         Db.Categories.Add(new Categorie { Id = Db.ProchainId(), Nom = "Blocs" });
         Db.Categories.Add(new Categorie { Id = Db.ProchainId(), Nom = "Détendeurs" });

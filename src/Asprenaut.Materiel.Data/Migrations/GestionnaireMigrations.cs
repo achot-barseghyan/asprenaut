@@ -27,7 +27,10 @@ public sealed partial class GestionnaireMigrations(FabriqueConnexion fabrique)
     public static int VersionCible => ScriptsDisponibles().Select(s => s.Version).DefaultIfEmpty(0).Max();
 
     /// <summary>Met la base à jour. Retourne la version finale.</summary>
-    public async Task<int> AppliquerAsync(CancellationToken ct = default)
+    public Task<int> AppliquerAsync(CancellationToken ct = default) => AppliquerAsync(int.MaxValue, ct);
+
+    /// <summary>Met la base à jour sans dépasser la version <paramref name="jusqua"/> (tests des reprises de données).</summary>
+    public async Task<int> AppliquerAsync(int jusqua, CancellationToken ct = default)
     {
         await using var cx = await fabrique.OuvrirAsync(ct);
         await cx.ExecuteScalarAsync<string>("PRAGMA journal_mode = WAL;");
@@ -35,7 +38,7 @@ public sealed partial class GestionnaireMigrations(FabriqueConnexion fabrique)
 
         var actuelle = await cx.ExecuteScalarAsync<int?>("SELECT MAX(version) FROM schema_version;") ?? 0;
 
-        foreach (var (version, nom) in ScriptsDisponibles().Where(s => s.Version > actuelle))
+        foreach (var (version, nom) in ScriptsDisponibles().Where(s => s.Version > actuelle && s.Version <= jusqua))
         {
             var sql = LireScript(nom);
             await using var tx = await cx.BeginTransactionAsync(ct);

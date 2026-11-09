@@ -73,7 +73,7 @@ public sealed class ServiceSortie(
             Statut = StatutSortie.EnPreparation,
         };
         var id = await sorties.AjouterAsync(sortie, ct);
-        await JournaliserAsync(ActionsJournal.SortieCreee, $"Sortie {id} « {intitule} » du {Libelles.Date(demande.Date)} ({moniteur.NomComplet})", ct);
+        await JournaliserAsync(ActionsJournal.SortieCreee, $"Sortie {id} « {intitule} » du {Libelles.Date(demande.Date)} ({moniteur.NomComplet})", ct, sortieId: id);
         return ResultatOperation.Ok("Sortie créée.", id);
     }
 
@@ -100,7 +100,7 @@ public sealed class ServiceSortie(
         sortie.Statut = StatutSortie.EnCours;
         sortie.DepartValideLe = horloge.MaintenantUtc;
         await sorties.MettreAJourAsync(sortie, ct);
-        await JournaliserAsync(ActionsJournal.DepartValide, $"Départ validé pour la sortie {sortieId} ({Libelles.Pluriel(affectations.Count, "équipement")})", ct);
+        await JournaliserAsync(ActionsJournal.DepartValide, $"Départ validé pour la sortie {sortieId} ({Libelles.Pluriel(affectations.Count, "équipement")})", ct, sortieId: sortieId);
         return ResultatOperation.Ok($"Départ validé : {Libelles.Pluriel(affectations.Count, "équipement")}.", sortieId);
     }
 
@@ -154,17 +154,17 @@ public sealed class ServiceSortie(
             foreach (var a in manquants)
             {
                 var code = codes.GetValueOrDefault(a.EquipementId, $"Équipement {a.EquipementId}");
-                await JournaliserAsync(ActionsJournal.ManquantDeclare, $"{code} manquant (sortie {sortieId})", ct);
+                await JournaliserAsync(ActionsJournal.ManquantDeclare, $"{code} manquant (sortie {sortieId})", ct, a.EquipementId, sortieId);
             }
         }
 
-        await JournaliserAsync(ActionsJournal.SortieCloturee, $"Sortie {sortieId} clôturée, {Libelles.Pluriel(manquants.Count, "manquant")}", ct);
+        await JournaliserAsync(ActionsJournal.SortieCloturee, $"Sortie {sortieId} clôturée, {Libelles.Pluriel(manquants.Count, "manquant")}", ct, sortieId: sortieId);
 
         return manquants.Count == 0
             ? ResultatOperation.Ok("Sortie clôturée. Tout est rendu.", sortieId)
             : ResultatOperation.Ok($"Sortie clôturée avec {Libelles.Pluriel(manquants.Count, "manquant")}.", sortieId);
     }
 
-    private Task JournaliserAsync(string action, string details, CancellationToken ct) =>
-        journal.AjouterAsync(new EntreeJournal { Horodatage = horloge.MaintenantUtc, Action = action, Details = details }, ct);
+    private Task JournaliserAsync(string action, string details, CancellationToken ct, long? equipementId = null, long? sortieId = null) =>
+        journal.AjouterAsync(new EntreeJournal { Horodatage = horloge.MaintenantUtc, Action = action, Details = details, EquipementId = equipementId, SortieId = sortieId }, ct);
 }

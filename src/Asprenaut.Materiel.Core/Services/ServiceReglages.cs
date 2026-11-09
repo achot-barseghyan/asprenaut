@@ -43,6 +43,19 @@ public sealed class ServiceReglages(Reglages reglages, IStockageReglages stockag
         return ResultatOperation.Ok("Enregistré.");
     }
 
+    /// <summary>Thème de l'interface (sombre ou clair), retenu pour les prochains démarrages.</summary>
+    public ResultatOperation ChangerAffichage(ModeAffichage mode)
+    {
+        if (!Enum.IsDefined(mode))
+        {
+            return ResultatOperation.Echec("Thème inconnu.");
+        }
+
+        reglages.Affichage = mode;
+        stockage.Enregistrer(reglages);
+        return ResultatOperation.Ok(mode == ModeAffichage.Clair ? "Thème clair." : "Thème sombre.");
+    }
+
     /// <summary>Préfixe des étiquettes : sans espaces, en majuscules, 8 caractères au plus (vide = aucun).</summary>
     public ResultatOperation ChangerPrefixe(string? prefixe)
     {

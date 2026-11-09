@@ -153,6 +153,27 @@ public sealed class SortieRepositoryMemoire(BaseMemoire db) : ISortieRepository
             })
             .ToList());
 
+    public Task<IReadOnlyList<PassageSortie>> ListerPassagesAsync(long equipementId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<PassageSortie>>(db.Affectations
+            .Where(a => a.EquipementId == equipementId)
+            .OrderByDescending(a => a.ScanneDepartLe)
+            .Select(a =>
+            {
+                var s = db.Sorties.First(x => x.Id == a.SortieId);
+                return new PassageSortie
+                {
+                    SortieId = s.Id,
+                    Intitule = s.Intitule,
+                    DateSortie = s.DateSortie,
+                    MoniteurNom = db.Moniteurs.FirstOrDefault(m => m.Id == s.MoniteurId)?.NomComplet ?? "",
+                    ClotureeLe = s.ClotureeLe,
+                    Statut = a.Statut,
+                    ScanneDepartLe = a.ScanneDepartLe,
+                    ScanneRetourLe = a.ScanneRetourLe,
+                };
+            })
+            .ToList());
+
     public Task<IReadOnlyList<SortieEquipement>> ListerAffectationsAsync(long sortieId, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<SortieEquipement>>(db.Affectations.Where(a => a.SortieId == sortieId).ToList());
 
@@ -224,4 +245,37 @@ public sealed class JournalRepositoryMemoire(BaseMemoire db) : IJournalRepositor
 
     public Task<IReadOnlyList<EntreeJournal>> ListerRecentsAsync(int nombre, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<EntreeJournal>>(db.Journal.OrderByDescending(j => j.Id).Take(nombre).ToList());
+
+    public Task<IReadOnlyList<LigneJournal>> ListerAsync(DateTime? depuisUtc, int nombreMax, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<LigneJournal>>(db.Journal
+            .Where(j => depuisUtc is null || j.Horodatage >= depuisUtc)
+            .OrderByDescending(j => j.Horodatage)
+            .ThenByDescending(j => j.Id)
+            .Take(nombreMax)
+            .Select(j =>
+            {
+                var e = db.Equipements.FirstOrDefault(x => x.Id == j.EquipementId);
+                var s = db.Sorties.FirstOrDefault(x => x.Id == j.SortieId);
+                var lignes = db.Affectations.Where(a => s is not null && a.SortieId == s.Id).ToList();
+                return new LigneJournal
+                {
+                    Id = j.Id,
+                    Horodatage = j.Horodatage,
+                    Action = j.Action,
+                    Details = j.Details,
+                    EquipementId = e?.Id,
+                    Code = e?.Code,
+                    Libelle = e?.Libelle,
+                    Categorie = db.Categories.FirstOrDefault(c => c.Id == e?.CategorieId)?.Nom,
+                    SortieId = s?.Id,
+                    SortieIntitule = s?.Intitule,
+                    SortieDate = s?.DateSortie,
+                    SortieType = s?.Type,
+                    SortieLieu = s?.Lieu,
+                    MoniteurNom = db.Moniteurs.FirstOrDefault(m => m.Id == s?.MoniteurId)?.NomComplet,
+                    SortieNbEquipements = lignes.Count,
+                    SortieNbManquants = lignes.Count(a => a.Statut == StatutSortieEquipement.Manquant),
+                };
+            })
+            .ToList());
 }

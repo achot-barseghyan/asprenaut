@@ -9,6 +9,27 @@ namespace Asprenaut.Materiel.App.Apparence;
 /// </summary>
 public static class Icones
 {
+    private static Icon? _fenetre;
+
+    /// <summary>
+    /// Icône de l'application (masque et tuba, Ressources\Asprenaut.ico embarqué, de 16 à 256 px) pour la barre de titre
+    /// et la barre des tâches. Le .exe porte la même via ApplicationIcon dans le .csproj.
+    /// </summary>
+    public static Icon IconeFenetre
+    {
+        get
+        {
+            if (_fenetre is null)
+            {
+                using var flux = typeof(Icones).Assembly.GetManifestResourceStream("Asprenaut.ico")
+                    ?? throw new InvalidOperationException("Icône de l'application introuvable (ressource Asprenaut.ico).");
+                _fenetre = new Icon(flux);
+            }
+
+            return _fenetre;
+        }
+    }
+
     // --- Navigation ---
     public const string Sorties = "M3 10c2 0 2-2 4.5-2S10 10 12 10s2-2 4.5-2S19 10 21 10M3 16c2 0 2-2 4.5-2S10 16 12 16s2-2 4.5-2S19 16 21 16";
     public const string Inventaire = "M4 4h16v16H4zM4 10h16M10 10v10";
@@ -24,6 +45,7 @@ public static class Icones
     public const string Croix = "M6 6l12 12M18 6L6 18";
     public const string ChevronGauche = "M15 6l-6 6 6 6";
     public const string ChevronDroite = "M9 6l6 6-6 6";
+    public const string ChevronBas = "M6 9l6 6 6-6";
     public const string Exclamation = "M12 6v8M12 18v.01";
     public const string Recherche = "M11 5a6 6 0 1 0 0 12 6 6 0 0 0 0-12zM20 20l-4.5-4.5";
     public const string Telecharger = "M12 4v11M7 10l5 5 5-5M5 20h14";
@@ -43,6 +65,13 @@ public static class Icones
     public const string Document = "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5";
     public const string Calendrier = "M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM3 10h18M8 3v4M16 3v4M12 13v5M9.5 15.5h5";
     public const string Info = "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v5M12 8h.01";
+    public const string Lune = "M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z";
+    public const string Soleil = "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4";
+
+    // --- Historique : familles d'événements ---
+    public const string Depart = "M14 4h5v16h-5M3 12h11M10 8l4 4-4 4";
+    public const string Retour = "M10 4H5v16h5M21 12H10M14 8l-4 4 4 4";
+    public const string Alerte = "M12 8v5M12 16h.01M10.3 3.9L2.5 18a2 2 0 0 0 1.7 3h15.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z";
     // --- Marque : masque et tuba ---
     public const string Logo = "M2.5 9.5a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v2a3 3 0 0 1-3 3h-2.5l-1.5-2h-2l-1.5 2H5.5a3 3 0 0 1-3-3zM21.5 5v9a5 5 0 0 1-5 5h-2";
 
