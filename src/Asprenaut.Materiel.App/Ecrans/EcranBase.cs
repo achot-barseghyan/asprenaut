@@ -30,11 +30,14 @@ public abstract class EcranBase : UserControl
     protected virtual Task ChargerAsync(object? parametre) => Task.CompletedTask;
 
     /// <summary>Lance le chargement ; une erreur est affichée simplement à l'utilisateur.</summary>
+    internal Task Chargement { get; private set; } = Task.CompletedTask;
+
     internal async void Demarrer(object? parametre)
     {
         try
         {
-            await ChargerAsync(parametre);
+            Chargement = ChargerAsync(parametre);
+            await Chargement;
         }
         catch (Exception ex)
         {

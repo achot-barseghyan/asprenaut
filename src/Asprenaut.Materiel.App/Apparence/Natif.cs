@@ -15,6 +15,41 @@ internal static class Natif
     [DllImport("uxtheme.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
     private static extern int SetWindowTheme(IntPtr hwnd, string? nomApplication, string? listeIds);
 
+    private const int WmSetRedraw = 0x000B;
+    private const uint RdwInvalidate = 0x0001, RdwErase = 0x0004, RdwAllChildren = 0x0080, RdwUpdateNow = 0x0100, RdwFrame = 0x0400;
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool RedrawWindow(IntPtr hwnd, IntPtr rect, IntPtr region, uint flags);
+
+    /// <summary>
+    /// Gèle l'affichage de <paramref name="controle"/> : l'écran garde l'image actuelle tant que
+    /// <see cref="Degeler"/> n'est pas appelé, même si on ajoute, construit ou retire des contrôles dedans.
+    /// </summary>
+    public static void Geler(Control controle)
+    {
+        if (controle.IsHandleCreated)
+        {
+            SendMessage(controle.Handle, WmSetRedraw, IntPtr.Zero, IntPtr.Zero);
+        }
+    }
+
+    /// <summary>Dégèle et redessine d'un seul coup (enfants compris) : pas d'image intermédiaire à l'écran.</summary>
+    public static void Degeler(Control controle)
+    {
+        if (controle.IsHandleCreated)
+        {
+            SendMessage(controle.Handle, WmSetRedraw, new IntPtr(1), IntPtr.Zero);
+
+            // Redessin demandé à la fenêtre entière : avec WS_EX_COMPOSITED, c'est elle qui peint tous ses enfants
+            // dans une même image hors écran, présentée d'un bloc.
+            var fenetre = controle.FindForm() is { IsHandleCreated: true } f ? f.Handle : controle.Handle;
+            RedrawWindow(fenetre, IntPtr.Zero, IntPtr.Zero, RdwInvalidate | RdwErase | RdwAllChildren | RdwUpdateNow | RdwFrame);
+        }
+    }
+
     /// <summary>Passe la barre de titre Windows en sombre (sans effet sur les versions non prises en charge).</summary>
     public static void BarreDeTitreSombre(Form fenetre)
     {
