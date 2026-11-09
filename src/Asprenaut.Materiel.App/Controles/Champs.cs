@@ -160,6 +160,17 @@ public sealed class ChampDate : Panel
         }
     }
 
+    /// <summary>Vrai si le champ est vide ou contient une date lisible (faux pour une saisie incorrecte).</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool Valide => _date is not null || _texte.Text.Trim().Length == 0;
+
+    protected override void OnEnabledChanged(EventArgs e)
+    {
+        base.OnEnabledChanged(e);
+        _texte.BackColor = Enabled ? ChampSaisie.FondChamp : Theme.Surface;
+        Invalidate();
+    }
+
     protected override void OnLayout(LayoutEventArgs levent)
     {
         base.OnLayout(levent);

@@ -26,7 +26,7 @@ public sealed class EcranInventaire : EcranBase
         _reglages = reglages;
 
         var ajouter = new BoutonArrondi("Ajouter un équipement", StyleBouton.Principal, Icones.Plus);
-        ajouter.Click += (_, _) => Dialogues.Information(FindForm(), "L'ajout d'équipement arrive dans une prochaine version.");
+        ajouter.Click += (_, _) => Executer(AjouterEquipementAsync);
         var exporter = new BoutonArrondi("Exporter CSV", StyleBouton.Secondaire, Icones.Telecharger);
         exporter.Click += (_, _) => Dialogues.Information(FindForm(), "L'export CSV arrive dans une prochaine version.");
 
@@ -93,6 +93,13 @@ public sealed class EcranInventaire : EcranBase
         }
 
         _categories.SuspendLayout();
+        foreach (var tuile in _tuiles)
+        {
+            _categories.Controls.Remove(tuile);
+            tuile.Dispose();
+        }
+
+        _tuiles.Clear();
         AjouterTuile("Tout", Icones.Tout, null, tout.Count);
         foreach (var c in categories)
         {
@@ -112,6 +119,19 @@ public sealed class EcranInventaire : EcranBase
         }
 
         base.Dispose(disposing);
+    }
+
+    /// <summary>Ajout d'un équipement ; la catégorie filtrée est proposée par défaut, puis on le montre dans la liste.</summary>
+    private async Task AjouterEquipementAsync()
+    {
+        var code = await FormulaireEquipement.OuvrirAsync(FindForm(), _inventaire, categorieId: _categorie);
+        if (code is null || IsDisposed)
+        {
+            return;
+        }
+
+        await ChargerAsync(null);
+        _recherche.Champ.Text = code; // Recherche sur le nouveau code : l'équipement apparaît seul.
     }
 
     private void AjouterTuile(string texte, string icone, long? categorieId, int nombre)

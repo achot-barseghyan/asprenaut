@@ -14,6 +14,7 @@ public sealed class EcranDepart : EcranScanBase
 {
     private readonly ServiceSortie _sorties;
     private readonly ServiceScan _scan;
+    private readonly ServiceInventaire _inventaire;
     private readonly IHorloge _horloge;
     private readonly Pastille _compte = Compteur(Theme.Depart, Theme.DepartClair);
     private readonly ListeMateriel _liste = new(StyleListe.Depart, "Rien n'est encore scanné. Scannez la première étiquette.");
@@ -22,9 +23,10 @@ public sealed class EcranDepart : EcranScanBase
     private IReadOnlyList<LigneSortie> _lignes = [];
     private StatutSortie _statut;
 
-    public EcranDepart(ServiceSortie sorties, ServiceScan scan, IHorloge horloge, ServiceReglages reglages, INavigation navigation)
+    public EcranDepart(ServiceSortie sorties, ServiceScan scan, ServiceInventaire inventaire, IHorloge horloge, ServiceReglages reglages, INavigation navigation)
         : base(navigation, reglages, ModeScan.Depart)
     {
+        _inventaire = inventaire;
         _sorties = sorties;
         _scan = scan;
         _horloge = horloge;
@@ -105,10 +107,11 @@ public sealed class EcranDepart : EcranScanBase
         var resultat = await _scan.ScannerDepartAsync(SortieId, code);
         ZoneScan.AfficherResultat(resultat);
 
-        if (resultat.Action == ActionProposee.CreerEquipement && Dialogues.Confirmer(FindForm(), resultat.Message))
+        // Code inconnu : on propose de créer l'équipement (code pré-rempli), puis il part directement avec la sortie.
+        if (resultat.Action == ActionProposee.CreerEquipement && Dialogues.Confirmer(FindForm(), resultat.Message)
+            && await FormulaireEquipement.OuvrirAsync(FindForm(), _inventaire, resultat.Code) is { } cree && !IsDisposed)
         {
-            // Étape suivante : formulaire de création pré-rempli avec resultat.Code.
-            Dialogues.Information(FindForm(), $"La création de l'équipement {resultat.Code} arrive dans une prochaine version.");
+            ZoneScan.AfficherResultat(await _scan.ScannerDepartAsync(SortieId, cree));
         }
 
         await RafraichirAsync();

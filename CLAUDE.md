@@ -67,7 +67,10 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
 1. Un équipement n'est « Dehors » que dans une seule sortie (aussi garanti par l'index partiel `ux_sortie_equipement_dehors`).
 2. HorsService / Reforme ne part pas.
 3. Double scan au départ dans la même sortie → ignoré, « déjà scanné ».
-4. Code inconnu au départ → `ActionProposee.CreerEquipement`.
+4. Code inconnu au départ → `ActionProposee.CreerEquipement` : l'écran ouvre `FormulaireEquipement` (code pré-rempli, catégorie
+   devinée par `ServiceInventaire.DevinerCategorieAsync`), puis rescanne le code dans la sortie.
+   Création (`ServiceInventaire.CreerAsync`) : code nettoyé et unique, nom et catégorie obligatoires, pas de date de contrôle passée,
+   requalification réservée aux blocs, toujours EnService. Code proposé : `ProposerCodeAsync` (BLOC-034 → BLOC-035).
 5. Retour d'un équipement absent de la sortie → avertir sans rien modifier ; s'il est dehors ailleurs →
    `ActionProposee.RentrerDansAutreSortie` (l'écran rescanne alors dans `AutreSortieId`).
 6. Retrait possible seulement en préparation (`StatutSortie.EnPreparation`).

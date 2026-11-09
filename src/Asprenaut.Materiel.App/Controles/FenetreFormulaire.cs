@@ -75,6 +75,28 @@ public sealed class FenetreFormulaire : Form
         return controle;
     }
 
+    /// <summary>Ajoute deux champs côte à côte (libellés au-dessus).</summary>
+    public void DeuxChamps(string libelle1, Control champ1, string libelle2, Control champ2, int hauteur = Theme.HauteurChamp)
+    {
+        var table = new TableLayoutPanel { ColumnCount = 2, RowCount = 2, AutoSize = true, BackColor = Color.Transparent, Margin = new Padding(0, 0, 0, 14) };
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        table.RowStyles.Add(new RowStyle(SizeType.Absolute, hauteur));
+        var l1 = Ui.LibelleChamp(libelle1);
+        var l2 = Ui.LibelleChamp(libelle2);
+        l1.Margin = new Padding(0, 0, 7, 8);
+        l2.Margin = new Padding(7, 0, 0, 8);
+        champ1.Margin = new Padding(0, 0, 7, 0);
+        champ2.Margin = new Padding(7, 0, 0, 0);
+        champ1.Dock = champ2.Dock = DockStyle.Fill;
+        table.Controls.Add(l1, 0, 0);
+        table.Controls.Add(l2, 1, 0);
+        table.Controls.Add(champ1, 0, 1);
+        table.Controls.Add(champ2, 1, 1);
+        Ajouter(table);
+    }
+
     /// <summary>Ajoute une ligne libre (case à cocher, texte d'aide...).</summary>
     public void Ajouter(Control controle, SizeType type = SizeType.AutoSize, float valeur = 0)
     {
