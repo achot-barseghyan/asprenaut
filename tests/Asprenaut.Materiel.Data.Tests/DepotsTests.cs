@@ -147,4 +147,33 @@ public class DepotsTests : IAsyncLifetime
         Assert.True(await DonneesDemo.ChargerSiVideAsync(_base.Fabrique, new DateOnly(2026, 11, 6)));
         Assert.False(await DonneesDemo.ChargerSiVideAsync(_base.Fabrique, new DateOnly(2026, 11, 6)));
     }
+
+    [Fact]
+    public async Task Modifier_puis_supprimer_une_sortie_seulement_si_elle_est_vide()
+    {
+        var horloge = new HorlogeFixe();
+        var sorties = new SortieRepository(_base.Fabrique);
+        var moniteurs = new MoniteurRepository(_base.Fabrique);
+        var journal = new JournalRepository(_base.Fabrique);
+        var service = new ServiceSortie(sorties, moniteurs, journal, horloge, new Reglages());
+        var scan = new ServiceScan(new EquipementRepository(_base.Fabrique), sorties, journal, horloge, new Reglages());
+        await DonneesDemo.ChargerSiVideAsync(_base.Fabrique, horloge.AujourdHui);
+        var pascal = (await moniteurs.ListerAsync(true)).Single(m => m.Prenom == "Pascal");
+        var vide = (await service.CreerAsync(new NouvelleSortie(new DateOnly(2026, 11, 6), TypeSortie.Piscine, "Vide", pascal.Id))).Id!.Value;
+        var pleine = (await service.CreerAsync(new NouvelleSortie(new DateOnly(2026, 11, 6), TypeSortie.Piscine, "Pleine", pascal.Id))).Id!.Value;
+        await scan.ScannerDepartAsync(pleine, "BLOC-031");
+
+        Assert.True((await service.ModifierAsync(vide, new NouvelleSortie(new DateOnly(2026, 11, 7), TypeSortie.Mer, "Mer", pascal.Id, "Port"))).Reussi);
+        await using (var cx = await _base.Fabrique.OuvrirAsync())
+        {
+            Assert.Equal(("2026-11-07", "Mer", "Mer", "Port"), await cx.QuerySingleAsync<(string, string, string, string)>(
+                "SELECT date_sortie, type, intitule, lieu FROM sortie WHERE id = @vide;", new { vide }));
+        }
+
+        // Le dépôt lui-même refuse de supprimer une sortie qui a du matériel (condition dans la requête).
+        Assert.False(await sorties.SupprimerAsync(pleine));
+        Assert.True(await sorties.SupprimerAsync(vide));
+        Assert.Null(await sorties.ObtenirAsync(vide));
+        Assert.NotNull(await sorties.ObtenirAsync(pleine));
+    }
 }

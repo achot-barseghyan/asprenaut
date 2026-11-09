@@ -43,6 +43,9 @@ public interface ISortieRepository
 
     Task MettreAJourAsync(Sortie sortie, CancellationToken ct = default);
 
+    /// <summary>Supprime la sortie si aucun matériel n'y est rattaché ; faux sinon (rien n'est supprimé).</summary>
+    Task<bool> SupprimerAsync(long id, CancellationToken ct = default);
+
     Task<SortieResume?> ObtenirResumeAsync(long id, CancellationToken ct = default);
 
     /// <summary>Sorties clôturées si <paramref name="cloturees"/>, sinon en préparation et en cours.</summary>

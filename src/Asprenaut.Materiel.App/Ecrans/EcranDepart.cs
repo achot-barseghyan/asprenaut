@@ -20,12 +20,20 @@ public sealed class EcranDepart : EcranScanBase
     private readonly ListeMateriel _liste = new(StyleListe.Depart, "Rien n'est encore scanné. Scannez la première étiquette.");
     private readonly BoutonArrondi _valider = new("Valider le départ", StyleBouton.Depart, Icones.Coche, iconeApres: true);
     private readonly FiltreCategories _filtre = new(Theme.AccentClair) { Margin = new Padding(0, 0, 0, 10) };
+    private readonly ServiceMoniteurs _moniteurs;
+    private readonly BoutonArrondi _modifier = new("Modifier la sortie", StyleBouton.Secondaire, Icones.Crayon) { Height = Theme.HauteurCliquable, Margin = new Padding(10, 0, 0, 0) };
+    private readonly BoutonArrondi _supprimer = new("Supprimer", StyleBouton.Secondaire, Icones.Corbeille) { Height = Theme.HauteurCliquable, Margin = new Padding(10, 0, 0, 0), Visible = false };
     private IReadOnlyList<LigneSortie> _lignes = [];
     private StatutSortie _statut;
+    private string _intitule = "";
 
-    public EcranDepart(ServiceSortie sorties, ServiceScan scan, ServiceInventaire inventaire, IHorloge horloge, ServiceReglages reglages, INavigation navigation)
+    public EcranDepart(ServiceSortie sorties, ServiceScan scan, ServiceInventaire inventaire, ServiceMoniteurs moniteurs, IHorloge horloge, ServiceReglages reglages, INavigation navigation)
         : base(navigation, reglages, ModeScan.Depart)
     {
+        _moniteurs = moniteurs;
+        _modifier.Click += (_, _) => Executer(ModifierAsync);
+        _supprimer.Click += (_, _) => Executer(SupprimerAsync);
+        _supprimer.AccessibleDescription = "Possible seulement quand aucun matériel n'est scanné";
         _inventaire = inventaire;
         _sorties = sorties;
         _scan = scan;
@@ -49,7 +57,8 @@ public sealed class EcranDepart : EcranScanBase
             (_liste, SizeType.Percent, 100),
             (_valider, SizeType.Absolute, 56 + 12)));
 
-        Composer(Ui.Colonnes((gauche, SizeType.Percent, 58), (carteListe, SizeType.Percent, 42)));
+        // Rangée de droite à gauche : « Modifier la sortie » tout à droite, « Supprimer » à sa gauche (sortie vide seulement).
+        Composer(Ui.Colonnes((gauche, SizeType.Percent, 58), (carteListe, SizeType.Percent, 42)), _modifier, _supprimer);
     }
 
     public override string Titre => "Départ du matériel";
@@ -59,9 +68,12 @@ public sealed class EcranDepart : EcranScanBase
         var resume = await _sorties.ObtenirResumeAsync(SortieId) ?? throw new InvalidOperationException("Sortie introuvable.");
         var lignes = await _sorties.ListerMaterielAsync(SortieId);
         _statut = resume.Statut;
+        _intitule = resume.Intitule;
         AfficherSortie(resume);
 
         var enPreparation = _statut == StatutSortie.EnPreparation;
+        _modifier.Visible = enPreparation;
+        _supprimer.Visible = enPreparation && lignes.Count == 0;
         _compte.Text = lignes.Count.ToString(Libelles.Culture);
         _valider.Text = enPreparation ? "Valider le départ" : "Revenir au retour";
         _valider.Icone = enPreparation ? Icones.Coche : Icones.Fleche;
@@ -122,6 +134,83 @@ public sealed class EcranDepart : EcranScanBase
         var resultat = await _scan.RetirerDuDepartAsync(SortieId, element.EquipementId);
         ZoneScan.AfficherMessage(resultat.Reussi ? NiveauResultat.Succes : NiveauResultat.Erreur, resultat.Message, element.Code);
         await RafraichirAsync();
+    }
+
+    /// <summary>Modifier date, type, intitulé, moniteur, lieu, notes : fenêtre préremplie, validée par ServiceSortie.</summary>
+    private async Task ModifierAsync()
+    {
+        if (await _sorties.ObtenirAsync(SortieId) is not { } s || IsDisposed)
+        {
+            return;
+        }
+
+        var date = new ChampDate { Date = s.DateSortie };
+        var type = new ListeDeroulante { AccessibleName = "Type de sortie" };
+        foreach (var t in Enum.GetValues<TypeSortie>())
+        {
+            type.Items.Add(new Choix<TypeSortie>(t, Libelles.De(t)));
+        }
+
+        type.SelectedIndex = Array.IndexOf(Enum.GetValues<TypeSortie>(), s.Type);
+        var intitule = new ChampSaisie { Valeur = s.Intitule };
+        intitule.Champ.AccessibleName = "Intitulé";
+        var lieu = new ChampSaisie { Valeur = s.Lieu, TexteIndicatif = "Nom de la piscine, du site…" };
+        lieu.Champ.AccessibleName = "Lieu";
+        var notes = new ChampSaisie(multiligne: true) { Valeur = s.Notes, TexteIndicatif = "Groupe N1, 8 élèves…" };
+        notes.Champ.AccessibleName = "Notes";
+
+        // Moniteurs actifs, plus le responsable actuel s'il est devenu inactif.
+        var moniteur = new ListeDeroulante { AccessibleName = "Moniteur responsable" };
+        var choix = (await _moniteurs.ListerTousAsync()).Where(m => m.Actif || m.Id == s.MoniteurId).ToList();
+        foreach (var m in choix)
+        {
+            moniteur.Items.Add(new Choix<long>(m.Id, m.NomComplet));
+        }
+
+        moniteur.SelectedIndex = choix.FindIndex(m => m.Id == s.MoniteurId);
+
+        using var fenetre = new FenetreFormulaire("Modifier la sortie", "Enregistrer", () =>
+            date.Date is not { } d
+                ? Task.FromResult(ResultatOperation.Echec("Date invalide : écrivez-la comme 08/11/2026."))
+                : _sorties.ModifierAsync(SortieId, new NouvelleSortie(
+                    d,
+                    (type.SelectedItem as Choix<TypeSortie>)?.Valeur ?? s.Type,
+                    intitule.Valeur,
+                    (moniteur.SelectedItem as Choix<long>)?.Valeur,
+                    lieu.Valeur,
+                    notes.Valeur)));
+        fenetre.DeuxChamps("Date", date, "Type", type);
+        fenetre.Champ("Intitulé", intitule);
+        fenetre.DeuxChamps("Moniteur responsable", moniteur, "Lieu", lieu);
+        fenetre.Champ("Notes (facultatif)", notes, 96);
+
+        if (fenetre.ShowDialog(FindForm()) == DialogResult.OK && !IsDisposed)
+        {
+            await RafraichirAsync();
+            ZoneScan.AfficherMessage(NiveauResultat.Succes, "Sortie modifiée.");
+        }
+
+        ZoneScan.PrendreFocus();
+    }
+
+    /// <summary>Supprimer une sortie créée par erreur (bouton visible seulement si aucun matériel n'est scanné).</summary>
+    private async Task SupprimerAsync()
+    {
+        if (!Dialogues.Confirmer(FindForm(), $"Supprimer la sortie « {_intitule} » ?\n\nElle ne contient aucun matériel. Cette action est définitive."))
+        {
+            ZoneScan.PrendreFocus();
+            return;
+        }
+
+        var resultat = await _sorties.SupprimerAsync(SortieId);
+        if (!resultat.Reussi)
+        {
+            ZoneScan.AfficherMessage(NiveauResultat.Erreur, resultat.Message);
+            await RafraichirAsync();
+            return;
+        }
+
+        Navigation.AllerA<EcranSorties>();
     }
 
     private async Task ValiderAsync()

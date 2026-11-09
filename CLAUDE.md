@@ -81,6 +81,10 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
 5. Retour d'un équipement absent de la sortie → avertir sans rien modifier ; s'il est dehors ailleurs →
    `ActionProposee.RentrerDansAutreSortie` (l'écran rescanne alors dans `AutreSortieId`).
 6. Retrait possible seulement en préparation (`StatutSortie.EnPreparation`).
+   Modifier la sortie (date, type, intitulé, moniteur, lieu, notes) : seulement en préparation, mêmes contrôles qu'à la création,
+   le moniteur déjà responsable reste accepté s'il est devenu inactif (`ServiceSortie.ModifierAsync`, journal `SortieModifiee`).
+   Supprimer une sortie : seulement si aucun matériel n'y est rattaché (`ServiceSortie.SupprimerAsync` ; la requête SQL du dépôt
+   re-vérifie, journal `SortieSupprimee`). Écran Départ : boutons « Modifier la sortie » et « Supprimer » (sortie vide) en haut à droite.
 7. Clôture : Dehors → Manquant, confirmation avec le nombre (`ApercuClotureAsync`) s'il reste du matériel dehors
    (`ApercuCloture.ConfirmationNecessaire`, réglage `ConfirmerCloture`).
 8. Un Manquant scanné plus tard au retour (dans sa sortie ou depuis une autre) → Rendu + journal `ManquantRetrouve`.

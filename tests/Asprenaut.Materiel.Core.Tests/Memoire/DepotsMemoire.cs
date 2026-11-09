@@ -121,6 +121,9 @@ public sealed class SortieRepositoryMemoire(BaseMemoire db) : ISortieRepository
 
     public Task MettreAJourAsync(Sortie sortie, CancellationToken ct = default) => Task.CompletedTask;
 
+    public Task<bool> SupprimerAsync(long id, CancellationToken ct = default) =>
+        Task.FromResult(!db.Affectations.Any(a => a.SortieId == id) && db.Sorties.RemoveAll(s => s.Id == id) == 1);
+
     public Task<SortieResume?> ObtenirResumeAsync(long id, CancellationToken ct = default) =>
         Task.FromResult(db.Sorties.Where(s => s.Id == id).Select(Resumer).FirstOrDefault());
 

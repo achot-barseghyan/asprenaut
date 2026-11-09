@@ -40,6 +40,8 @@ public static class Icones
 
     // --- Actions ---
     public const string Plus = "M12 5v14M5 12h14";
+    public const string Crayon = "M4 20h4L19 9l-4-4L4 16zM14 6l4 4";
+    public const string Corbeille = "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6";
     public const string Fleche = "M5 12h14M13 6l6 6-6 6";
     public const string Coche = "M5 12l5 5 9-10";
     public const string Croix = "M6 6l12 12M18 6L6 18";

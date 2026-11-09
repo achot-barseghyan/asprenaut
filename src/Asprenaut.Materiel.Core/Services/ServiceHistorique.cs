@@ -40,6 +40,8 @@ public sealed class ServiceHistorique(
         [ActionsJournal.ManquantDeclare] = (TypeEvenement.Manquant, "Manquant"),
         [ActionsJournal.SortieCreee] = (TypeEvenement.Sortie, "Sortie créée"),
         [ActionsJournal.SortieCloturee] = (TypeEvenement.Sortie, "Sortie clôturée"),
+        [ActionsJournal.SortieModifiee] = (TypeEvenement.Sortie, "Sortie modifiée"),
+        [ActionsJournal.SortieSupprimee] = (TypeEvenement.Sortie, "Sortie supprimée"),
         [ActionsJournal.EquipementCree] = (TypeEvenement.Materiel, "Ajout"),
         [ActionsJournal.EquipementModifie] = (TypeEvenement.Materiel, "Modification"),
         [ActionsJournal.ControleEnregistre] = (TypeEvenement.Revision, "Contrôle"),
@@ -145,7 +147,7 @@ public sealed class ServiceHistorique(
                 (equipement, l.SortieId is null ? "" : Joindre("Pas rendu à la clôture", contexte)),
             ActionsJournal.DepartValide =>
                 (l.SortieIntitule, l.SortieId is null ? "" : Joindre(l.MoniteurNom, Libelles.Pluriel(l.SortieNbEquipements, "équipement"))),
-            ActionsJournal.SortieCreee =>
+            ActionsJournal.SortieCreee or ActionsJournal.SortieModifiee =>
                 (l.SortieIntitule, l.SortieId is null ? "" : Joindre(
                     l.SortieDate?.ToString("dd/MM", Libelles.Culture),
                     l.SortieLieu is { Length: > 0 } lieu ? lieu : l.SortieType is { } t ? Libelles.De(t) : null,
@@ -162,11 +164,17 @@ public sealed class ServiceHistorique(
             _ => (null, ""),
         };
 
+        // Sortie supprimée (ou entrée ancienne) : l'intitulé est repris du texte enregistré, entre « ».
+        if (sujet is null or "" && type == TypeEvenement.Sortie && l.SortieIntitule is null)
+        {
+            sujet = IntituleCite(l.Details);
+        }
+
         var titre = sujet is { Length: > 0 } ? $"{debut} : {sujet}" : debut;
-        // Entrée ancienne ou sans lien : le texte enregistré reste le meilleur détail.
+        // Entrée ancienne ou sans lien : le texte enregistré reste le meilleur détail (sans le numéro interne de sortie).
         if (detail is null or "")
         {
-            detail = l.Details;
+            detail = SansNumeroDeSortie(l.Details);
         }
 
         return new EvenementHistorique(l.Id, l.Horodatage.ToLocalTime(), type, titre, detail, l.Code is { Length: > 0 } ? l.Code : null);
@@ -383,6 +391,18 @@ public sealed class ServiceHistorique(
 
         return Majuscule(texte);
     }
+
+    /// <summary>« Sortie 8 « Fosse » du 09/11/2026 … » → « Fosse » ; null s'il n'y a pas de texte entre guillemets.</summary>
+    private static string? IntituleCite(string details)
+    {
+        var debut = details.IndexOf('«', StringComparison.Ordinal);
+        var fin = debut < 0 ? -1 : details.IndexOf('»', debut + 1);
+        return fin > debut + 1 ? details[(debut + 1)..fin].Trim() : null;
+    }
+
+    /// <summary>« Sortie 8 « Fosse » du … » → « Sortie « Fosse » du … » : le numéro interne ne parle pas aux bénévoles.</summary>
+    private static string SansNumeroDeSortie(string details) =>
+        System.Text.RegularExpressions.Regex.Replace(details, @"^Sortie \d+ ", "Sortie ");
 
     private static string Majuscule(string texte) =>
         texte.Length == 0 ? texte : char.ToUpper(texte[0], Libelles.Culture) + texte[1..];

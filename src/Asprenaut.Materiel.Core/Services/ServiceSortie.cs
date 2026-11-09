@@ -77,6 +77,77 @@ public sealed class ServiceSortie(
         return ResultatOperation.Ok("Sortie créée.", id);
     }
 
+    public Task<Sortie?> ObtenirAsync(long sortieId, CancellationToken ct = default) =>
+        sorties.ObtenirAsync(sortieId, ct);
+
+    /// <summary>
+    /// Modifie date, type, intitulé, moniteur, lieu et notes, tant que le départ n'est pas validé.
+    /// Mêmes contrôles qu'à la création ; le moniteur déjà choisi reste accepté même s'il est devenu inactif.
+    /// </summary>
+    public async Task<ResultatOperation> ModifierAsync(long sortieId, NouvelleSortie demande, CancellationToken ct = default)
+    {
+        if (await sorties.ObtenirAsync(sortieId, ct) is not { } sortie)
+        {
+            return ResultatOperation.Echec("Sortie introuvable.");
+        }
+
+        if (sortie.Statut != StatutSortie.EnPreparation)
+        {
+            return ResultatOperation.Echec("Le départ est validé : la sortie ne peut plus être modifiée.");
+        }
+
+        var intitule = demande.Intitule.Trim();
+        if (intitule.Length == 0)
+        {
+            return ResultatOperation.Echec("Indiquez un intitulé.");
+        }
+
+        if (demande.MoniteurId is not { } moniteurId)
+        {
+            return ResultatOperation.Echec("Choisissez le moniteur responsable.");
+        }
+
+        var moniteur = await moniteurs.ObtenirAsync(moniteurId, ct);
+        if (moniteur is null || (!moniteur.Actif && moniteurId != sortie.MoniteurId))
+        {
+            return ResultatOperation.Echec("Ce moniteur n'est pas disponible.");
+        }
+
+        sortie.DateSortie = demande.Date;
+        sortie.Type = demande.Type;
+        sortie.Intitule = intitule;
+        sortie.MoniteurId = moniteurId;
+        sortie.Lieu = demande.Lieu.Trim();
+        sortie.Notes = demande.Notes.Trim();
+        await sorties.MettreAJourAsync(sortie, ct);
+        await JournaliserAsync(ActionsJournal.SortieModifiee, $"Sortie {sortieId} « {intitule} » du {Libelles.Date(demande.Date)} modifiée ({moniteur.NomComplet})", ct, sortieId: sortieId);
+        return ResultatOperation.Ok("Sortie modifiée.", sortieId);
+    }
+
+    /// <summary>Supprime une sortie créée par erreur : seulement si aucun matériel n'y a été scanné.</summary>
+    public async Task<ResultatOperation> SupprimerAsync(long sortieId, CancellationToken ct = default)
+    {
+        if (await sorties.ObtenirAsync(sortieId, ct) is not { } sortie)
+        {
+            return ResultatOperation.Echec("Sortie introuvable.");
+        }
+
+        if ((await sorties.ListerAffectationsAsync(sortieId, ct)).Count > 0)
+        {
+            return ResultatOperation.Echec("Cette sortie contient du matériel. Retirez-le d'abord pour pouvoir la supprimer.");
+        }
+
+        if (!await sorties.SupprimerAsync(sortieId, ct))
+        {
+            return ResultatOperation.Echec("La sortie n'a pas pu être supprimée : du matériel vient d'y être scanné.");
+        }
+
+        var moniteur = await moniteurs.ObtenirAsync(sortie.MoniteurId, ct);
+        await JournaliserAsync(ActionsJournal.SortieSupprimee,
+            $"Sortie « {sortie.Intitule} » du {Libelles.Date(sortie.DateSortie)} supprimée{(moniteur is null ? "" : $" ({moniteur.NomComplet})")}", ct, sortieId: sortieId);
+        return ResultatOperation.Ok($"Sortie « {sortie.Intitule} » supprimée.", sortieId);
+    }
+
     /// <summary>Fin de la préparation : le matériel est parti, on passe au retour.</summary>
     public async Task<ResultatOperation> ValiderDepartAsync(long sortieId, CancellationToken ct = default)
     {

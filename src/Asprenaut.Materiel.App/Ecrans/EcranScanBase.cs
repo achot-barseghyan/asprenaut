@@ -38,8 +38,8 @@ public abstract class EcranScanBase : EcranBase
 
     protected ScanInput ZoneScan { get; }
 
-    /// <summary>Met en page : fil d'Ariane, carte d'en-tête, puis le corps propre à l'écran.</summary>
-    protected void Composer(Control corps)
+    /// <summary>Met en page : fil d'Ariane (avec des actions à droite), carte d'en-tête, puis le corps propre à l'écran.</summary>
+    protected void Composer(Control corps, params Control[] actions)
     {
         _titreSortie.AutoEllipsis = true;
         _titreSortie.Margin = new Padding(0, 0, 0, 6);
@@ -55,8 +55,16 @@ public abstract class EcranScanBase : EcranBase
         Etapes.Anchor = AnchorStyles.Right;
         entete.Controls.Add(ligne);
 
+        Control haut = _fil;
+        if (actions.Length > 0)
+        {
+            var ligneHaut = Ui.Entete(_fil, actions);
+            ligneHaut.Margin = new Padding(0, 0, 0, 12);
+            haut = ligneHaut;
+        }
+
         Controls.Add(Ui.Colonne(
-            (_fil, SizeType.AutoSize, 0),
+            (haut, SizeType.AutoSize, 0),
             (entete, SizeType.Absolute, 112 + 22),
             (corps, SizeType.Percent, 100)));
     }

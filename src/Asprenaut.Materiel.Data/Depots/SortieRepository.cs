@@ -49,6 +49,16 @@ public sealed class SortieRepository(FabriqueConnexion fabrique) : ISortieReposi
         await cx.ExecuteAsync(new CommandDefinition(SqlMiseAJourSortie, Parametres(sortie), cancellationToken: ct));
     }
 
+    public async Task<bool> SupprimerAsync(long id, CancellationToken ct = default)
+    {
+        // La condition est dans la requête : un scan arrivé entre la vérification du service et ici empêche la suppression.
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        var lignes = await cx.ExecuteAsync(new CommandDefinition(
+            "DELETE FROM sortie WHERE id = @id AND NOT EXISTS (SELECT 1 FROM sortie_equipement WHERE sortie_id = @id);",
+            new { id }, cancellationToken: ct));
+        return lignes == 1;
+    }
+
     public async Task<SortieResume?> ObtenirResumeAsync(long id, CancellationToken ct = default)
     {
         await using var cx = await fabrique.OuvrirAsync(ct);

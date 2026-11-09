@@ -26,6 +26,8 @@ public static class ActionsJournal
     public const string ManquantRetrouve = "ManquantRetrouve";
     public const string ManquantDeclare = "ManquantDeclare";
     public const string SortieCloturee = "SortieCloturee";
+    public const string SortieModifiee = "SortieModifiee";
+    public const string SortieSupprimee = "SortieSupprimee";
     public const string EquipementCree = "EquipementCree";
     public const string EquipementModifie = "EquipementModifie";
     public const string ControleEnregistre = "ControleEnregistre";
