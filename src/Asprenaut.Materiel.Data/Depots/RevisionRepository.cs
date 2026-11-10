@@ -13,8 +13,8 @@ public sealed class RevisionRepository(FabriqueConnexion fabrique) : IRevisionRe
     public async Task<long> AjouterControleAsync(Controle controle, CancellationToken ct = default)
     {
         const string sql = """
-            INSERT INTO controle (equipement_id, type, date_controle, resultat, inspecteur_id, notes, saisi_le)
-            VALUES (@EquipementId, @Type, @DateControle, @Resultat, @InspecteurId, @Notes, @SaisiLe)
+            INSERT INTO controle (equipement_id, type, date_controle, resultat, inspecteur_id, notes, saisi_le, nature, intervenant)
+            VALUES (@EquipementId, @Type, @DateControle, @Resultat, @InspecteurId, @Notes, @SaisiLe, @Nature, @Intervenant)
             RETURNING id;
             """;
         await using var cx = await fabrique.OuvrirAsync(ct);
@@ -27,6 +27,8 @@ public sealed class RevisionRepository(FabriqueConnexion fabrique) : IRevisionRe
             controle.InspecteurId,
             controle.Notes,
             SaisiLe = FormatIso.Ecrire(controle.SaisiLe),
+            controle.Nature,
+            controle.Intervenant,
         }, cancellationToken: ct));
         return controle.Id;
     }
@@ -45,10 +47,22 @@ public sealed class RevisionRepository(FabriqueConnexion fabrique) : IRevisionRe
         await using var cx = await fabrique.OuvrirAsync(ct);
         var lignes = await cx.QueryAsync<Controle>(new CommandDefinition(
             """
-            SELECT id, equipement_id, type, date_controle, resultat, inspecteur_id, notes, saisi_le
+            SELECT id, equipement_id, type, date_controle, resultat, inspecteur_id, notes, saisi_le, nature, intervenant
             FROM controle WHERE equipement_id = @equipementId ORDER BY date_controle DESC, id DESC;
             """,
             new { equipementId }, cancellationToken: ct));
+        return lignes.AsList();
+    }
+
+    public async Task<IReadOnlyList<Controle>> ListerControlesPeriodeAsync(DateOnly du, DateOnly au, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        var lignes = await cx.QueryAsync<Controle>(new CommandDefinition(
+            """
+            SELECT id, equipement_id, type, date_controle, resultat, inspecteur_id, notes, saisi_le, nature, intervenant
+            FROM controle WHERE date_controle BETWEEN @du AND @au ORDER BY date_controle, id;
+            """,
+            new { du = FormatIso.Ecrire(du), au = FormatIso.Ecrire(au) }, cancellationToken: ct));
         return lignes.AsList();
     }
 
@@ -119,6 +133,29 @@ public sealed class RevisionRepository(FabriqueConnexion fabrique) : IRevisionRe
             "INSERT INTO seance_tiv (date_seance, heure, lieu) VALUES (@DateSeance, @Heure, @Lieu) RETURNING id;",
             new { DateSeance = FormatIso.Ecrire(seance.DateSeance), seance.Heure, seance.Lieu }, cancellationToken: ct));
         return seance.Id;
+    }
+
+    public async Task<IReadOnlyList<long>> ListerPlanifiesAsync(long seanceId, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        var lignes = await cx.QueryAsync<long>(new CommandDefinition(
+            "SELECT equipement_id FROM seance_equipement WHERE seance_id = @seanceId ORDER BY equipement_id;", new { seanceId }, cancellationToken: ct));
+        return lignes.AsList();
+    }
+
+    public async Task AjouterASeanceAsync(long seanceId, long equipementId, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        await cx.ExecuteAsync(new CommandDefinition(
+            "INSERT OR IGNORE INTO seance_equipement (seance_id, equipement_id) VALUES (@seanceId, @equipementId);",
+            new { seanceId, equipementId }, cancellationToken: ct));
+    }
+
+    public async Task RetirerDesSeancesAsync(long equipementId, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        await cx.ExecuteAsync(new CommandDefinition(
+            "DELETE FROM seance_equipement WHERE equipement_id = @equipementId;", new { equipementId }, cancellationToken: ct));
     }
 
     public async Task<SeanceTiv?> ProchaineSeanceAsync(DateOnly aPartirDu, CancellationToken ct = default)

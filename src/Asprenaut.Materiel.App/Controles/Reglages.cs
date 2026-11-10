@@ -124,9 +124,18 @@ public sealed class SelecteurNombre : Panel
 /// Carte d'une section de réglages : pictogramme teinté + titre, puis un contenu vertical.
 /// Sa hauteur suit son contenu (lignes AutoSize d'un TableLayoutPanel).
 /// </summary>
-public sealed class CarteSection : Carte
+public sealed class CarteSection : Carte, IVerrouillable
 {
     private readonly TableLayoutPanel _contenu;
+    private readonly PastilleCodeRequis _codeRequis = new() { Visible = false };
+
+    /// <summary>Réglages protégés en mode consultation : badge « Code requis » à côté du titre.</summary>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public bool Verrouille
+    {
+        get => _codeRequis.Visible;
+        set => _codeRequis.Visible = value;
+    }
 
     public CarteSection(string titre, string? icone, Color couleurIcone)
     {
@@ -156,7 +165,8 @@ public sealed class CarteSection : Carte
         {
             var picto = new Picto(icone, 42, couleurIcone, Theme.Teinte(couleurIcone, 0.14f)) { Margin = Padding.Empty };
             libelle.Margin = new Padding(12, 10, 0, 0);
-            var entete = Ui.Rangee(true, picto, libelle);
+            _codeRequis.Margin = new Padding(12, 9, 0, 0);
+            var entete = Ui.Rangee(true, picto, libelle, _codeRequis);
             entete.Margin = new Padding(0, 0, 0, 18);
             Ajouter(entete);
         }

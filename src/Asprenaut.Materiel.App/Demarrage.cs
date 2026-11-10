@@ -1,3 +1,4 @@
+using Asprenaut.Materiel.App.Controles;
 using Asprenaut.Materiel.App.Infrastructure;
 using Asprenaut.Materiel.App.Navigation;
 using Asprenaut.Materiel.Core.Abstractions;
@@ -47,6 +48,8 @@ internal static class Demarrage
         services.AddSingleton<ISortieRepository, SortieRepository>();
         services.AddSingleton<IJournalRepository, JournalRepository>();
         services.AddSingleton<IRevisionRepository, RevisionRepository>();
+        services.AddSingleton<IExportRepository, ExportRepository>();
+        services.AddSingleton<ITypeSortieRepository, TypeSortieRepository>();
 
         // Services métier (Core)
         services.AddSingleton<ServiceScan>();
@@ -54,12 +57,18 @@ internal static class Demarrage
         services.AddSingleton<ServiceInventaire>();
         services.AddSingleton<ServiceMoniteurs>();
         services.AddSingleton<ServiceHistorique>();
+        services.AddSingleton<ServiceBilan>();
+        services.AddSingleton<ServiceExport>();
+        services.AddSingleton<ServiceCompteur>();
+        services.AddSingleton<ServiceTypesSortie>();
+        services.AddSingleton<ServiceGestion>();
         services.AddSingleton<ServiceReglages>();
         services.AddSingleton<ServiceRevisions>();
 
         // Interface. Les écrans ne sont pas enregistrés : ServiceNavigation les crée à la demande.
         services.AddSingleton<ServiceNavigation>();
         services.AddSingleton<INavigation>(sp => sp.GetRequiredService<ServiceNavigation>());
+        services.AddSingleton<GardeGestion>();
         services.AddSingleton<MainForm>();
 
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });

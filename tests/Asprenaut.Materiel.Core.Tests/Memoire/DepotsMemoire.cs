@@ -12,6 +12,8 @@ public sealed class BaseMemoire
     public List<Sortie> Sorties { get; } = [];
     public List<SortieEquipement> Affectations { get; } = [];
     public List<EntreeJournal> Journal { get; } = [];
+    public List<Controle> Controles { get; } = [];
+    public List<TypeDeSortie> TypesSortie { get; } = [];
 
     private long _sequence;
 
@@ -45,7 +47,9 @@ public sealed class EquipementRepositoryMemoire(BaseMemoire db) : IEquipementRep
             .Where(e => categorieId is null || e.CategorieId == categorieId)
             .Where(e => recherche is null
                 || e.Code.Contains(recherche, StringComparison.OrdinalIgnoreCase)
-                || e.Libelle.Contains(recherche, StringComparison.OrdinalIgnoreCase))
+                || e.Libelle.Contains(recherche, StringComparison.OrdinalIgnoreCase)
+                || new[] { e.Taille ?? "", e.Marque, e.Modele, e.NumeroSerie, e.NumeroDeuxiemeEtage, e.NumeroOctopus }
+                    .Any(v => v.Contains(recherche, StringComparison.OrdinalIgnoreCase)))
             .Select(e =>
             {
                 var dehors = db.Affectations.FirstOrDefault(a => a.EquipementId == e.Id && a.Statut == StatutSortieEquipement.Dehors);
@@ -63,6 +67,18 @@ public sealed class EquipementRepositoryMemoire(BaseMemoire db) : IEquipementRep
                     SortieEnCoursId = dehors?.SortieId,
                     SortieEnCoursIntitule = dehors is null ? null : db.Sorties.First(s => s.Id == dehors.SortieId).Intitule,
                     EstManquant = db.Affectations.Any(a => a.EquipementId == e.Id && a.Statut == StatutSortieEquipement.Manquant),
+                    Marque = e.Marque,
+                    Modele = e.Modele,
+                    NumeroSerie = e.NumeroSerie,
+                    Montage = e.Montage,
+                    MarqueDeuxiemeEtage = e.MarqueDeuxiemeEtage,
+                    ModeleDeuxiemeEtage = e.ModeleDeuxiemeEtage,
+                    NumeroDeuxiemeEtage = e.NumeroDeuxiemeEtage,
+                    DirectSystem = e.DirectSystem,
+                    Manometre = e.Manometre,
+                    Octopus = e.Octopus,
+                    NumeroOctopus = e.NumeroOctopus,
+                    DerniereRevision = db.Controles.Where(c => c.EquipementId == e.Id && c.Type == TypeControle.Revision).Select(c => (DateOnly?)c.DateControle).Max(),
                 };
             })
             .OrderBy(l => l.Code)
@@ -78,6 +94,22 @@ public sealed class EquipementRepositoryMemoire(BaseMemoire db) : IEquipementRep
     }
 
     public Task MettreAJourAsync(Equipement equipement, CancellationToken ct = default) => Task.CompletedTask;
+
+    public Task<IReadOnlyList<CompteurEquipement>> ListerCompteursAsync(long? equipementId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CompteurEquipement>>(db.Equipements
+            .Where(e => equipementId is null || e.Id == equipementId)
+            .Select(e =>
+            {
+                var dernier = db.Controles.Where(c => c.EquipementId == e.Id).Select(c => (DateOnly?)c.DateControle).Max();
+                var apres = dernier is { } d ? d.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc) : DateTime.MinValue;
+                return new CompteurEquipement
+                {
+                    EquipementId = e.Id,
+                    Utilisations = db.Affectations.Where(a => a.EquipementId == e.Id && a.ScanneRetourLe is { } r && r >= apres)
+                        .Sum(a => db.Sorties.First(s => s.Id == a.SortieId).Utilisations),
+                };
+            })
+            .ToList());
 }
 
 public sealed class MoniteurRepositoryMemoire(BaseMemoire db) : IMoniteurRepository
@@ -192,6 +224,31 @@ public sealed class SortieRepositoryMemoire(BaseMemoire db) : ISortieRepository
             .OrderByDescending(a => a.ScanneDepartLe)
             .FirstOrDefault());
 
+    public Task<IReadOnlyList<PassageBilan>> ListerPassagesPeriodeAsync(DateOnly du, DateOnly au, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<PassageBilan>>(db.Affectations
+            .Select(a => (a, s: db.Sorties.First(x => x.Id == a.SortieId), e: db.Equipements.First(x => x.Id == a.EquipementId)))
+            .Where(t => t.s.DateSortie >= du && t.s.DateSortie <= au)
+            .Select(t => new PassageBilan
+            {
+                SortieId = t.s.Id,
+                DateSortie = t.s.DateSortie,
+                TypeSortie = t.s.Type,
+                TypeId = t.s.TypeId,
+                TypeNom = db.TypesSortie.FirstOrDefault(x => x.Id == t.s.TypeId)?.Nom,
+                StatutSortie = t.s.Statut,
+                Intitule = t.s.Intitule,
+                MoniteurNom = db.Moniteurs.FirstOrDefault(m => m.Id == t.s.MoniteurId)?.NomComplet ?? "",
+                ClotureeLe = t.s.ClotureeLe,
+                EquipementId = t.e.Id,
+                Code = t.e.Code,
+                Libelle = t.e.Libelle,
+                Categorie = db.Categories.FirstOrDefault(c => c.Id == t.e.CategorieId)?.Nom ?? "",
+                Taille = t.e.Taille,
+                Statut = t.a.Statut,
+                ScanneRetourLe = t.a.ScanneRetourLe,
+            })
+            .ToList());
+
     public Task<long> AjouterAffectationAsync(SortieEquipement affectation, CancellationToken ct = default)
     {
         if (db.Affectations.Any(a => a.SortieId == affectation.SortieId && a.EquipementId == affectation.EquipementId))
@@ -223,6 +280,9 @@ public sealed class SortieRepositoryMemoire(BaseMemoire db) : ISortieRepository
             Id = s.Id,
             DateSortie = s.DateSortie,
             Type = s.Type,
+            TypeId = s.TypeId,
+            Utilisations = s.Utilisations,
+            TypeNom = db.TypesSortie.FirstOrDefault(x => x.Id == s.TypeId)?.Nom,
             Intitule = s.Intitule,
             Lieu = s.Lieu,
             Statut = s.Statut,
@@ -274,6 +334,7 @@ public sealed class JournalRepositoryMemoire(BaseMemoire db) : IJournalRepositor
                     SortieIntitule = s?.Intitule,
                     SortieDate = s?.DateSortie,
                     SortieType = s?.Type,
+                    SortieTypeNom = db.TypesSortie.FirstOrDefault(x => s is not null && x.Id == s.TypeId)?.Nom,
                     SortieLieu = s?.Lieu,
                     MoniteurNom = db.Moniteurs.FirstOrDefault(m => m.Id == s?.MoniteurId)?.NomComplet,
                     SortieNbEquipements = lignes.Count,
@@ -281,4 +342,31 @@ public sealed class JournalRepositoryMemoire(BaseMemoire db) : IJournalRepositor
                 };
             })
             .ToList());
+}
+
+public sealed class TypeSortieRepositoryMemoire(BaseMemoire db) : ITypeSortieRepository
+{
+    private TypeDeSortie AvecNombre(TypeDeSortie t)
+    {
+        t.NbSorties = db.Sorties.Count(s => s.TypeId == t.Id);
+        return t;
+    }
+
+    public Task<IReadOnlyList<TypeDeSortie>> ListerAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<TypeDeSortie>>(db.TypesSortie.OrderBy(t => t.Ordre).ThenBy(t => t.Nom).Select(AvecNombre).ToList());
+
+    public Task<TypeDeSortie?> ObtenirAsync(long id, CancellationToken ct = default) =>
+        Task.FromResult(db.TypesSortie.Where(t => t.Id == id).Select(AvecNombre).FirstOrDefault());
+
+    public Task<long> AjouterAsync(TypeDeSortie type, CancellationToken ct = default)
+    {
+        type.Id = db.ProchainId();
+        db.TypesSortie.Add(type);
+        return Task.FromResult(type.Id);
+    }
+
+    public Task MettreAJourAsync(TypeDeSortie type, CancellationToken ct = default) => Task.CompletedTask;
+
+    public Task<bool> SupprimerAsync(long id, CancellationToken ct = default) =>
+        Task.FromResult(!db.Sorties.Any(s => s.TypeId == id) && db.TypesSortie.RemoveAll(t => t.Id == id) == 1);
 }

@@ -21,6 +21,30 @@ public sealed class Equipement
     public string Notes { get; set; } = "";
     public DateTime CreeLe { get; set; }
 
+    // --- Fiche matériel (migration 005) : marque, modèle, numéro de série ; pour un détendeur, ceux du premier étage ---
+
+    public string Marque { get; set; } = "";
+    public string Modele { get; set; } = "";
+    public string NumeroSerie { get; set; } = "";
+
+    // --- Détendeurs seulement ---
+
+    public MontageDetendeur? Montage { get; set; }
+    public string MarqueDeuxiemeEtage { get; set; } = "";
+    public string ModeleDeuxiemeEtage { get; set; } = "";
+    public string NumeroDeuxiemeEtage { get; set; } = "";
+
+    /// <summary>Colonne « D.S » du registre du club (oui / non) ; null = non renseigné.</summary>
+    public bool? DirectSystem { get; set; }
+
+    /// <summary>Marque du manomètre ; vide = sans manomètre.</summary>
+    public string Manometre { get; set; } = "";
+
+    /// <summary>Modèle de l'octopus ; vide = sans octopus.</summary>
+    public string Octopus { get; set; } = "";
+
+    public string NumeroOctopus { get; set; } = "";
+
     /// <summary>Échéance la plus proche : révision/TIV ou requalification.</summary>
     public DateOnly? ProchaineEcheance =>
         DateProchaineRevision is { } r && DateRequalification is { } q ? (r < q ? r : q) : DateProchaineRevision ?? DateRequalification;

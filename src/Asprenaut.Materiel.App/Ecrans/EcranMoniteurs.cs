@@ -23,12 +23,16 @@ public sealed class EcranMoniteurs : EcranBase
     private IReadOnlyList<FicheMoniteur> _liste = [];
     private long? _selection;
 
-    public EcranMoniteurs(ServiceMoniteurs moniteurs, INavigation navigation)
+    private readonly GardeGestion _garde;
+
+    public EcranMoniteurs(ServiceMoniteurs moniteurs, INavigation navigation, GardeGestion garde)
     {
+        _garde = garde;
         _moniteurs = moniteurs;
         _navigation = navigation;
 
         var ajouter = new BoutonArrondi("Ajouter un moniteur", StyleBouton.Principal, Icones.Plus);
+        _garde.Lier(ajouter, ActionProtegee.Moniteurs);
         ajouter.Click += (_, _) => Executer(() => ModifierAsync(null));
 
         Natif.ScrollbarsDuTheme(_fiche);
@@ -185,6 +189,7 @@ public sealed class EcranMoniteurs : EcranBase
 
         // Actions.
         var modifier = new BoutonArrondi("Modifier", StyleBouton.Secondaire) { AutoSize = false, Margin = new Padding(0, 0, 10, 0) };
+        _garde.Lier(modifier, ActionProtegee.Moniteurs);
         modifier.Click += (_, _) => Executer(() => ModifierAsync(m));
         var creer = new BoutonArrondi("Créer une sortie", StyleBouton.Principal) { AutoSize = false, Margin = Padding.Empty, Enabled = m.Actif };
         creer.Click += (_, _) => _navigation.AllerA<EcranNouvelleSortie>(m.Id);
@@ -271,6 +276,11 @@ public sealed class EcranMoniteurs : EcranBase
     /// <summary>Ajout (m = null) ou modification d'un moniteur dans une petite fenêtre.</summary>
     private async Task ModifierAsync(Moniteur? m)
     {
+        if (!_garde.Exiger(FindForm(), ActionProtegee.Moniteurs, m is null ? "Ajouter un moniteur" : "Modifier un moniteur"))
+        {
+            return;
+        }
+
         var prenom = new ChampSaisie { Valeur = m?.Prenom ?? "" };
         var nom = new ChampSaisie { Valeur = m?.Nom ?? "" };
         var niveau = new ChampSaisie { Valeur = m?.Niveau ?? "", TexteIndicatif = "E3, MF1, MF2…" };

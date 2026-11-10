@@ -13,6 +13,7 @@ public sealed class FenetreFormulaire : Form
     private const int Largeur = 520;
 
     private readonly TableLayoutPanel _champs;
+    private readonly Panel _cadre;
     private readonly Label _message = Ui.Libelle("", Theme.PoliceTitre(10.5f), Theme.Erreur);
     private readonly BoutonArrondi _valider;
     private readonly Func<Task<ResultatOperation>> _validation;
@@ -35,8 +36,21 @@ public sealed class FenetreFormulaire : Form
         AutoSizeMode = AutoSizeMode.GrowAndShrink;
         Padding = new Padding(28, 24, 28, 24);
 
-        _champs = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, BackColor = Color.Transparent, Margin = Padding.Empty, Dock = DockStyle.Fill };
+        // Champs dans un cadre qui défile si la fenêtre dépasse la hauteur de l'écran (fiche d'un détendeur sur un petit écran).
+        _champs = new TableLayoutPanel
+        {
+            ColumnCount = 1,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Color.Transparent,
+            Margin = Padding.Empty,
+            MinimumSize = new Size(Largeur - 56, 0),
+        };
         _champs.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        _cadre = new Panel { AutoScroll = true, BackColor = Theme.Surface, Margin = Padding.Empty };
+        _cadre.Controls.Add(_champs);
+        Natif.ScrollbarsDuTheme(_cadre);
+        _champs.SizeChanged += (_, _) => AjusterCadre();
 
         var annuler = new BoutonArrondi("Annuler", StyleBouton.Secondaire) { Margin = new Padding(12, 0, 0, 0), DialogResult = DialogResult.Cancel };
         _valider = new BoutonArrondi(texteValider, StyleBouton.Principal) { Margin = new Padding(12, 0, 0, 0) };
@@ -54,9 +68,9 @@ public sealed class FenetreFormulaire : Form
         var titreLibelle = Ui.Libelle(titre, Theme.PoliceGrasse(16f));
         titreLibelle.Margin = new Padding(0, 0, 0, 18);
 
-        var page = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, BackColor = Color.Transparent, Margin = Padding.Empty, MinimumSize = new Size(Largeur - 56, 0) };
+        var page = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, BackColor = Color.Transparent, Margin = Padding.Empty, MinimumSize = new Size(Largeur - 56, 0) };
         page.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        foreach (var (c, i) in new Control[] { titreLibelle, _champs, _message, boutons }.Select((c, i) => (c, i)))
+        foreach (var (c, i) in new Control[] { titreLibelle, _cadre, _message, boutons }.Select((c, i) => (c, i)))
         {
             page.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             page.Controls.Add(c, 0, i);
@@ -76,8 +90,11 @@ public sealed class FenetreFormulaire : Form
         return controle;
     }
 
-    /// <summary>Ajoute deux champs côte à côte (libellés au-dessus).</summary>
-    public void DeuxChamps(string libelle1, Control champ1, string libelle2, Control champ2, int hauteur = Theme.HauteurChamp)
+    /// <summary>
+    /// Ajoute deux champs côte à côte (libellés au-dessus). Retourne la rangée : on peut la masquer (Visible) ou
+    /// changer ses libellés (<see cref="Libelles"/>) selon le reste du formulaire.
+    /// </summary>
+    public TableLayoutPanel DeuxChamps(string libelle1, Control champ1, string libelle2, Control champ2, int hauteur = Theme.HauteurChamp)
     {
         var table = new TableLayoutPanel { ColumnCount = 2, RowCount = 2, AutoSize = true, BackColor = Color.Transparent, Margin = new Padding(0, 0, 0, 14) };
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
@@ -96,7 +113,12 @@ public sealed class FenetreFormulaire : Form
         table.Controls.Add(champ1, 0, 1);
         table.Controls.Add(champ2, 1, 1);
         Ajouter(table);
+        return table;
     }
+
+    /// <summary>Libellés (gauche, droite) d'une rangée créée par <see cref="DeuxChamps"/>.</summary>
+    public static (Label Gauche, Label Droite) Libelles(TableLayoutPanel rangee) =>
+        ((Label)rangee.GetControlFromPosition(0, 0)!, (Label)rangee.GetControlFromPosition(1, 0)!);
 
     /// <summary>Ajoute une ligne libre (case à cocher, texte d'aide...).</summary>
     public void Ajouter(Control controle, SizeType type = SizeType.AutoSize, float valeur = 0)
@@ -121,7 +143,25 @@ public sealed class FenetreFormulaire : Form
         }
 
         Padding = new Padding((int)Dessin.Echelle(this, 28), (int)Dessin.Echelle(this, 24), (int)Dessin.Echelle(this, 28), (int)Dessin.Echelle(this, 24));
+        AjusterCadre();
         base.OnLoad(e);
+    }
+
+    /// <summary>
+    /// Le cadre prend la taille des champs, mais pas plus haut que l'écran moins le titre et les boutons :
+    /// au-delà, les champs défilent (barre verticale à droite, place réservée).
+    /// </summary>
+    private void AjusterCadre()
+    {
+        var ecran = Screen.FromControl(this).WorkingArea.Height;
+        var max = Math.Max((int)Dessin.Echelle(this, 220), ecran - (int)Dessin.Echelle(this, 290));
+        var defile = _champs.Height > max;
+        var largeur = _champs.Width + (defile ? SystemInformation.VerticalScrollBarWidth + (int)Dessin.Echelle(this, 8) : 0);
+        var taille = new Size(largeur, Math.Min(_champs.Height, max));
+        if (_cadre.Size != taille)
+        {
+            _cadre.Size = taille;
+        }
     }
 
     private async Task ValiderAsync()

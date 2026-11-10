@@ -14,7 +14,9 @@ public sealed class EcranNouvelleSortie : EcranBase
     private readonly ServiceSortie _sorties;
     private readonly ServiceMoniteurs _moniteurs;
     private readonly INavigation _navigation;
-    private readonly List<(Tuile Tuile, TypeSortie Type)> _types = [];
+    private readonly ServiceTypesSortie _typesSortie;
+    private readonly List<(Tuile Tuile, long Id)> _types = [];
+    private readonly GrilleAdaptative _tuiles = new() { LargeurMin = 96, HauteurElement = 96, Ecart = 10, ColonnesMax = 6, Margin = new Padding(0, 0, 0, 26) };
     private readonly ChampDate _date = new();
     private readonly ListeDeroulante _moniteur = new();
     private readonly ChampSaisie _intitule = new() { TexteIndicatif = "Ex. : Cours en piscine" };
@@ -22,23 +24,22 @@ public sealed class EcranNouvelleSortie : EcranBase
     private readonly ChampSaisie _notes = new(multiligne: true) { TexteIndicatif = "Groupe N1, 8 élèves…" };
     private readonly Label _message = Ui.Libelle("", Theme.PoliceTitre(10.5f), Theme.Erreur);
     private readonly BoutonArrondi _creer = new("Créer et scanner le matériel", StyleBouton.Principal, Icones.Fleche, iconeApres: true);
-    private TypeSortie _type = TypeSortie.Piscine;
+    private long? _typeId;
 
-    public EcranNouvelleSortie(ServiceSortie sorties, ServiceMoniteurs moniteurs, INavigation navigation)
+    // Compteur d'utilisation : valeur du type choisi, modifiable pour cette sortie (2 plongées dans la journée : 2).
+    private readonly SelecteurNombre _utilisations = new("Utilisations comptées pour cette sortie", n => Libelles.Pluriel(n, "utilisation")) { Width = 230 };
+    private readonly Label _aideUtilisations = Ui.Libelle("", Theme.Police(9f), Theme.TexteSecondaire);
+    private readonly Dictionary<long, (string Nom, int Utilisations)> _utilisationsParType = [];
+    private int? _utilisationsChoisies;
+
+    public EcranNouvelleSortie(ServiceSortie sorties, ServiceMoniteurs moniteurs, INavigation navigation, ServiceTypesSortie typesSortie)
     {
         _sorties = sorties;
         _moniteurs = moniteurs;
         _navigation = navigation;
+        _typesSortie = typesSortie;
 
-        // Type de sortie : une tuile par valeur.
-        var tuiles = new GrilleAdaptative { LargeurMin = 96, HauteurElement = 96, Ecart = 10, ColonnesMax = 6, Margin = new Padding(0, 0, 0, 26) };
-        foreach (var type in Enum.GetValues<TypeSortie>())
-        {
-            var tuile = new Tuile(Libelles.De(type), IconeType(type), DispositionTuile.Verticale) { Selectionne = type == _type };
-            tuile.Click += (_, _) => ChoisirType(type);
-            _types.Add((tuile, type));
-            tuiles.Controls.Add(tuile);
-        }
+        // Type de sortie : une tuile par type proposé (Paramètres › Types de sortie), ajoutées au chargement.
 
         _date.Date = DateOnly.FromDateTime(DateTime.Today);
         _moniteur.AccessibleName = "Moniteur responsable";
@@ -110,8 +111,9 @@ public sealed class EcranNouvelleSortie : EcranBase
         }
 
         Ligne(legende);
-        Ligne(tuiles, SizeType.Absolute, 96 + 26);
+        Ligne(_tuiles, SizeType.Absolute, 96 + 26);
         Ligne(grille);
+        Ligne(CadreUtilisations(), SizeType.Absolute, 84 + 22);
         Ligne(Ui.Rangee(true, notes, facultatif));
         Ligne(_notes, SizeType.Absolute, 96 + 22);
         Ligne(_message);
@@ -156,6 +158,29 @@ public sealed class EcranNouvelleSortie : EcranBase
 
     protected override async Task ChargerAsync(object? parametre)
     {
+        var types = await _typesSortie.ListerProposesAsync();
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        _tuiles.SuspendLayout();
+        foreach (var type in types)
+        {
+            var tuile = new Tuile(type.Nom, Icones.PourTypeSortie(type.Pictogramme), DispositionTuile.Verticale);
+            var id = type.Id;
+            tuile.Click += (_, _) => ChoisirType(id);
+            _types.Add((tuile, id));
+            _utilisationsParType[id] = (type.Nom, type.Utilisations);
+            _tuiles.Controls.Add(tuile);
+        }
+
+        _tuiles.ResumeLayout(true);
+        if (types.Count > 0)
+        {
+            ChoisirType(types[0].Id);
+        }
+
         var moniteurs = await _moniteurs.ListerActifsAsync();
         _moniteur.Items.Clear();
         foreach (var m in moniteurs)
@@ -177,23 +202,63 @@ public sealed class EcranNouvelleSortie : EcranBase
         _intitule.Champ.Focus();
     }
 
-    private static string IconeType(TypeSortie type) => type switch
+    private void ChoisirType(long id)
     {
-        TypeSortie.Piscine => Icones.Piscine,
-        TypeSortie.Fosse => Icones.Fosse,
-        TypeSortie.Mer => Icones.Mer,
-        TypeSortie.Lac => Icones.Lac,
-        TypeSortie.Bapteme => Icones.Bapteme,
-        _ => Icones.Autre,
-    };
-
-    private void ChoisirType(TypeSortie type)
-    {
-        _type = type;
+        _typeId = id;
         foreach (var (tuile, t) in _types)
         {
-            tuile.Selectionne = t == type;
+            tuile.Selectionne = t == id;
         }
+
+        _utilisationsChoisies = null; // Nouveau type : on repart de sa valeur.
+        AfficherUtilisations();
+    }
+
+    /// <summary>Cadre « Compteur d'utilisation » : explication à gauche, sélecteur à droite.</summary>
+    private Carte CadreUtilisations()
+    {
+        var titre = Ui.Libelle("Compteur d'utilisation", Theme.PoliceTitre(10.5f));
+        titre.Margin = new Padding(0, 0, 0, 2);
+        _aideUtilisations.Margin = Padding.Empty;
+        _aideUtilisations.MaximumSize = new Size(440, 0);
+        var textes = Ui.Pile(titre, _aideUtilisations);
+        textes.Anchor = AnchorStyles.Left;
+        _utilisations.Anchor = AnchorStyles.Right;
+        _utilisations.Margin = new Padding(12, 0, 0, 0);
+        _utilisations.Demande += (_, n) =>
+        {
+            _utilisationsChoisies = Math.Clamp(n, TypeDeSortie.UtilisationsMin, TypeDeSortie.UtilisationsMax);
+            AfficherUtilisations();
+        };
+
+        var rangee = Ui.Colonnes((textes, SizeType.Percent, 100), (_utilisations, SizeType.AutoSize, 0));
+        rangee.AutoSize = true;
+        rangee.Dock = DockStyle.Fill;
+        var cadre = new Carte
+        {
+            Padding = new Padding(16, 12, 16, 12),
+            Rayon = 16,
+            BackColor = Theme.Teinte(Theme.Accent, 0.06f),
+            CouleurBordure = Theme.Teinte(Theme.Accent, 0.24f),
+            Margin = new Padding(0, 0, 0, 22),
+            Height = 84,
+        };
+        cadre.Controls.Add(rangee);
+        return cadre;
+    }
+
+    private void AfficherUtilisations()
+    {
+        if (_typeId is not { } id || !_utilisationsParType.TryGetValue(id, out var type))
+        {
+            return;
+        }
+
+        var n = _utilisationsChoisies ?? type.Utilisations;
+        _utilisations.Nombre = n;
+        _aideUtilisations.Text = n != type.Utilisations
+            ? $"Modifié pour cette sortie (défaut {type.Nom} : {type.Utilisations})."
+            : $"Valeur par défaut du type {type.Nom}, réglée dans les Paramètres. Ex. 2 plongées dans la journée : passez à 2.";
     }
 
     private async Task CreerAsync()
@@ -209,11 +274,13 @@ public sealed class EcranNouvelleSortie : EcranBase
         {
             var demande = new NouvelleSortie(
                 date,
-                _type,
+                Core.Modeles.TypeSortie.Autre,
                 _intitule.Valeur,
                 (_moniteur.SelectedItem as Choix<long>)?.Valeur,
                 _lieu.Valeur,
-                _notes.Valeur);
+                _notes.Valeur,
+                _typeId,
+                _utilisations.Nombre);
             var resultat = await _sorties.CreerAsync(demande);
             if (resultat is { Reussi: true, Id: { } id })
             {

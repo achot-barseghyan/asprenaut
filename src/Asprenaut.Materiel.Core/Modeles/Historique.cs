@@ -40,6 +40,9 @@ public sealed class LigneJournal
     public string? SortieIntitule { get; set; }
     public DateOnly? SortieDate { get; set; }
     public TypeSortie? SortieType { get; set; }
+
+    /// <summary>Nom du type de la sortie (table type_sortie), s'il est connu.</summary>
+    public string? SortieTypeNom { get; set; }
     public string? SortieLieu { get; set; }
     public string? MoniteurNom { get; set; }
 

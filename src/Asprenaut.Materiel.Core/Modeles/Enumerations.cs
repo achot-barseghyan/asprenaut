@@ -11,7 +11,10 @@ public enum EtatEquipement
     Reforme,
 }
 
-/// <summary>Type de sortie.</summary>
+/// <summary>
+/// Famille (pictogramme) d'un type de sortie. Les types eux-mêmes sont des données (<see cref="TypeDeSortie"/>, Paramètres) ;
+/// la colonne sortie.type garde la famille du type choisi.
+/// </summary>
 public enum TypeSortie
 {
     Piscine,
@@ -62,4 +65,11 @@ public enum ModeAffichage
 {
     Sombre,
     Clair,
+}
+
+/// <summary>Montage du premier étage d'un détendeur sur le robinet du bloc.</summary>
+public enum MontageDetendeur
+{
+    Etrier,
+    Din,
 }

@@ -11,7 +11,9 @@ public sealed record NouvelleSortie(
     string Intitule,
     long? MoniteurId,
     string Lieu = "",
-    string Notes = "");
+    string Notes = "",
+    long? TypeId = null,
+    int? Utilisations = null);
 
 /// <summary>Cycle de vie d'une sortie : création, validation du départ, clôture.</summary>
 public sealed class ServiceSortie(
@@ -19,8 +21,37 @@ public sealed class ServiceSortie(
     IMoniteurRepository moniteurs,
     IJournalRepository journal,
     IHorloge horloge,
-    Reglages reglages)
+    Reglages reglages,
+    ServiceGestion? gestion = null,
+    ITypeSortieRepository? types = null)
 {
+    /// <summary>
+    /// Type de la sortie : celui choisi (<see cref="NouvelleSortie.TypeId"/>), qui doit être proposé, ou rester celui
+    /// de la sortie modifiée s'il a été masqué depuis ; sans choix, le premier type proposé de la famille demandée.
+    /// Retourne (famille, id du type) ou une erreur.
+    /// </summary>
+    private async Task<(TypeSortie Famille, long? TypeId, int UtilisationsDuType, ResultatOperation? Erreur)> TypeAsync(NouvelleSortie demande, long? typeActuel, CancellationToken ct)
+    {
+        if (demande.Utilisations is < TypeDeSortie.UtilisationsMin or > TypeDeSortie.UtilisationsMax)
+        {
+            return (demande.Type, null, 1, ResultatOperation.Echec(
+                $"Utilisations : entre {TypeDeSortie.UtilisationsMin} et {TypeDeSortie.UtilisationsMax} par sortie."));
+        }
+
+        if (types is null)
+        {
+            return (demande.Type, demande.TypeId, TypeDeSortie.UtilisationsParDefaut(demande.Type), null);
+        }
+
+        var tous = await types.ListerAsync(ct);
+        var type = demande.TypeId is { } id
+            ? tous.FirstOrDefault(t => t.Id == id && (t.Actif || t.Id == typeActuel))
+            : tous.FirstOrDefault(t => t.Actif && t.Pictogramme == demande.Type);
+        return type is null
+            ? (demande.Type, null, 1, ResultatOperation.Echec("Choisissez un type de sortie."))
+            : (type.Pictogramme, type.Id, type.Utilisations, null);
+    }
+
     /// <summary>
     /// Sortie en cours dont du matériel est encore dehors plus de <see cref="Reglages.JoursAvantAlerteRetour"/> jours
     /// après la validation du départ : elle est signalée en orange dans la liste.
@@ -62,10 +93,18 @@ public sealed class ServiceSortie(
             return ResultatOperation.Echec("Ce moniteur n'est pas disponible.");
         }
 
+        var (famille, typeId, utilisationsDuType, erreurType) = await TypeAsync(demande, null, ct);
+        if (erreurType is not null)
+        {
+            return erreurType;
+        }
+
         var sortie = new Sortie
         {
             DateSortie = demande.Date,
-            Type = demande.Type,
+            Type = famille,
+            TypeId = typeId,
+            Utilisations = demande.Utilisations ?? utilisationsDuType,
             Intitule = intitule,
             MoniteurId = moniteurId,
             Lieu = demande.Lieu.Trim(),
@@ -113,8 +152,17 @@ public sealed class ServiceSortie(
             return ResultatOperation.Echec("Ce moniteur n'est pas disponible.");
         }
 
+        var (famille, typeId, utilisationsDuType, erreurType) = await TypeAsync(demande, sortie.TypeId, ct);
+        if (erreurType is not null)
+        {
+            return erreurType;
+        }
+
+        // Sans valeur donnée : la sortie garde la sienne, ou prend celle du nouveau type si le type change.
+        sortie.Utilisations = demande.Utilisations ?? (typeId != sortie.TypeId ? utilisationsDuType : sortie.Utilisations);
         sortie.DateSortie = demande.Date;
-        sortie.Type = demande.Type;
+        sortie.Type = famille;
+        sortie.TypeId = typeId;
         sortie.Intitule = intitule;
         sortie.MoniteurId = moniteurId;
         sortie.Lieu = demande.Lieu.Trim();
@@ -127,6 +175,11 @@ public sealed class ServiceSortie(
     /// <summary>Supprime une sortie créée par erreur : seulement si aucun matériel n'y a été scanné.</summary>
     public async Task<ResultatOperation> SupprimerAsync(long sortieId, CancellationToken ct = default)
     {
+        if (gestion?.Exiger(ActionProtegee.SupprimerSortie) is { Reussi: false } refus)
+        {
+            return refus;
+        }
+
         if (await sorties.ObtenirAsync(sortieId, ct) is not { } sortie)
         {
             return ResultatOperation.Echec("Sortie introuvable.");
@@ -210,6 +263,13 @@ public sealed class ServiceSortie(
         var manquants = (await sorties.ListerAffectationsAsync(sortieId, ct))
             .Where(a => a.Statut == StatutSortieEquipement.Dehors)
             .ToList();
+
+        // Réglage « Code pour clôturer avec des manquants » : laisser du matériel dehors demande le mode gestion.
+        if (manquants.Count > 0 && gestion?.Exiger(ActionProtegee.CloturerAvecManquants) is { Reussi: false } refus)
+        {
+            return refus;
+        }
+
         foreach (var a in manquants)
         {
             a.Statut = StatutSortieEquipement.Manquant;

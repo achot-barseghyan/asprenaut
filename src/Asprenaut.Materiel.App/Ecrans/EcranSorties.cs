@@ -183,7 +183,7 @@ public sealed class EcranSorties : EcranBase
 
             var enPreparation = s.Statut == StatutSortie.EnPreparation;
             var date = new PastilleDate { Date = s.DateSortie };
-            var type = new Pastille(Libelles.De(s.Type).ToUpper(Libelles.Culture), Theme.Teinte(Theme.Accent, 0.12f), Theme.AccentClair, police: Theme.PoliceTitre(7.5f), hauteur: 24)
+            var type = new Pastille(s.LibelleType.ToUpper(Libelles.Culture), Theme.Teinte(Theme.Accent, 0.12f), Theme.AccentClair, police: Theme.PoliceTitre(7.5f), hauteur: 24)
             {
                 Margin = new Padding(0, 0, 0, 6),
             };

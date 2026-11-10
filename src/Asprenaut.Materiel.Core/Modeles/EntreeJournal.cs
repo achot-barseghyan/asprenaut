@@ -34,6 +34,8 @@ public static class ActionsJournal
     public const string EnvoiAtelier = "EnvoiAtelier";
     public const string RetourAtelier = "RetourAtelier";
     public const string SeanceTivPlanifiee = "SeanceTivPlanifiee";
+    public const string AjoutSeanceTiv = "AjoutSeanceTiv";
+    public const string RetraitSeanceTiv = "RetraitSeanceTiv";
     public const string MoniteurCree = "MoniteurCree";
     public const string MoniteurModifie = "MoniteurModifie";
 }

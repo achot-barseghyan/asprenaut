@@ -20,15 +20,19 @@ public sealed class EcranInventaire : EcranBase
     private readonly System.Windows.Forms.Timer _attenteRecherche = new() { Interval = 300 };
     private long? _categorie;
 
-    public EcranInventaire(ServiceInventaire inventaire, ServiceReglages reglages)
+    private readonly GardeGestion _garde;
+
+    public EcranInventaire(ServiceInventaire inventaire, ServiceReglages reglages, GardeGestion garde)
     {
+        _garde = garde;
         _inventaire = inventaire;
         _reglages = reglages;
 
         var ajouter = new BoutonArrondi("Ajouter un équipement", StyleBouton.Principal, Icones.Plus);
+        _garde.Lier(ajouter, ActionProtegee.Materiel);
         ajouter.Click += (_, _) => Executer(AjouterEquipementAsync);
         var exporter = new BoutonArrondi("Exporter CSV", StyleBouton.Secondaire, Icones.Telecharger);
-        exporter.Click += (_, _) => Dialogues.Information(FindForm(), "L'export CSV arrive dans une prochaine version.");
+        exporter.Click += (_, _) => Executer(ExporterAsync);
 
         _recherche.Margin = new Padding(0, 0, 0, 20);
         _recherche.Champ.TextChanged += (_, _) =>
@@ -59,14 +63,35 @@ public sealed class EcranInventaire : EcranBase
 
         Theme.AppliquerGrille(_grille, hauteurLigne: 60);
         _grille.AccessibleName = "Matériel du club";
-        Tableaux.AjouterColonne(_grille, "equipement", "Équipement", 190);
-        Tableaux.AjouterColonne(_grille, "code", "Code", 90);
-        Tableaux.AjouterColonne(_grille, "taille", "Taille", 60);
-        Tableaux.AjouterColonne(_grille, "statut", "Statut", 110);
-        Tableaux.AjouterColonne(_grille, "sortie", "Sortie en cours", 140);
-        Tableaux.AjouterColonne(_grille, "revision", "Prochaine révision", 110);
+        _grille.ScrollBars = ScrollBars.Both; // Les colonnes des détendeurs défilent en largeur.
+        DefinirColonnes(ColonnesGenerales);
         _grille.CellFormatting += ColorerCellule;
         _grille.CellPainting += PeindreCellule;
+
+        // Modifier : bouton dessiné dans la dernière colonne, double-clic ou Entrée sur une ligne.
+        _grille.CellClick += (_, e) =>
+        {
+            if (e.RowIndex >= 0 && Colonne(e.ColumnIndex) == "action" && _grille.Rows[e.RowIndex].Tag is LigneInventaire l)
+            {
+                Executer(() => ModifierEquipementAsync(l));
+            }
+        };
+        _grille.CellDoubleClick += (_, e) =>
+        {
+            if (e.RowIndex >= 0 && Colonne(e.ColumnIndex) != "action" && _grille.Rows[e.RowIndex].Tag is LigneInventaire l)
+            {
+                Executer(() => ModifierEquipementAsync(l));
+            }
+        };
+        _grille.KeyDown += (_, e) =>
+        {
+            if (e.KeyCode == Keys.Enter && _grille.CurrentRow?.Tag is LigneInventaire l)
+            {
+                e.SuppressKeyPress = true;
+                Executer(() => ModifierEquipementAsync(l));
+            }
+        };
+        _grille.CellMouseEnter += (_, e) => _grille.Cursor = e.RowIndex >= 0 && Colonne(e.ColumnIndex) == "action" ? Cursors.Hand : Cursors.Default;
 
         var carteGrille = new Carte { Padding = new Padding(8, 6, 8, 8), Rayon = 22 };
         _grille.Dock = DockStyle.Fill;
@@ -100,6 +125,12 @@ public sealed class EcranInventaire : EcranBase
         }
 
         _tuiles.Clear();
+        _nomsCategories.Clear();
+        foreach (var c in categories)
+        {
+            _nomsCategories[c.Id] = c.Nom;
+        }
+
         AjouterTuile("Tout", Icones.Tout, null, tout.Count);
         foreach (var c in categories)
         {
@@ -116,6 +147,10 @@ public sealed class EcranInventaire : EcranBase
         if (disposing)
         {
             _attenteRecherche.Dispose();
+            foreach (var police in _policesBarrees.Values)
+            {
+                police.Dispose();
+            }
         }
 
         base.Dispose(disposing);
@@ -124,7 +159,12 @@ public sealed class EcranInventaire : EcranBase
     /// <summary>Ajout d'un équipement ; la catégorie filtrée est proposée par défaut, puis on le montre dans la liste.</summary>
     private async Task AjouterEquipementAsync()
     {
-        var code = await FormulaireEquipement.OuvrirAsync(FindForm(), _inventaire, categorieId: _categorie);
+        if (!_garde.Exiger(FindForm(), ActionProtegee.Materiel, "Ajouter un équipement"))
+        {
+            return;
+        }
+
+        var code =await FormulaireEquipement.OuvrirAsync(FindForm(), _inventaire, categorieId: _categorie);
         if (code is null || IsDisposed)
         {
             return;
@@ -166,19 +206,156 @@ public sealed class EcranInventaire : EcranBase
         }
     }
 
+    /// <summary>Exporte les lignes affichées (catégorie et recherche en cours).</summary>
+    private async Task ExporterAsync()
+    {
+        if (_lignes.Count == 0)
+        {
+            Dialogues.Information(FindForm(), "Rien à exporter : la liste est vide.");
+            return;
+        }
+
+        if (await Fichiers.EnregistrerCsvAsync(FindForm(), "Exporter l'inventaire", _inventaire.NomFichierExport(), _inventaire.ExporterCsv(_lignes)))
+        {
+            Dialogues.Information(FindForm(), $"Inventaire exporté : {Libelles.Pluriel(_lignes.Count, "équipement")}.");
+        }
+    }
+
+    /// <summary>Fiche de l'équipement (action protégée), puis la liste est rechargée.</summary>
+    private async Task ModifierEquipementAsync(LigneInventaire ligne)
+    {
+        if (!_garde.Exiger(FindForm(), ActionProtegee.Materiel, "Modifier un équipement"))
+        {
+            return;
+        }
+
+        if (await _inventaire.ObtenirAsync(ligne.EquipementId) is not { } equipement)
+        {
+            Dialogues.Erreur(FindForm(), "Cet équipement n'existe plus.");
+            return;
+        }
+
+        if (await FormulaireEquipement.ModifierAsync(FindForm(), _inventaire, equipement, ligne.DerniereRevision) && !IsDisposed)
+        {
+            await RechargerAsync();
+        }
+    }
+
+    private IReadOnlyList<LigneInventaire> _lignes = [];
+
+    // ---------------------------------------------------------------- Colonnes selon la catégorie
+
+    /// <summary>Une colonne du tableau : nom interne, titre, largeur (poids, ou pixels logiques en largeur fixe), valeur affichée.</summary>
+    private sealed record ColonneInventaire(string Nom, string Titre, int Largeur, Func<LigneInventaire, string> Valeur);
+
+    private static string Ou(string? v) => string.IsNullOrWhiteSpace(v) ? "—" : v;
+
+    private static string Date(DateOnly? d) => d is { } v ? Libelles.Date(v) : "—";
+
+    private static readonly ColonneInventaire Action = new("action", "", 100, _ => "");
+
+    private static readonly ColonneInventaire Statut = new("statut", "Statut", 110, l => Libelles.De(l.Statut));
+
+    /// <summary>« Tout » et les catégories sans fiche particulière.</summary>
+    private static readonly ColonneInventaire[] ColonnesGenerales =
+    [
+        new("equipement", "Équipement", 190, l => l.Libelle),
+        new("code", "Code", 90, l => l.Code),
+        new("marque", "Marque", 90, l => Ou(l.Marque)),
+        new("taille", "Taille", 60, l => Ou(l.Taille)),
+        Statut,
+        new("sortie", "Sortie en cours", 130, l => Ou(l.SortieEnCoursIntitule)),
+        new("revision", "Prochaine révision", 110, l => Date(ProchaineEcheance(l))),
+        Action,
+    ];
+
+    /// <summary>Stabs : comme le registre du club (marque, modèle, taille, n° de série, identification).</summary>
+    private ColonneInventaire[] ColonnesGilets =>
+    [
+        new("code", "Code", 70, l => l.Code),
+        new("marque", "Marque", 90, l => Ou(l.Marque)),
+        new("modele", "Modèle", 80, l => Ou(l.Modele)),
+        new("taille", "Taille", 55, l => Ou(l.Taille)),
+        new("serie", "N° série", 100, l => Ou(l.NumeroSerie)),
+        Statut,
+        new("identification", "Identification", 230, l => _inventaire.Identification(l.Categorie, l.Code, l.Taille)),
+        Action,
+    ];
+
+    /// <summary>Détendeurs : toutes les colonnes du registre (largeurs fixes, la grille défile en largeur).</summary>
+    private ColonneInventaire[] ColonnesDetendeurs =>
+    [
+        new("code", "Code", 80, l => l.Code),
+        new("marque", "Marque", 100, l => Ou(l.Marque)),
+        new("modele", "Premier étage", 110, l => Ou(l.Modele)),
+        new("montage", "Étrier / DIN", 100, l => l.Montage is { } m ? Libelles.De(m) : "—"),
+        new("serie", "N° premier étage", 130, l => Ou(l.NumeroSerie)),
+        new("marque2", "Marque 2e étage", 120, l => Ou(l.MarqueDeuxiemeEtage)),
+        new("modele2", "Deuxième étage", 120, l => Ou(l.ModeleDeuxiemeEtage)),
+        new("serie2", "N° 2e étage", 130, l => Ou(l.NumeroDeuxiemeEtage)),
+        new("ds", "D.S", 60, l => l.DirectSystem is { } ds ? (ds ? "Oui" : "Non") : "—"),
+        new("mano", "Mano", 100, l => Ou(l.Manometre)),
+        new("octopus", "Octopus", 90, l => string.IsNullOrWhiteSpace(l.Octopus) ? "Non" : l.Octopus),
+        new("serieOctopus", "N° octopus", 120, l => Ou(l.NumeroOctopus)),
+        new("statut", "Statut", 120, l => Libelles.De(l.Statut)),
+        new("derniere", "Dernière révision", 120, l => Date(l.DerniereRevision)),
+        new("revision", "À réviser avant", 150, l => Date(l.DateProchaineRevision)),
+        new("identification", "Identification", 300, l => _inventaire.Identification(l.Categorie, l.Code, l.Taille)),
+        new("action", "", 110, _ => ""),
+    ];
+
+    private ColonneInventaire[] _colonnes = [];
+    private readonly Dictionary<Font, Font> _policesBarrees = [];
+    private readonly Dictionary<long, string> _nomsCategories = [];
+
+    private string? Colonne(int index) => index >= 0 && index < _grille.Columns.Count ? _grille.Columns[index].Name : null;
+
+    /// <summary>Remplace les colonnes ; largeur fixe et défilement horizontal pour les détendeurs, sinon pleine largeur.</summary>
+    private void DefinirColonnes(ColonneInventaire[] colonnes)
+    {
+        if (_colonnes.Select(c => c.Nom).SequenceEqual(colonnes.Select(c => c.Nom)))
+        {
+            _colonnes = colonnes;
+            return;
+        }
+
+        _colonnes = colonnes;
+        var largeursFixes = colonnes.Length > 10;
+        _grille.SuspendLayout();
+        _grille.Rows.Clear();
+        _grille.Columns.Clear();
+        _grille.AutoSizeColumnsMode = largeursFixes ? DataGridViewAutoSizeColumnsMode.None : DataGridViewAutoSizeColumnsMode.Fill;
+        foreach (var c in colonnes)
+        {
+            Tableaux.AjouterColonne(_grille, c.Nom, c.Titre, c.Largeur);
+            var colonne = _grille.Columns[c.Nom]!;
+            colonne.HeaderCell.Style.Padding = colonne.DefaultCellStyle.Padding = new Padding((int)Dessin.Echelle(this, 8), 0, 4, 0);
+            if (largeursFixes)
+            {
+                colonne.Width = (int)Dessin.Echelle(this, c.Largeur);
+            }
+        }
+
+        if (largeursFixes)
+        {
+            _grille.Columns[0].Frozen = true; // Le code reste visible quand on fait défiler.
+        }
+
+        _grille.ResumeLayout();
+    }
+
     private void Afficher(IReadOnlyList<LigneInventaire> lignes)
     {
+        _lignes = lignes;
+        var categorie = _categorie is { } id && _nomsCategories.TryGetValue(id, out var nom) ? nom : null;
+        DefinirColonnes(ServiceInventaire.EstDetendeur(categorie) ? ColonnesDetendeurs
+            : ServiceInventaire.EstGilet(categorie) ? ColonnesGilets
+            : ColonnesGenerales);
         _grille.SuspendLayout();
         _grille.Rows.Clear();
         foreach (var l in lignes)
         {
-            var i = _grille.Rows.Add(
-                l.Libelle,
-                l.Code,
-                l.Taille ?? "—",
-                Libelles.De(l.Statut),
-                l.SortieEnCoursIntitule ?? "—",
-                ProchaineEcheance(l) is { } d ? Libelles.Date(d) : "—");
+            var i = _grille.Rows.Add(_colonnes.Select(c => (object)c.Valeur(l)).ToArray());
             _grille.Rows[i].Tag = l;
         }
 
@@ -196,10 +373,24 @@ public sealed class EcranInventaire : EcranBase
             return;
         }
 
-        if (e.ColumnIndex == _grille.Columns["code"]!.Index)
+        if (Colonne(e.ColumnIndex) == "code")
         {
             e.CellStyle.Font = Theme.PoliceCode(10f);
             e.CellStyle.ForeColor = e.CellStyle.SelectionForeColor = Theme.Accent;
+        }
+
+        // Matériel réformé : barré et grisé, comme dans les registres du club.
+        if (l.Etat == EtatEquipement.Reforme)
+        {
+            var police = e.CellStyle.Font ?? _grille.DefaultCellStyle.Font ?? Theme.Police();
+            if (!_policesBarrees.TryGetValue(police, out var barree))
+            {
+                barree = new Font(police, police.Style | FontStyle.Strikeout); // Une par police, libérées avec l'écran.
+                _policesBarrees[police] = barree;
+            }
+
+            e.CellStyle.Font = barree;
+            e.CellStyle.ForeColor = e.CellStyle.SelectionForeColor = Theme.TexteSecondaire;
         }
     }
 
@@ -210,11 +401,16 @@ public sealed class EcranInventaire : EcranBase
             return;
         }
 
-        if (e.ColumnIndex == _grille.Columns["equipement"]!.Index)
+        var colonne = Colonne(e.ColumnIndex);
+        if (colonne == "equipement")
         {
             Tableaux.PeindreIconeTexte(e, Icones.PourCategorie(l.Categorie), l.Libelle);
         }
-        else if (e.ColumnIndex == _grille.Columns["statut"]!.Index)
+        else if (colonne == "action")
+        {
+            Tableaux.PeindreBouton(e, "Modifier");
+        }
+        else if (colonne == "statut")
         {
             var (couleur, texte) = l.Statut switch
             {
@@ -226,7 +422,7 @@ public sealed class EcranInventaire : EcranBase
             };
             Tableaux.PeindrePastille(e, Libelles.De(l.Statut), couleur, texte);
         }
-        else if (e.ColumnIndex == _grille.Columns["revision"]!.Index && ProchaineEcheance(l) is { } date)
+        else if (colonne == "revision" && l.Etat != EtatEquipement.Reforme && ProchaineEcheance(l) is { } date)
         {
             // Badge : jaune si la révision approche (réglage « Prévenir avant une révision »), rouge si dépassée.
             switch (_inventaire.EtatDeRevision(date))

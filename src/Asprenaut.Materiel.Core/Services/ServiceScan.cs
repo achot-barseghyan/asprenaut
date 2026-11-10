@@ -14,7 +14,8 @@ public sealed class ServiceScan(
     ISortieRepository sorties,
     IJournalRepository journal,
     IHorloge horloge,
-    Reglages reglages)
+    Reglages reglages,
+    ServiceCompteur? compteur = null)
 {
     /// <summary>Scan d'un équipement qui part avec la sortie.</summary>
     public async Task<ResultatScan> ScannerDepartAsync(long sortieId, string codeBrut, CancellationToken ct = default)
@@ -74,6 +75,16 @@ public sealed class ServiceScan(
                 equipement);
         }
 
+        // Règle : seuil de sorties atteint (compteur d'utilisation) → refusé si le club bloque au seuil, sinon avertissement (plus bas).
+        var usage = compteur is null ? null : await compteur.UsageAsync(equipement, ct);
+        var seuilAtteint = usage?.Etat == EtatCompteur.Atteint;
+        if (seuilAtteint && reglages.BloquerAuSeuil)
+        {
+            return ResultatScan.Erreur(
+                $"{equipement.Designation} : {usage!.Utilisations} utilisations depuis sa dernière révision (seuil {usage.Seuil}). Révision à faire avant de repartir.",
+                equipement);
+        }
+
         // Règle : un équipement n'est dehors que dans une seule sortie à la fois.
         var dehors = await sorties.ObtenirAffectationDehorsAsync(equipement.Id, ct);
         if (dehors is not null)
@@ -100,6 +111,13 @@ public sealed class ServiceScan(
         {
             return ResultatScan.Avertissement(
                 $"{equipement.Designation} ajouté. Attention : révision dépassée depuis le {Libelles.Date(equipement.EcheanceDepassee(horloge.AujourdHui)!.Value)}.",
+                equipement);
+        }
+
+        if (seuilAtteint)
+        {
+            return ResultatScan.Avertissement(
+                $"{equipement.Designation} ajouté. Attention : révision à faire ({usage!.Utilisations} utilisations, seuil {usage.Seuil}).",
                 equipement);
         }
 

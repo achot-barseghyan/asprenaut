@@ -7,7 +7,19 @@ public sealed class SortieResume
 {
     public long Id { get; set; }
     public DateOnly DateSortie { get; set; }
+    /// <summary>Famille (pictogramme) du type.</summary>
     public TypeSortie Type { get; set; }
+
+    public long? TypeId { get; set; }
+
+    /// <summary>Utilisations comptées par équipement rentré.</summary>
+    public int Utilisations { get; set; } = 1;
+
+    /// <summary>Nom du type de sortie (table type_sortie) ; null si la sortie n'est reliée à aucun type.</summary>
+    public string? TypeNom { get; set; }
+
+    /// <summary>Nom affiché du type : celui du club, sinon celui de la famille.</summary>
+    public string LibelleType => TypeNom is { Length: > 0 } nom ? nom : Libelles.De(Type);
     public string Intitule { get; set; } = "";
     public string Lieu { get; set; } = "";
     public StatutSortie Statut { get; set; }
@@ -74,6 +86,22 @@ public sealed class LigneInventaire
     public long? SortieEnCoursId { get; set; }
     public string? SortieEnCoursIntitule { get; set; }
     public bool EstManquant { get; set; }
+
+    // --- Fiche matériel (voir Equipement) ---
+    public string Marque { get; set; } = "";
+    public string Modele { get; set; } = "";
+    public string NumeroSerie { get; set; } = "";
+    public MontageDetendeur? Montage { get; set; }
+    public string MarqueDeuxiemeEtage { get; set; } = "";
+    public string ModeleDeuxiemeEtage { get; set; } = "";
+    public string NumeroDeuxiemeEtage { get; set; } = "";
+    public bool? DirectSystem { get; set; }
+    public string Manometre { get; set; } = "";
+    public string Octopus { get; set; } = "";
+    public string NumeroOctopus { get; set; } = "";
+
+    /// <summary>Date du dernier contrôle « révision » enregistré (colonne « Date de la dernière révision »).</summary>
+    public DateOnly? DerniereRevision { get; set; }
 
     public StatutInventaire Statut => Etat switch
     {

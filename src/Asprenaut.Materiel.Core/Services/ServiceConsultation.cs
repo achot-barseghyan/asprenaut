@@ -5,7 +5,7 @@ using Asprenaut.Materiel.Core.Resultats;
 namespace Asprenaut.Materiel.Core.Services;
 
 /// <summary>Moniteurs : listes de choix, cartes avec leurs sorties et le matériel dehors, ajout et modification.</summary>
-public sealed class ServiceMoniteurs(IMoniteurRepository moniteurs, ISortieRepository sorties, IJournalRepository journal, IHorloge horloge)
+public sealed class ServiceMoniteurs(IMoniteurRepository moniteurs, ISortieRepository sorties, IJournalRepository journal, IHorloge horloge, ServiceGestion? gestion = null)
 {
     /// <summary>Nombre de sorties clôturées affichées dans la fiche.</summary>
     public const int NombreDernieresSorties = 3;
@@ -67,6 +67,11 @@ public sealed class ServiceMoniteurs(IMoniteurRepository moniteurs, ISortieRepos
     /// <summary>Ajoute (Id = 0) ou modifie un moniteur. Prénom et nom obligatoires.</summary>
     public async Task<ResultatOperation> EnregistrerAsync(Moniteur saisie, CancellationToken ct = default)
     {
+        if (gestion?.Exiger(ActionProtegee.Moniteurs) is { Reussi: false } refus)
+        {
+            return refus;
+        }
+
         var prenom = saisie.Prenom.Trim();
         var nom = saisie.Nom.Trim();
         if (prenom.Length == 0 || nom.Length == 0)

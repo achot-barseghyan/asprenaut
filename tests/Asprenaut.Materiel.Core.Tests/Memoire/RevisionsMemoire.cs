@@ -6,7 +6,8 @@ namespace Asprenaut.Materiel.Core.Tests.Memoire;
 /// <summary>Contrôles, passages en atelier et séances TIV en mémoire.</summary>
 public sealed class RevisionRepositoryMemoire(BaseMemoire db) : IRevisionRepository
 {
-    public List<Controle> Controles { get; } = [];
+    /// <summary>Dans la base partagée : le compteur d'utilisation (dépôt des équipements) les lit aussi.</summary>
+    public List<Controle> Controles => db.Controles;
     public List<PassageAtelier> Passages { get; } = [];
     public List<SeanceTiv> Seances { get; } = [];
 
@@ -25,6 +26,9 @@ public sealed class RevisionRepositoryMemoire(BaseMemoire db) : IRevisionReposit
 
     public Task<IReadOnlyList<Controle>> ListerControlesAsync(long equipementId, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<Controle>>(Controles.Where(c => c.EquipementId == equipementId).OrderByDescending(c => c.DateControle).ToList());
+
+    public Task<IReadOnlyList<Controle>> ListerControlesPeriodeAsync(DateOnly du, DateOnly au, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<Controle>>(Controles.Where(c => c.DateControle >= du && c.DateControle <= au).OrderBy(c => c.DateControle).ToList());
 
     public Task<long> AjouterPassageAtelierAsync(PassageAtelier passage, CancellationToken ct = default)
     {
@@ -59,6 +63,23 @@ public sealed class RevisionRepositoryMemoire(BaseMemoire db) : IRevisionReposit
         seance.Id = db.ProchainId();
         Seances.Add(seance);
         return Task.FromResult(seance.Id);
+    }
+
+    public HashSet<(long Seance, long Equipement)> Planifies { get; } = [];
+
+    public Task<IReadOnlyList<long>> ListerPlanifiesAsync(long seanceId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<long>>(Planifies.Where(p => p.Seance == seanceId).Select(p => p.Equipement).Order().ToList());
+
+    public Task AjouterASeanceAsync(long seanceId, long equipementId, CancellationToken ct = default)
+    {
+        Planifies.Add((seanceId, equipementId));
+        return Task.CompletedTask;
+    }
+
+    public Task RetirerDesSeancesAsync(long equipementId, CancellationToken ct = default)
+    {
+        Planifies.RemoveWhere(p => p.Equipement == equipementId);
+        return Task.CompletedTask;
     }
 
     public Task<SeanceTiv?> ProchaineSeanceAsync(DateOnly aPartirDu, CancellationToken ct = default) =>

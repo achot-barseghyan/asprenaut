@@ -2,6 +2,7 @@ using Asprenaut.Materiel.App.Apparence;
 using Asprenaut.Materiel.App.Controles;
 using Asprenaut.Materiel.App.Ecrans;
 using Asprenaut.Materiel.App.Navigation;
+using Asprenaut.Materiel.Core.Services;
 
 namespace Asprenaut.Materiel.App;
 
@@ -12,10 +13,18 @@ public sealed class MainForm : Form
     private readonly Dictionary<EntreeMenu, BoutonArrondi> _menu = [];
     private Panel _menuPanneau;
     private readonly Panel _contenu;
+    private readonly ServiceGestion _gestion;
+    private readonly GardeGestion _garde;
+    private readonly FiltreActivite _activite;
+    private readonly System.Windows.Forms.Timer _minuterie = new() { Interval = 5000 };
+    private CarteModeGestion _carteGestion = null!;
 
-    public MainForm(ServiceNavigation navigation)
+    public MainForm(ServiceNavigation navigation, ServiceGestion gestion, GardeGestion garde)
     {
         _navigation = navigation;
+        _gestion = gestion;
+        _garde = garde;
+        _activite = new FiltreActivite(gestion);
 
         AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
@@ -40,6 +49,16 @@ public sealed class MainForm : Form
         _navigation.Attacher(contenu);
         _navigation.EcranChange += (_, ecran) => SelectionnerMenu(ecran.Menu);
         Theme.Changement += ChangerTheme;
+
+        // Mode gestion : carte du menu à jour, retour automatique en consultation vérifié toutes les 5 s.
+        _gestion.EtatChange += ActualiserGestion;
+        _minuterie.Tick += (_, _) =>
+        {
+            if (!_gestion.Verifier())
+            {
+                _carteGestion.Actualiser(); // Minutes restantes.
+            }
+        };
     }
 
     protected override void Dispose(bool disposing)
@@ -47,9 +66,30 @@ public sealed class MainForm : Form
         if (disposing)
         {
             Theme.Changement -= ChangerTheme;
+            _gestion.EtatChange -= ActualiserGestion;
+            _minuterie.Dispose();
         }
 
         base.Dispose(disposing);
+    }
+
+    private void ActualiserGestion(object? sender, EventArgs e)
+    {
+        if (InvokeRequired)
+        {
+            BeginInvoke(() => ActualiserGestion(sender, e));
+            return;
+        }
+
+        _carteGestion.Actualiser();
+    }
+
+    protected override void OnFormClosed(FormClosedEventArgs e)
+    {
+        Application.RemoveMessageFilter(_activite);
+        _minuterie.Stop();
+        _gestion.PreparerFermeture(); // Reverrouille au prochain lancement, sauf si le club l'a désactivé.
+        base.OnFormClosed(e);
     }
 
     private void SelectionnerMenu(EntreeMenu menu)
@@ -115,6 +155,8 @@ public sealed class MainForm : Form
         var f = DeviceDpi / 96f;
         _contenu.Padding = new Padding((int)(40 * f), (int)(28 * f), (int)(40 * f), (int)(28 * f));
         _navigation.AllerA<EcranSorties>();
+        Application.AddMessageFilter(_activite);
+        _minuterie.Start();
     }
 
     private Panel CreerMenu()
@@ -156,6 +198,7 @@ public sealed class MainForm : Form
         Ajouter<EcranInventaire>(EntreeMenu.Inventaire, "Inventaire", Icones.Inventaire);
         Ajouter<EcranMoniteurs>(EntreeMenu.Moniteurs, "Moniteurs", Icones.Moniteurs);
         Ajouter<EcranHistorique>(EntreeMenu.Historique, "Historique", Icones.Historique);
+        Ajouter<EcranBilan>(EntreeMenu.Bilan, "Bilan de saison", Icones.Bilan);
         Ajouter<EcranRevisions>(EntreeMenu.Revisions, "Révisions", Icones.Revisions);
         Ajouter<EcranParametres>(EntreeMenu.Parametres, "Paramètres", Icones.Parametres);
 
@@ -164,7 +207,23 @@ public sealed class MainForm : Form
         version.Dock = DockStyle.Bottom;
         version.Padding = new Padding(6, 10, 0, 0);
 
+        // Mode consultation / mode gestion, juste au-dessus de la carte du pistolet.
+        _carteGestion = new CarteModeGestion(_gestion) { Dock = DockStyle.Bottom };
+        _carteGestion.Click += (_, _) =>
+        {
+            if (_gestion.ModeGestion)
+            {
+                _gestion.Verrouiller();
+            }
+            else
+            {
+                _garde.Deverrouiller(this);
+            }
+        };
+
+        // Ancrées en bas dans l'ordre inverse de leur ajout : version tout en bas, puis pistolet, puis mode gestion.
         panneau.Controls.Add(entrees);
+        panneau.Controls.Add(_carteGestion);
         panneau.Controls.Add(scanner);
         panneau.Controls.Add(version);
         return panneau;

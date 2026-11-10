@@ -19,7 +19,7 @@ public class SchemaTests : IAsyncLifetime
         var tables = (await cx.QueryAsync<string>("SELECT name FROM sqlite_master WHERE type = 'table';")).ToHashSet();
 
         Assert.Superset(
-            new HashSet<string> { "categorie", "equipement", "moniteur", "sortie", "sortie_equipement", "journal", "schema_version", "controle", "atelier", "seance_tiv" },
+            new HashSet<string> { "categorie", "equipement", "moniteur", "sortie", "sortie_equipement", "journal", "schema_version", "controle", "atelier", "seance_tiv", "type_sortie", "seance_equipement" },
             tables);
         Assert.Equal(GestionnaireMigrations.VersionCible, await cx.ExecuteScalarAsync<int>("SELECT MAX(version) FROM schema_version;"));
     }
@@ -36,9 +36,9 @@ public class SchemaTests : IAsyncLifetime
     }
 
     [Fact]
-    public void Scripts_001_a_003_sont_embarques()
+    public void Scripts_001_a_007_sont_embarques()
     {
-        Assert.Equal([1, 2, 3], GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
+        Assert.Equal([1, 2, 3, 4, 5, 6, 7], GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
     }
 
     [Fact]

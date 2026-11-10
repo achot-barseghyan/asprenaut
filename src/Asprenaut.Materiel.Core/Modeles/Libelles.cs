@@ -44,6 +44,8 @@ public static class Libelles
         _ => "Réformé",
     };
 
+    public static string De(MontageDetendeur montage) => montage == MontageDetendeur.Din ? "DIN" : "Étrier";
+
     /// <summary>"1 équipement", "3 équipements".</summary>
     public static string Pluriel(int nombre, string singulier, string? pluriel = null) =>
         $"{nombre} {(nombre > 1 ? pluriel ?? singulier + "s" : singulier)}";

@@ -22,6 +22,12 @@ public interface IEquipementRepository
     Task<long> AjouterAsync(Equipement equipement, CancellationToken ct = default);
 
     Task MettreAJourAsync(Equipement equipement, CancellationToken ct = default);
+
+    /// <summary>
+    /// Compteur d'utilisation : retours scannés de chaque équipement (ou d'un seul) après le jour de son dernier contrôle
+    /// (tous types), ou depuis toujours s'il n'en a pas.
+    /// </summary>
+    Task<IReadOnlyList<CompteurEquipement>> ListerCompteursAsync(long? equipementId, CancellationToken ct = default);
 }
 
 public interface IMoniteurRepository
@@ -58,6 +64,9 @@ public interface ISortieRepository
     /// <summary>Toutes les sorties où cet équipement est passé, la plus récente d'abord.</summary>
     Task<IReadOnlyList<PassageSortie>> ListerPassagesAsync(long equipementId, CancellationToken ct = default);
 
+    /// <summary>Matériel de toutes les sorties datées du <paramref name="du"/> au <paramref name="au"/> inclus (bilan de saison).</summary>
+    Task<IReadOnlyList<PassageBilan>> ListerPassagesPeriodeAsync(DateOnly du, DateOnly au, CancellationToken ct = default);
+
     Task<IReadOnlyList<SortieEquipement>> ListerAffectationsAsync(long sortieId, CancellationToken ct = default);
 
     Task<SortieEquipement?> ObtenirAffectationAsync(long sortieId, long equipementId, CancellationToken ct = default);
@@ -88,6 +97,9 @@ public interface IRevisionRepository
 
     Task<IReadOnlyList<Controle>> ListerControlesAsync(long equipementId, CancellationToken ct = default);
 
+    /// <summary>Contrôles faits du <paramref name="du"/> au <paramref name="au"/> inclus (bilan de saison).</summary>
+    Task<IReadOnlyList<Controle>> ListerControlesPeriodeAsync(DateOnly du, DateOnly au, CancellationToken ct = default);
+
     Task<long> AjouterPassageAtelierAsync(PassageAtelier passage, CancellationToken ct = default);
 
     /// <summary>Passage en cours (non revenu) de cet équipement, ou null.</summary>
@@ -104,8 +116,39 @@ public interface IRevisionRepository
 
     Task<long> AjouterSeanceAsync(SeanceTiv seance, CancellationToken ct = default);
 
+    /// <summary>Équipements ajoutés à une séance TIV (colonne « Planifié »).</summary>
+    Task<IReadOnlyList<long>> ListerPlanifiesAsync(long seanceId, CancellationToken ct = default);
+
+    /// <summary>Ajoute un équipement à une séance (sans doublon).</summary>
+    Task AjouterASeanceAsync(long seanceId, long equipementId, CancellationToken ct = default);
+
+    /// <summary>Retire l'équipement de toutes les séances (intervention faite, ou retiré à la main).</summary>
+    Task RetirerDesSeancesAsync(long equipementId, CancellationToken ct = default);
+
     /// <summary>Première séance à partir de cette date, ou null.</summary>
     Task<SeanceTiv?> ProchaineSeanceAsync(DateOnly aPartirDu, CancellationToken ct = default);
+}
+
+/// <summary>Types de sortie (table type_sortie), avec le nombre de sorties de chacun.</summary>
+public interface ITypeSortieRepository
+{
+    /// <summary>Tous les types, masqués compris, dans l'ordre d'affichage.</summary>
+    Task<IReadOnlyList<TypeDeSortie>> ListerAsync(CancellationToken ct = default);
+
+    Task<TypeDeSortie?> ObtenirAsync(long id, CancellationToken ct = default);
+
+    Task<long> AjouterAsync(TypeDeSortie type, CancellationToken ct = default);
+
+    Task MettreAJourAsync(TypeDeSortie type, CancellationToken ct = default);
+
+    /// <summary>Supprime le type s'il n'est utilisé par aucune sortie ; faux sinon (rien n'est supprimé).</summary>
+    Task<bool> SupprimerAsync(long id, CancellationToken ct = default);
+}
+
+/// <summary>Lecture de toutes les tables pour l'export CSV complet.</summary>
+public interface IExportRepository
+{
+    Task<IReadOnlyList<TableExport>> ListerTablesAsync(CancellationToken ct = default);
 }
 
 public interface IJournalRepository

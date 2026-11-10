@@ -40,7 +40,8 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
 - **Core/Services** : `ServiceScan` (scan départ/retour, retrait), `ServiceSortie` (créer, valider départ, aperçu et clôture),
   `ServiceInventaire`, `ServiceMoniteurs` (cartes, fiche, ajout/modification, saison au 1er septembre), `ServiceRevisions`
   (échéancier, contrôles, atelier, séances TIV), `ServiceReglages`, `ServiceHistorique` (journal lisible, période, regroupement,
-  export CSV, vie d'un équipement). Toutes les règles métier sont ici.
+  export CSV, vie d'un équipement), `ServiceGestion` (mode consultation / mode gestion, code gestionnaire),
+  `ServiceBilan` (bilan de saison pour l'AG). Toutes les règles métier sont ici.
 - **Core/Resultats** : `ResultatScan` (Niveau Succes/Avertissement/Erreur, Message, Equipement, `ActionProposee`, Code, AutreSortieId),
   `ResultatOperation`, `ApercuCloture`. Les cas métier ne lèvent pas d'exception : ils retournent un résultat.
 - **Core/Saisie** : `CodeScanne.Nettoyer` (espaces, préfixe `ASP:`, majuscules) et `AntiRebond` — logique pure, testée.
@@ -54,7 +55,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   de l'écran et dispose le précédent. Écrans dans `Ecrans/` (héritent d'`EcranBase` ; Départ/Retour héritent d'`EcranScanBase`
   qui sérialise les scans et fournit fil d'Ariane + carte d'en-tête via `Composer(corps)`).
 - **Maquette** : https://claude.ai/artifact/8op5sAWFbf4mRQCxzd37aa (Sorties, Nouvelle sortie, Départ, Retour, Inventaire,
-  Moniteurs, Historique, Révisions, Paramètres). Polices Sora/Manrope remplacées par Segoe UI Variable ; pas de fond dégradé ni de bulles animées.
+  Moniteurs, Historique, Bilan de saison, Révisions, Paramètres, Déverrouillage). Polices Sora/Manrope remplacées par Segoe UI Variable ; pas de fond dégradé ni de bulles animées.
 - **Briques d'interface** (`Controles/`) : `Carte`, `ControleDessine` (base des contrôles peints), `AnneauProgression`,
   `IndicateurEtapes`, `PastilleDate`, `Pastille`, `Picto`, `GrilleAdaptative` (colonnes auto, ajuste sa ligne de TableLayoutPanel),
   `Tuile`, `FilAriane`, `BarreRecherche`, `ChampSaisie` (`Icone` optionnelle), `ChampDate` (remplace le DateTimePicker, blanc et en anglais),
@@ -64,6 +65,22 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   la validation passe par un service et ne ferme qu'en cas de succès), `Interrupteur`, `SelecteurNombre`, `CarteSection`, `LigneReglage`,
   `JournalHistorique` (journal par jour dessiné dans un seul contrôle défilant : seule la partie visible est peinte, le clic sur un
   code est retrouvé par calcul — à préférer à un contrôle par ligne dès qu'une liste peut compter des milliers d'éléments).
+  `EcranBilan` : cartes entièrement dessinées (classes imbriquées), placées par `PageBilan` selon la largeur (4/2 chiffres,
+  3/2/1 cartes du bas) ; la page est focusable pour que la molette la fasse défiler, et sa largeur est posée à la main
+  (en Dock Top, la barre de défilement apparue après coup recouvrait le bord droit des cartes).
+- **Impression/** : `DocumentPdf` dessine des `BlocPdf` en GDI+ (thème clair) et les envoie à l'imprimante Windows
+  « Microsoft Print to PDF » (`PrintToFile`), sans bibliothèque ; pagination par blocs, titre gardé avec la suite.
+  `RapportBilan` (bilan pour l'AG), `RegistrePdf` (registre des contrôles, bouton « Registre PDF » de Révisions).
+  `Infrastructure/Fichiers` : `EnregistrerPdfAsync` (imprimante, dialogue, erreurs, ouvrir) et `EnregistrerCsvAsync` (UTF-8 avec BOM).
+- **Exports CSV** : `Core/Saisie/Csv` (séparateur « ; », guillemets, apostrophe devant = + - @). Inventaire : lignes affichées
+  (`ServiceInventaire.ExporterCsv`). Paramètres › Exporter CSV : toutes les tables dans « Export Asprenaut AAAA-MM-JJ »
+  (`ServiceExport` met en forme les valeurs brutes de `ExportRepository` selon `GenreColonne` : dates, états en français).
+- **Révisions** (`EcranRevisions`) : tableau à 4 colonnes dessinées (`ColonneRevision`, 2 sous 1000 px logiques) et cartes
+  (`CarteEquipement`, vrais `BoutonArrondi` liés à `ActionProtegee.Revisions`), filtre par famille, champ de scan qui ouvre
+  le panneau « Ajouter une intervention » en haut de page ; « Fiche › » mène à Historique (vie de l'équipement).
+  `PageRevisions.OnLayout` recommence le placement si la hauteur posée a fait apparaître la barre (mise en page imbriquée ignorée).
+- **Inventaire** : bouton « Modifier » dessiné dans la grille (`Tableaux.PeindreBouton`), double-clic ou Entrée →
+  `FormulaireEquipement.ModifierAsync` → `ServiceInventaire.ModifierAsync`.
 - **Pictogrammes** : `Apparence/Icones.cs`, chemins SVG 24 × 24 de la maquette lus par `CheminSvg` et tracés en GDI+.
 - **Icône de l'application** : `Ressources/Asprenaut.ico` (16 à 256 px ; tailles ≤ 96 en bitmap, 128 et 256 en PNG), fabriquée
   depuis `Ressources/Asprenaut.png` (1024 px). `ApplicationIcon` dans le .csproj pour le .exe, ressource embarquée lue par
@@ -93,9 +110,11 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
 10. Sortie en cours avec du matériel dehors depuis `JoursAvantAlerteRetour` jours → en retard (`ServiceSortie.EstEnRetard`, carte orange).
 11. Révision dans les `JoursAvantRevision` jours (15/30/60) → badge jaune ; dépassée → badge rouge (`ServiceInventaire.EtatDeRevision`).
 12. Contrôles (`ServiceRevisions.EnregistrerControleAsync`) : TIV et requalification pour les blocs (catégorie « Blocs… »),
-    révision pour le reste. Conforme → TIV/révision + 12 mois, requalification + 6 ans (et TIV + 12 mois) ; à surveiller → + 6 mois ;
+    révision pour le reste. Conforme → TIV + 12 mois ; révision + délai de la catégorie (`ServiceRevisions.MoisRevision` :
+    `Reglages.MoisEntreRevisionsParCategorie`, Détendeurs 24, Gilets 0 = pas de date obligatoire, sinon `MoisEntreRevisions` 12) ;
+    requalification + 6 ans (et TIV + 12 mois) ; à surveiller → + 6 mois ;
     refusé → HorsService (impossible si l'équipement est dehors). TIV : inspecteur habilité obligatoire. Pas de date future.
-    Délais dans `Reglages` (`MoisEntreTiv`, `AnneesEntreRequalifications`, `MoisEntreRevisions`, `MoisSiASurveiller`).
+    Délais dans `Reglages` (`MoisEntreTiv`, `AnneesEntreRequalifications`, `MoisEntreRevisions…`, `MoisSiASurveiller`).
 13. Échéancier : en retard / ce mois-ci / sous `JoursAPlanifier` (90) jours / à jour (`ServiceRevisions.EtatDe`). Matériel réformé exclu.
 14. Atelier : l'envoi passe l'équipement HorsService (refusé s'il est dehors, déjà en atelier, ou sans prestataire) ; le retour le remet EnService.
     Séance TIV : date à venir ; blocs à préparer = TIV due au plus tard 30 jours après la séance.
@@ -105,6 +124,69 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     à moins de 15 minutes et le même jour → un seul événement « Retour : 3 équipements ». Périodes : 7 jours, 30 jours, saison
     (1er septembre), tout (5000 entrées au plus). Vie d'un équipement reconstituée depuis sortie_equipement, controle et atelier
     (manquant puis retrouvé si rendu après la clôture), pas depuis le journal.
+16. Mode gestion (`ServiceGestion`, maquette « Déverrouillage » et Paramètres › Sécurité) : sans code gestionnaire, rien n'est verrouillé.
+    Avec un code (4 à 6 chiffres, haché PBKDF2-SHA256 salé dans `Reglages.CodeGestionnaire`), l'appli démarre en consultation ;
+    les `ActionProtegee` (matériel, moniteurs, supprimer une sortie, révisions/atelier/séances, paramètres, restaurer une sauvegarde,
+    et clôturer avec des manquants si `CodePourCloturerAvecManquants`) sont refusées par les services tant que le mode gestion n'est
+    pas ouvert. Tous les paramètres (thème compris) sont protégés. Libres : créer/modifier une sortie en préparation, scanner,
+    valider, clôturer sans manquant, consulter, tester le pistolet, faire une sauvegarde.
+    Retour en consultation après `MinutesDeverrouillage` (5/15/30/60) sans activité ; `VerrouillerALaFermeture` coupé → le mode
+    gestion ouvert est repris au lancement (`DeverrouilleAuDemarrage`). Changer ou retirer le code demande l'ancien.
+    5 codes faux d'affilée → saisie bloquée 1 minute. Les services reçoivent `ServiceGestion? gestion = null` (null = pas de contrôle,
+    pour les tests qui n'en ont pas besoin). App : `GardeGestion.Exiger(...)` avant chaque action protégée (pavé
+    `DialogueDeverrouillage`, chiffres lus d'après le caractère tapé : AZERTY), `CarteModeGestion` dans le menu, `FiltreActivite`.
+    Visuel « verrouillé » : `GardeGestion.Lier(controle, action)` met `Verrouille` à jour à chaque changement de mode —
+    cadenas après le texte d'un `BoutonArrondi`, badge « Code requis » d'une `CarteSection`. Tout nouveau bouton d'action protégée doit être lié.
+    Code oublié : supprimer la ligne `CodeGestionnaire` de `parametres.json` (application fermée).
+17. Bilan de saison (`ServiceBilan`, consultation libre) : saison précédente ou en cours (1er septembre → 31 août), seules les
+    sorties parties comptent (en cours ou clôturées, datées dans la saison). Mois de septembre à juin, juillet/août seulement s'il
+    y a eu des sorties. Manquant à la clôture : perdu s'il l'est encore, retrouvé s'il a été rendu après la clôture.
+    Tension = part du stock d'un groupe (catégorie + taille, hors réformé, au moins `StockMinTension` = 2) sortie lors de la sortie
+    la plus chargée ; rupture = tout le groupe dehors. Peu sortis : en service, moins de `SeuilPeuSorti` (3) sorties.
+    Contrôles par famille : TIV, requalifications, puis catégorie pour les révisions. Requêtes : `ListerPassagesPeriodeAsync`,
+    `ListerControlesPeriodeAsync`.
+18. Modifier un équipement (`ServiceInventaire.ModifierAsync`, action protégée Materiel) : mêmes contrôles qu'à la création
+    sauf les dates passées (acceptées) ; pas hors service ni réformé s'il est dehors ; état inchangeable en atelier (le retour
+    d'atelier le remet en service). Journal `EquipementModifie` avec la liste des champs changés. Pas de suppression : on réforme.
+19. Compteur d'utilisation (`ServiceCompteur`, Paramètres, action protégée) : chaque retour scanné ajoute les utilisations de
+    sa sortie (`Sortie.Utilisations`, 1 à 10) depuis le jour du dernier contrôle (tous types ; `IEquipementRepository.ListerCompteursAsync`
+    fait la somme). Seuil (en utilisations ; noms `SeuilsSorties` / `Sorties` gardés pour parametres.json) : propre au code, sinon au
+    modèle (nom exact de l'équipement), sinon à la catégorie (0 = désactivé ; Détendeurs et Gilets 100 par défaut).
+    À 90 % (`PrevenirAvantSeuil`) → « à planifier » dans Révisions (ligne `LigneEcheance.Usage` « 92/100 utilisations ») ;
+    au seuil → en retard, départ avec avertissement, ou refusé si `BloquerAuSeuil` (coupé par défaut). Un bloc repart à zéro à sa TIV.
+20. Registre des contrôles (`ServiceRevisions.RegistreAsync`) : tous les blocs (même sans contrôle), puis le matériel avec un
+    contrôle ou une révision prévue ; réformés seulement s'ils ont un historique.
+21. Types de sortie (`ServiceTypesSortie`, Paramètres › Types de sortie, action protégée Parametres) : des données
+    (`TypeDeSortie` : nom, pictogramme, actif, ordre), plus l'enum. Nom obligatoire, unique sans tenir compte des majuscules,
+    40 caractères au plus. Utilisé par une sortie → pas de suppression (la requête SQL re-vérifie), seulement masqué : plus
+    proposé (tuiles de « Nouvelle sortie »), gardé par ses sorties et accepté quand on les modifie. Toujours au moins un
+    type proposé. L'enum `TypeSortie` n'est plus que la famille / pictogramme du type (colonne sortie.type, CHECK inchangé) ;
+    `NouvelleSortie.TypeId` choisit le type (sans lui : premier type proposé de la famille). Afficher `SortieResume.LibelleType`,
+    jamais `Libelles.De(s.Type)`. Bilan, historique et export lisent le nom du type.
+    Utilisations (migration 006) : chaque type a ses utilisations par sortie (piscine, fosse, baptême, autre 1 ; lac 2 ; mer 4 ;
+    nouveau type selon son pictogramme, `TypeDeSortie.UtilisationsParDefaut`), réglées dans Paramètres › Types de sortie et
+    utilisations (`ChangerUtilisationsAsync`, 1 à 10, sans toucher aux sorties existantes). Une sortie prend celles de son type,
+    modifiables à la création et en modification (`NouvelleSortie.Utilisations`) ; en modification sans valeur, elle garde les
+    siennes sauf si le type change. Liste des types : corbeille rouge si jamais utilisé, sinon bouton œil
+    (`BasculerMasqueAsync`) pour masquer / réafficher ; type masqué grisé « · masqué ».
+22. Fiche matériel (registres « Stab » et « Détendeurs » du club, migration 005) : marque, modèle, n° de série pour tous (premier
+    étage pour un détendeur) ; détendeur seulement : montage `MontageDetendeur` (Étrier / DIN), deuxième étage (marque, modèle, n°),
+    D.S (oui / non / non renseigné), mano (marque), octopus (modèle, vide = sans) et son n°. Ces champs sont vidés pour les
+    autres catégories (`ServiceInventaire.Fiche`). « Date de la dernière révision » saisie dans la fiche (hors blocs) : pas dans le
+    futur, pas avant une révision déjà enregistrée ; elle devient un contrôle « révision conforme » (note « Saisie dans l'inventaire »)
+    et fixe « à réviser avant » (+ délai de la catégorie, même déjà passé) ; gilets : la date tapée est gardée.
+    Identification calculée (`ServiceInventaire.Identification`) : « (Stab) S01 taille XL {NomClub} {NumeroClub} »,
+    « (Detendeur) A01 … » ; `Reglages.NumeroClub` dans Paramètres › Club. Recherche aussi par marque, modèle et numéros de série.
+    Inventaire : colonnes selon la catégorie choisie (générales, Gilets, Détendeurs en largeur fixe avec défilement horizontal),
+    matériel réformé barré et grisé. `FenetreFormulaire` défile quand elle dépasse la hauteur de l'écran ; `DeuxChamps` retourne
+    sa rangée (masquable, libellés via `FenetreFormulaire.Libelles`).
+23. Tableau des révisions (`ServiceRevisions.TableauAsync`, migration 007) : À prévoir (échéance non à jour ou 90 % du seuil
+    d'utilisations, équipement EnService, ni en atelier ni déjà planifié) → Planifié (blocs ajoutés à la prochaine séance TIV,
+    table seance_equipement ; `AjouterASeanceAsync` refusé sans séance ou pour un non-bloc) → En atelier (passages ouverts) →
+    Fait (contrôles des `JoursFait` = 30 derniers jours, 12 au plus). Un contrôle enregistré retire l'équipement des séances.
+    « Bloqué pour les sorties » suit les réglages (`DepartSiRevisionDepassee`, `BloquerAuSeuil`), sans les changer.
+    Intervention (`EnregistrerInterventionAsync`) : contrôle avec nature (`NaturesPour`) et intervenant (controle.nature /
+    intervenant) ; depuis l'atelier, ferme le passage et remet en service, sauf refusé (reste HorsService).
 
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
@@ -122,12 +204,18 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
 - Tables snake_case : categorie, equipement, moniteur, sortie, sortie_equipement, journal, schema_version ;
   depuis 002 : controle, atelier (index partiel `ux_atelier_en_cours`), seance_tiv, colonnes moniteur.telephone / inspecteur_tiv,
   equipement.date_requalification ; depuis 003 : journal.equipement_id / sortie_id (sans clé étrangère, anciennes lignes
-  complétées d'après leur texte).
+  complétées d'après leur texte) ; depuis 004 : type_sortie (6 types d'origine), sortie.type_sortie_id (sorties existantes
+  reliées d'après leur famille). Pas de reconstruction de table : avec les clés étrangères actives, un DROP de sortie
+  supprimerait en cascade son matériel (sortie_equipement) ; depuis 005 : colonnes de fiche de equipement (marque, modele,
+  numero_serie, montage CHECK Etrier/Din, marque/modele/numero_deuxieme_etage, direct_system 0/1, manometre, octopus, numero_octopus) ;
+  depuis 006 : type_sortie.utilisations et sortie.utilisations (1 à 10, sorties existantes reprises de leur type) ;
+  depuis 007 : seance_equipement (blocs planifiés à une séance TIV, ON DELETE CASCADE), controle.nature et controle.intervenant.
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/004_xxx.sql`, sans jamais modifier un script déjà livré.
+- Nouvelle migration : ajouter `Migrations/008_xxx.sql`, sans jamais modifier un script déjà livré
+  (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.
 - Données de démo : `DonneesDemo.ChargerSiVideAsync`, appelé seulement sous `#if DEBUG` si la base est vide.

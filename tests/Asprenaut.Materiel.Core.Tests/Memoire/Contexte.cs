@@ -21,7 +21,11 @@ public sealed class Contexte
     public RevisionRepositoryMemoire DepotRevisions { get; }
     public ServiceMoniteurs Moniteurs { get; }
     public ServiceHistorique Historique { get; }
+    public ServiceGestion Gestion { get; }
+    public ServiceBilan Bilan { get; }
+    public ServiceCompteur Compteur { get; }
     public Moniteur Pascal { get; }
+    public ServiceTypesSortie TypesSortie { get; }
 
     public Contexte()
     {
@@ -29,15 +33,32 @@ public sealed class Contexte
         var sorties = new SortieRepositoryMemoire(Db);
         var journal = new JournalRepositoryMemoire(Db);
         var moniteurs = new MoniteurRepositoryMemoire(Db);
-        Scan = new ServiceScan(equipements, sorties, journal, Horloge, Reglages);
-        Sorties = new ServiceSortie(sorties, moniteurs, journal, Horloge, Reglages);
-        Inventaire = new ServiceInventaire(equipements, new CategorieRepositoryMemoire(Db), journal, Horloge, Reglages);
-        ServiceReglages = new ServiceReglages(Reglages, Stockage, Sauvegardes);
-        DepotRevisions = new RevisionRepositoryMemoire(Db);
         var categories = new CategorieRepositoryMemoire(Db);
-        Revisions = new ServiceRevisions(equipements, categories, sorties, DepotRevisions, moniteurs, journal, Horloge, Reglages);
-        Moniteurs = new ServiceMoniteurs(moniteurs, sorties, journal, Horloge);
+        DepotRevisions = new RevisionRepositoryMemoire(Db);
+        Gestion = new ServiceGestion(Reglages, Stockage, Horloge);
+        Compteur = new ServiceCompteur(Reglages, Stockage, equipements, categories, Gestion);
+        Scan = new ServiceScan(equipements, sorties, journal, Horloge, Reglages, Compteur);
+        var types = new TypeSortieRepositoryMemoire(Db);
+        TypesSortie = new ServiceTypesSortie(types, Gestion);
+        Sorties = new ServiceSortie(sorties, moniteurs, journal, Horloge, Reglages, Gestion, types);
+        Inventaire = new ServiceInventaire(equipements, categories, journal, Horloge, Reglages, Gestion, sorties, DepotRevisions);
+        ServiceReglages = new ServiceReglages(Reglages, Stockage, Sauvegardes, Gestion);
+        Revisions = new ServiceRevisions(equipements, categories, sorties, DepotRevisions, moniteurs, journal, Horloge, Reglages, Gestion, Compteur);
+        Moniteurs = new ServiceMoniteurs(moniteurs, sorties, journal, Horloge, Gestion);
         Historique = new ServiceHistorique(journal, equipements, categories, sorties, DepotRevisions, moniteurs, Horloge, Reglages);
+        Bilan = new ServiceBilan(sorties, DepotRevisions, equipements, Horloge);
+
+        // Les six types d'origine (comme la migration 004).
+        (string Nom, TypeSortie Pictogramme)[] typesOrigine =
+            [("Piscine", TypeSortie.Piscine), ("Fosse", TypeSortie.Fosse), ("Mer", TypeSortie.Mer), ("Lac", TypeSortie.Lac), ("Baptême", TypeSortie.Bapteme), ("Autre", TypeSortie.Autre)];
+        for (var i = 0; i < typesOrigine.Length; i++)
+        {
+            Db.TypesSortie.Add(new TypeDeSortie
+            {
+                Id = Db.ProchainId(), Nom = typesOrigine[i].Nom, Pictogramme = typesOrigine[i].Pictogramme, Ordre = i + 1,
+                Utilisations = TypeDeSortie.UtilisationsParDefaut(typesOrigine[i].Pictogramme),
+            });
+        }
 
         Db.Categories.Add(new Categorie { Id = Db.ProchainId(), Nom = "Blocs" });
         Db.Categories.Add(new Categorie { Id = Db.ProchainId(), Nom = "Détendeurs" });

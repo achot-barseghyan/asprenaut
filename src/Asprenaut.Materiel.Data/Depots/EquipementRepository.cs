@@ -19,7 +19,7 @@ public sealed class CategorieRepository(FabriqueConnexion fabrique) : ICategorie
 public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipementRepository
 {
     private const string Colonnes =
-        "id, code, libelle, categorie_id, taille, etat, date_prochaine_revision, date_requalification, notes, cree_le";
+        "id, code, libelle, categorie_id, taille, etat, date_prochaine_revision, date_requalification, notes, cree_le, " + ColonnesFiche;
 
     public async Task<Equipement?> ObtenirAsync(long id, CancellationToken ct = default)
     {
@@ -37,9 +37,12 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
 
     public async Task<IReadOnlyList<LigneInventaire>> ListerInventaireAsync(string? recherche, long? categorieId, CancellationToken ct = default)
     {
-        const string sql = """
+        const string sql = $"""
             SELECT e.id AS equipement_id, e.code, e.libelle, e.categorie_id, c.nom AS categorie,
                    e.taille, e.etat, e.date_prochaine_revision, e.date_requalification,
+                   e.marque, e.modele, e.numero_serie, e.montage, e.marque_deuxieme_etage, e.modele_deuxieme_etage,
+                   e.numero_deuxieme_etage, e.direct_system, e.manometre, e.octopus, e.numero_octopus,
+                   (SELECT MAX(ct.date_controle) FROM controle ct WHERE ct.equipement_id = e.id AND ct.type = 'Revision') AS derniere_revision,
                    s.id AS sortie_en_cours_id, s.intitule AS sortie_en_cours_intitule,
                    EXISTS (SELECT 1 FROM sortie_equipement m
                            WHERE m.equipement_id = e.id AND m.statut = 'Manquant') AS est_manquant
@@ -47,7 +50,9 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
             JOIN categorie c ON c.id = e.categorie_id
             LEFT JOIN sortie_equipement se ON se.equipement_id = e.id AND se.statut = 'Dehors'
             LEFT JOIN sortie s ON s.id = se.sortie_id
-            WHERE (@motif IS NULL OR e.code LIKE @motif OR e.libelle LIKE @motif OR e.taille LIKE @motif)
+            WHERE (@motif IS NULL OR e.code LIKE @motif OR e.libelle LIKE @motif OR e.taille LIKE @motif
+                   OR e.marque LIKE @motif OR e.modele LIKE @motif OR e.numero_serie LIKE @motif
+                   OR e.numero_deuxieme_etage LIKE @motif OR e.numero_octopus LIKE @motif)
               AND (@categorieId IS NULL OR e.categorie_id = @categorieId)
             ORDER BY e.code;
             """;
@@ -59,9 +64,9 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
 
     public async Task<long> AjouterAsync(Equipement equipement, CancellationToken ct = default)
     {
-        const string sql = """
-            INSERT INTO equipement (code, libelle, categorie_id, taille, etat, date_prochaine_revision, date_requalification, notes, cree_le)
-            VALUES (@Code, @Libelle, @CategorieId, @Taille, @Etat, @DateProchaineRevision, @DateRequalification, @Notes, @CreeLe)
+        const string sql = $"""
+            INSERT INTO equipement (code, libelle, categorie_id, taille, etat, date_prochaine_revision, date_requalification, notes, cree_le, {ColonnesFiche})
+            VALUES (@Code, @Libelle, @CategorieId, @Taille, @Etat, @DateProchaineRevision, @DateRequalification, @Notes, @CreeLe, {ValeursFiche})
             RETURNING id;
             """;
         await using var cx = await fabrique.OuvrirAsync(ct);
@@ -74,11 +79,34 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
         const string sql = """
             UPDATE equipement
             SET code = @Code, libelle = @Libelle, categorie_id = @CategorieId, taille = @Taille, etat = @Etat,
-                date_prochaine_revision = @DateProchaineRevision, date_requalification = @DateRequalification, notes = @Notes
+                date_prochaine_revision = @DateProchaineRevision, date_requalification = @DateRequalification, notes = @Notes,
+                marque = @Marque, modele = @Modele, numero_serie = @NumeroSerie, montage = @Montage,
+                marque_deuxieme_etage = @MarqueDeuxiemeEtage, modele_deuxieme_etage = @ModeleDeuxiemeEtage,
+                numero_deuxieme_etage = @NumeroDeuxiemeEtage, direct_system = @DirectSystem, manometre = @Manometre,
+                octopus = @Octopus, numero_octopus = @NumeroOctopus
             WHERE id = @Id;
             """;
         await using var cx = await fabrique.OuvrirAsync(ct);
         await cx.ExecuteAsync(new CommandDefinition(sql, Parametres(equipement), cancellationToken: ct));
+    }
+
+    public async Task<IReadOnlyList<CompteurEquipement>> ListerCompteursAsync(long? equipementId, CancellationToken ct = default)
+    {
+        // Chaque retour scanné ajoute les utilisations de sa sortie (1 en piscine, 4 en mer...).
+        // Contrôle daté sans heure : les retours du jour du contrôle sont comptés comme faits avant lui (fin de journée).
+        const string sql = """
+            SELECT e.id AS equipement_id,
+                   (SELECT COALESCE(SUM(s.utilisations), 0) FROM sortie_equipement se
+                    JOIN sortie s ON s.id = se.sortie_id
+                    WHERE se.equipement_id = e.id AND se.scanne_retour_le IS NOT NULL
+                      AND se.scanne_retour_le > COALESCE((SELECT MAX(c.date_controle) FROM controle c WHERE c.equipement_id = e.id) || 'T23:59:59.999Z', '')
+                   ) AS utilisations
+            FROM equipement e
+            WHERE @equipementId IS NULL OR e.id = @equipementId;
+            """;
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        var lignes = await cx.QueryAsync<CompteurEquipement>(new CommandDefinition(sql, new { equipementId }, cancellationToken: ct));
+        return lignes.AsList();
     }
 
     private static object Parametres(Equipement e) => new
@@ -93,7 +121,25 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
         DateRequalification = FormatIso.Ecrire(e.DateRequalification),
         e.Notes,
         CreeLe = FormatIso.Ecrire(e.CreeLe),
+        e.Marque,
+        e.Modele,
+        e.NumeroSerie,
+        Montage = e.Montage?.ToString(),
+        e.MarqueDeuxiemeEtage,
+        e.ModeleDeuxiemeEtage,
+        e.NumeroDeuxiemeEtage,
+        DirectSystem = e.DirectSystem is { } ds ? (ds ? 1 : 0) : (int?)null,
+        e.Manometre,
+        e.Octopus,
+        e.NumeroOctopus,
     };
+
+    /// <summary>Colonnes de la fiche matériel (migration 005), dans l'ordre des paramètres d'écriture.</summary>
+    private const string ColonnesFiche =
+        "marque, modele, numero_serie, montage, marque_deuxieme_etage, modele_deuxieme_etage, numero_deuxieme_etage, direct_system, manometre, octopus, numero_octopus";
+
+    private const string ValeursFiche =
+        "@Marque, @Modele, @NumeroSerie, @Montage, @MarqueDeuxiemeEtage, @ModeleDeuxiemeEtage, @NumeroDeuxiemeEtage, @DirectSystem, @Manometre, @Octopus, @NumeroOctopus";
 }
 
 public sealed class MoniteurRepository(FabriqueConnexion fabrique) : IMoniteurRepository
@@ -161,7 +207,7 @@ public sealed class JournalRepository(FabriqueConnexion fabrique) : IJournalRepo
         const string sql = """
             SELECT j.id, j.horodatage, j.action, j.details, j.equipement_id, j.sortie_id,
                    e.code, e.libelle, c.nom AS categorie,
-                   s.intitule AS sortie_intitule, s.date_sortie AS sortie_date, s.type AS sortie_type, s.lieu AS sortie_lieu,
+                   s.intitule AS sortie_intitule, s.date_sortie AS sortie_date, s.type AS sortie_type, ts.nom AS sortie_type_nom, s.lieu AS sortie_lieu,
                    TRIM(m.prenom || ' ' || m.nom) AS moniteur_nom,
                    (SELECT COUNT(*) FROM sortie_equipement se WHERE se.sortie_id = j.sortie_id) AS sortie_nb_equipements,
                    (SELECT COUNT(*) FROM sortie_equipement se WHERE se.sortie_id = j.sortie_id AND se.statut = 'Manquant') AS sortie_nb_manquants
@@ -170,6 +216,7 @@ public sealed class JournalRepository(FabriqueConnexion fabrique) : IJournalRepo
             LEFT JOIN categorie c ON c.id = e.categorie_id
             LEFT JOIN sortie s ON s.id = j.sortie_id
             LEFT JOIN moniteur m ON m.id = s.moniteur_id
+            LEFT JOIN type_sortie ts ON ts.id = s.type_sortie_id
             WHERE @depuis IS NULL OR j.horodatage >= @depuis
             ORDER BY j.horodatage DESC, j.id DESC
             LIMIT @nombreMax;

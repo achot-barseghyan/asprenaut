@@ -6,6 +6,12 @@ public sealed class Sortie
     public long Id { get; set; }
     public DateOnly DateSortie { get; set; }
     public TypeSortie Type { get; set; }
+
+    /// <summary>Type de sortie choisi (table type_sortie) ; null pour une sortie d'avant la migration 004 non reliée.</summary>
+    public long? TypeId { get; set; }
+
+    /// <summary>Utilisations ajoutées au compteur de chaque équipement rentré (défaut : celles du type ; 2 plongées dans la journée : 2).</summary>
+    public int Utilisations { get; set; } = 1;
     public string Intitule { get; set; } = "";
     public long MoniteurId { get; set; }
     public string Lieu { get; set; } = "";

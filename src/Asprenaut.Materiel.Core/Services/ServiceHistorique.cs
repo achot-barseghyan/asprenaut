@@ -1,4 +1,4 @@
-using System.Text;
+
 using Asprenaut.Materiel.Core.Abstractions;
 using Asprenaut.Materiel.Core.Modeles;
 using Asprenaut.Materiel.Core.Saisie;
@@ -48,6 +48,8 @@ public sealed class ServiceHistorique(
         [ActionsJournal.EnvoiAtelier] = (TypeEvenement.Revision, "Envoi en atelier"),
         [ActionsJournal.RetourAtelier] = (TypeEvenement.Revision, "Retour d'atelier"),
         [ActionsJournal.SeanceTivPlanifiee] = (TypeEvenement.Revision, "Séance TIV planifiée"),
+        [ActionsJournal.AjoutSeanceTiv] = (TypeEvenement.Revision, "Ajouté à la séance TIV"),
+        [ActionsJournal.RetraitSeanceTiv] = (TypeEvenement.Revision, "Retiré de la séance TIV"),
         [ActionsJournal.MoniteurCree] = (TypeEvenement.Autre, "Moniteur ajouté"),
         [ActionsJournal.MoniteurModifie] = (TypeEvenement.Autre, "Moniteur modifié"),
         ["DonneesDemo"] = (TypeEvenement.Autre, "Données de démonstration"),
@@ -150,7 +152,7 @@ public sealed class ServiceHistorique(
             ActionsJournal.SortieCreee or ActionsJournal.SortieModifiee =>
                 (l.SortieIntitule, l.SortieId is null ? "" : Joindre(
                     l.SortieDate?.ToString("dd/MM", Libelles.Culture),
-                    l.SortieLieu is { Length: > 0 } lieu ? lieu : l.SortieType is { } t ? Libelles.De(t) : null,
+                    l.SortieLieu is { Length: > 0 } lieu ? lieu : l.SortieTypeNom is { Length: > 0 } nomType ? nomType : l.SortieType is { } t ? Libelles.De(t) : null,
                     l.MoniteurNom)),
             ActionsJournal.SortieCloturee =>
                 (l.SortieIntitule, l.SortieId is null ? "" : Joindre(
@@ -159,7 +161,8 @@ public sealed class ServiceHistorique(
                     l.MoniteurNom)),
             ActionsJournal.EquipementCree => (equipement, l.EquipementId is null ? "" : Joindre("Nouvel équipement", l.Categorie)),
             ActionsJournal.EquipementModifie => (equipement, l.Categorie ?? ""),
-            ActionsJournal.ControleEnregistre or ActionsJournal.EnvoiAtelier or ActionsJournal.RetourAtelier =>
+            ActionsJournal.ControleEnregistre or ActionsJournal.EnvoiAtelier or ActionsJournal.RetourAtelier
+                or ActionsJournal.AjoutSeanceTiv or ActionsJournal.RetraitSeanceTiv =>
                 (equipement, SansCode(l.Details, l.Code)),
             _ => (null, ""),
         };
@@ -216,24 +219,17 @@ public sealed class ServiceHistorique(
     }
 
     /// <summary>Export CSV (séparateur « ; », lisible par Excel en français).</summary>
-    public static string ExporterCsv(IEnumerable<EvenementHistorique> evenements)
-    {
-        var csv = new StringBuilder();
-        csv.AppendLine("Date;Heure;Type;Événement;Détail;Code");
-        foreach (var e in evenements)
+    public static string ExporterCsv(IEnumerable<EvenementHistorique> evenements) => Csv.Ecrire(
+        ["Date", "Heure", "Type", "Événement", "Détail", "Code"],
+        evenements.Select(e => new[]
         {
-            csv.AppendJoin(';',
-                e.Moment.ToString("dd/MM/yyyy", Libelles.Culture),
-                e.Moment.ToString("HH:mm", Libelles.Culture),
-                Champ(Libelle(e.Type)),
-                Champ(e.Titre),
-                Champ(e.Detail),
-                Champ(e.Code ?? ""));
-            csv.AppendLine();
-        }
-
-        return csv.ToString();
-    }
+            e.Moment.ToString("dd/MM/yyyy", Libelles.Culture),
+            e.Moment.ToString("HH:mm", Libelles.Culture),
+            Libelle(e.Type),
+            e.Titre,
+            e.Detail,
+            e.Code ?? "",
+        }));
 
     /// <summary>Nom de fichier proposé : historique_2026-11-09.csv.</summary>
     public string NomFichierExport() => $"historique_{horloge.AujourdHui:yyyy-MM-dd}.csv";
@@ -406,7 +402,4 @@ public sealed class ServiceHistorique(
 
     private static string Majuscule(string texte) =>
         texte.Length == 0 ? texte : char.ToUpper(texte[0], Libelles.Culture) + texte[1..];
-
-    private static string Champ(string valeur) =>
-        valeur.IndexOfAny([';', '"', '\n', '\r']) >= 0 ? $"\"{valeur.Replace("\"", "\"\"", StringComparison.Ordinal)}\"" : valeur;
 }

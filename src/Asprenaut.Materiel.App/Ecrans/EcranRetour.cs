@@ -15,6 +15,8 @@ public sealed class EcranRetour : EcranScanBase
     private readonly ServiceScan _scan;
     private readonly AnneauProgression _anneau = new(104);
     private readonly BoutonArrondi _cloturer = new("Clôturer la sortie", StyleBouton.Secondaire);
+    private readonly Action _actualiserCloture;
+    private int _nbDehors;
     private readonly Label _conseil = Ui.Libelle("", Theme.Police(9.75f), Theme.TexteSecondaireClair);
     private readonly BoutonArrondi _ajouter = new("+ Ajouter du matériel à cette sortie", StyleBouton.Lien);
     private readonly Pastille _compteARendre = Compteur(Theme.Depart, Theme.DepartClair);
@@ -24,9 +26,13 @@ public sealed class EcranRetour : EcranScanBase
     private readonly FiltreCategories _filtre = new(Theme.Depart, "Type") { Margin = new Padding(0, 0, 0, 12) };
     private IReadOnlyList<LigneSortie> _lignes = [];
 
-    public EcranRetour(ServiceSortie sorties, ServiceScan scan, ServiceReglages reglages, INavigation navigation)
+    private readonly GardeGestion _garde;
+
+    public EcranRetour(ServiceSortie sorties, ServiceScan scan, ServiceReglages reglages, INavigation navigation, GardeGestion garde)
         : base(navigation, reglages, ModeScan.Retour)
     {
+        _garde = garde;
+        _actualiserCloture = _garde.Lier(_cloturer, ActionProtegee.CloturerAvecManquants, () => _nbDehors > 0);
         _sorties = sorties;
         _scan = scan;
         _cloturer.Click += (_, _) => Executer(CloturerAsync);
@@ -111,6 +117,8 @@ public sealed class EcranRetour : EcranScanBase
 
         var toutRendu = aRendre.Count == 0;
         _cloturer.Visible = !cloturee;
+        _nbDehors = resume.NbDehors;
+        _actualiserCloture(); // Cadenas seulement s'il resterait des manquants (et si le réglage le demande).
         _cloturer.Style = toutRendu ? StyleBouton.Retour : StyleBouton.Secondaire;
         _ajouter.Visible = resume.Statut == StatutSortie.EnCours;
         _conseil.Text = cloturee
@@ -179,6 +187,12 @@ public sealed class EcranRetour : EcranScanBase
     {
         var apercu = await _sorties.ApercuClotureAsync(SortieId);
         if (apercu.ConfirmationNecessaire && !Dialogues.Confirmer(FindForm(), apercu.MessageConfirmation))
+        {
+            return;
+        }
+
+        // Réglage « Code pour clôturer avec des manquants » : le garde ne demande le code que s'il est activé.
+        if (apercu.NbManquants > 0 && !_garde.Exiger(FindForm(), ActionProtegee.CloturerAvecManquants, "Clôturer avec du matériel manquant"))
         {
             return;
         }

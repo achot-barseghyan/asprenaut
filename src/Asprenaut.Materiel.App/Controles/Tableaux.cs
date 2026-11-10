@@ -48,6 +48,34 @@ public static class Tableaux
         e.Handled = true;
     }
 
+    /// <summary>
+    /// Bouton dessiné à droite de la cellule (« Enregistrer », « Modifier »). Le clic est géré par CellClick de la grille ;
+    /// la colonne entière est la cible, assez haute (lignes de 60 px) pour un doigt ou une souris peu précise.
+    /// </summary>
+    public static void PeindreBouton(DataGridViewCellPaintingEventArgs e, string texte)
+    {
+        if (e.Graphics is not { } g)
+        {
+            return;
+        }
+
+        e.PaintBackground(e.CellBounds, (e.State & DataGridViewElementStates.Selected) != 0);
+        Dessin.Qualite(g);
+        var hb = 40f * g.DpiY / 96f;
+        var lb = Math.Min(e.CellBounds.Width - 10, 104f * g.DpiX / 96f);
+        var r = new RectangleF(e.CellBounds.Right - lb - 6, e.CellBounds.Top + ((e.CellBounds.Height - hb) / 2), lb, hb);
+        using (var chemin = Dessin.Arrondi(r, 12f * g.DpiX / 96f))
+        using (var fond = new SolidBrush(Theme.Teinte(Theme.Accent, 0.12f)))
+        using (var bord = new Pen(Theme.Teinte(Theme.Accent, 0.30f)))
+        {
+            g.FillPath(fond, chemin);
+            g.DrawPath(bord, chemin);
+        }
+
+        Dessin.Texte(g, texte, Theme.PoliceTitre(9f), Rectangle.Round(r), Theme.AccentClair, centre: true);
+        e.Handled = true;
+    }
+
     /// <summary>Pictogramme dans un carré teinté, puis texte (première colonne de l'inventaire).</summary>
     public static void PeindreIconeTexte(DataGridViewCellPaintingEventArgs e, string icone, string texte)
     {

@@ -46,8 +46,17 @@ public sealed class Reglages
     /// <summary>Requalification d'un bloc dont la TIV annuelle est faite : tous les 6 ans.</summary>
     public int AnneesEntreRequalifications { get; set; } = 6;
 
-    /// <summary>Révision des autres équipements (délai du fabricant par défaut).</summary>
+    /// <summary>Révision des équipements dont la catégorie n'a pas de délai propre (délai du fabricant par défaut).</summary>
     public int MoisEntreRevisions { get; set; } = 12;
+
+    /// <summary>
+    /// Délai de révision propre à une catégorie, en mois : détendeurs tous les 2 ans ; 0 = pas de date obligatoire (gilets).
+    /// </summary>
+    public Dictionary<string, int> MoisEntreRevisionsParCategorie { get; set; } = new()
+    {
+        ["Détendeurs"] = 24,
+        ["Gilets"] = 0,
+    };
 
     /// <summary>Contrôle « à surveiller » : contrôle anticipé dans ce nombre de mois.</summary>
     public int MoisSiASurveiller { get; set; } = 6;
@@ -55,10 +64,52 @@ public sealed class Reglages
     /// <summary>Échéancier : une échéance dans ce nombre de jours est « à planifier ».</summary>
     public int JoursAPlanifier { get; set; } = 90;
 
+    // --- Compteur d'utilisation (voir ServiceCompteur) ---
+
+    /// <summary>Catégories qui ont un seuil de sorties réglable, dans l'ordre de l'écran Paramètres.</summary>
+    public static readonly string[] CategoriesCompteur = ["Détendeurs", "Gilets", "Ordinateurs", "Blocs"];
+
+    /// <summary>Révision après ce nombre de sorties depuis le dernier contrôle, par catégorie ; 0 = désactivé.</summary>
+    public Dictionary<string, int> SeuilsSorties { get; set; } = new()
+    {
+        ["Détendeurs"] = 100,
+        ["Gilets"] = 100,
+        ["Ordinateurs"] = 0,
+        ["Blocs"] = 0,
+    };
+
+    /// <summary>Seuils propres à un modèle ou à un équipement (notice du fabricant) : ils remplacent celui de la catégorie.</summary>
+    public List<SeuilSpecifique> SeuilsSpecifiques { get; set; } = [];
+
+    /// <summary>À 90 % du seuil, l'équipement passe « à planifier » dans Révisions.</summary>
+    public bool PrevenirAvantSeuil { get; set; } = true;
+
+    /// <summary>Seuil atteint : refusé au départ tant que la révision n'est pas enregistrée (sinon, avertissement).</summary>
+    public bool BloquerAuSeuil { get; set; }
+
     // --- Données ---
 
     /// <summary>Dossier des sauvegardes ; null = "Sauvegardes" à côté de la base.</summary>
     public string? DossierSauvegardes { get; set; }
+
+    // --- Sécurité · mode gestion (voir ServiceGestion) ---
+
+    public static readonly int[] MinutesDeverrouillagePossibles = [5, 15, 30, 60];
+
+    /// <summary>Code gestionnaire haché (PBKDF2, jamais le code lui-même) ; null = aucun code, rien n'est verrouillé.</summary>
+    public string? CodeGestionnaire { get; set; }
+
+    /// <summary>Sans activité pendant ce nombre de minutes, l'application repasse en consultation.</summary>
+    public int MinutesDeverrouillage { get; set; } = 15;
+
+    /// <summary>Au prochain lancement, l'application démarre en consultation (sinon elle reprend le mode gestion laissé ouvert).</summary>
+    public bool VerrouillerALaFermeture { get; set; } = true;
+
+    /// <summary>Clôturer une sortie en laissant du matériel manquant demande le code.</summary>
+    public bool CodePourCloturerAvecManquants { get; set; }
+
+    /// <summary>Mode gestion ouvert à la fermeture (utilisé seulement si <see cref="VerrouillerALaFermeture"/> est coupé).</summary>
+    public bool DeverrouilleAuDemarrage { get; set; }
 
     // --- Affichage ---
 
@@ -70,4 +121,7 @@ public sealed class Reglages
     public string NomClub { get; set; } = "Asprenaut";
 
     public string ResponsableMateriel { get; set; } = "";
+
+    /// <summary>Numéro d'affiliation FFESSM (ex. « 14 71-0025 »), repris dans l'identification marquée sur le matériel.</summary>
+    public string NumeroClub { get; set; } = "";
 }

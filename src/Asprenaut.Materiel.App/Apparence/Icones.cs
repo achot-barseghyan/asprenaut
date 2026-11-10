@@ -35,13 +35,19 @@ public static class Icones
     public const string Inventaire = "M4 4h16v16H4zM4 10h16M10 10v10";
     public const string Moniteurs = "M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 20c0-3 3-5 6-5s6 2 6 5M16 5a3 3 0 0 1 0 6M18 15c2 .6 3 2.4 3 5";
     public const string Historique = "M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 8v4l3 2";
+    public const string Bilan = "M4 20V11M10 20V5M16 20v-7M21 20H3";
     public const string Revisions = "M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z";
     public const string Parametres ="M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 3v3M12 18v3M3 12h3M18 12h3";
 
     // --- Actions ---
     public const string Plus = "M12 5v14M5 12h14";
-    public const string Crayon = "M4 20h4L19 9l-4-4L4 16zM14 6l4 4";
-    public const string Corbeille = "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6";
+    public const string Cadenas = "M7 11h10a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2zM8 11V7a4 4 0 0 1 8 0v4";
+    public const string CadenasOuvert = "M7 11h10a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2zM8 11V7a4 4 0 0 1 7.5-2";
+    public const string Effacer = "M20 6H9l-6 6 6 6h11a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1zM12 10l4 4M16 10l-4 4";
+    public const string Crayon ="M4 20h4L19 9l-4-4L4 16zM14 6l4 4";
+    public const string Oeil = "M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z";
+    public const string OeilBarre = "M3 3l18 18M10.6 6.1A10 10 0 0 1 12 6c6 0 10 6 10 6a17 17 0 0 1-3.2 3.8M6.1 6.9C3.6 8.6 2 12 2 12s4 6 10 6a9.7 9.7 0 0 0 4-.9";
+    public const string Corbeille ="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6";
     public const string Fleche = "M5 12h14M13 6l6 6-6 6";
     public const string Coche = "M5 12l5 5 9-10";
     public const string Croix = "M6 6l12 12M18 6L6 18";
@@ -96,6 +102,28 @@ public static class Icones
     public const string Bapteme = "M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.4l-5.2 2.7 1-5.8L3.5 9.2l5.9-.9z";
 
     private static readonly Dictionary<string, GraphicsPath> Cache = [];
+
+    /// <summary>Pictogramme d'un type de sortie, d'après sa famille.</summary>
+    public static string PourTypeSortie(Core.Modeles.TypeSortie famille) => famille switch
+    {
+        Core.Modeles.TypeSortie.Piscine => Piscine,
+        Core.Modeles.TypeSortie.Fosse => Fosse,
+        Core.Modeles.TypeSortie.Mer => Mer,
+        Core.Modeles.TypeSortie.Lac => Lac,
+        Core.Modeles.TypeSortie.Bapteme => Bapteme,
+        _ => Autre,
+    };
+
+    /// <summary>Nom du pictogramme proposé dans Paramètres › Types de sortie.</summary>
+    public static string NomPictogramme(Core.Modeles.TypeSortie famille) => famille switch
+    {
+        Core.Modeles.TypeSortie.Piscine => "Piscine (bassin)",
+        Core.Modeles.TypeSortie.Fosse => "Fosse (flèche vers le bas)",
+        Core.Modeles.TypeSortie.Mer => "Mer (vagues)",
+        Core.Modeles.TypeSortie.Lac => "Lac (montagne)",
+        Core.Modeles.TypeSortie.Bapteme => "Baptême (étoile)",
+        _ => "Autre (points)",
+    };
 
     /// <summary>Pictogramme d'une catégorie d'après son nom (catégories de la migration 001).</summary>
     public static string PourCategorie(string? nom) => (nom ?? "").Trim().ToUpperInvariant() switch

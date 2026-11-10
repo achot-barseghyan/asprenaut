@@ -21,16 +21,22 @@ public sealed class EcranDepart : EcranScanBase
     private readonly BoutonArrondi _valider = new("Valider le départ", StyleBouton.Depart, Icones.Coche, iconeApres: true);
     private readonly FiltreCategories _filtre = new(Theme.AccentClair) { Margin = new Padding(0, 0, 0, 10) };
     private readonly ServiceMoniteurs _moniteurs;
+    private readonly ServiceTypesSortie _typesSortie;
     private readonly BoutonArrondi _modifier = new("Modifier la sortie", StyleBouton.Secondaire, Icones.Crayon) { Height = Theme.HauteurCliquable, Margin = new Padding(10, 0, 0, 0) };
     private readonly BoutonArrondi _supprimer = new("Supprimer", StyleBouton.Secondaire, Icones.Corbeille) { Height = Theme.HauteurCliquable, Margin = new Padding(10, 0, 0, 0), Visible = false };
     private IReadOnlyList<LigneSortie> _lignes = [];
     private StatutSortie _statut;
     private string _intitule = "";
 
-    public EcranDepart(ServiceSortie sorties, ServiceScan scan, ServiceInventaire inventaire, ServiceMoniteurs moniteurs, IHorloge horloge, ServiceReglages reglages, INavigation navigation)
+    private readonly GardeGestion _garde;
+
+    public EcranDepart(ServiceSortie sorties, ServiceScan scan, ServiceInventaire inventaire, ServiceMoniteurs moniteurs, IHorloge horloge, ServiceReglages reglages, INavigation navigation, GardeGestion garde, ServiceTypesSortie typesSortie)
         : base(navigation, reglages, ModeScan.Depart)
     {
+        _garde = garde;
+        _garde.Lier(_supprimer, ActionProtegee.SupprimerSortie);
         _moniteurs = moniteurs;
+        _typesSortie = typesSortie;
         _modifier.Click += (_, _) => Executer(ModifierAsync);
         _supprimer.Click += (_, _) => Executer(SupprimerAsync);
         _supprimer.AccessibleDescription = "Possible seulement quand aucun matériel n'est scanné";
@@ -121,6 +127,7 @@ public sealed class EcranDepart : EcranScanBase
 
         // Code inconnu : on propose de créer l'équipement (code pré-rempli), puis il part directement avec la sortie.
         if (resultat.Action == ActionProposee.CreerEquipement && Dialogues.Confirmer(FindForm(), resultat.Message)
+            && _garde.Exiger(FindForm(), ActionProtegee.Materiel, "Ajouter un équipement")
             && await FormulaireEquipement.OuvrirAsync(FindForm(), _inventaire, resultat.Code) is { } cree && !IsDisposed)
         {
             ZoneScan.AfficherResultat(await _scan.ScannerDepartAsync(SortieId, cree));
@@ -145,13 +152,15 @@ public sealed class EcranDepart : EcranScanBase
         }
 
         var date = new ChampDate { Date = s.DateSortie };
+        // Types proposés, plus celui de la sortie s'il a été masqué depuis.
         var type = new ListeDeroulante { AccessibleName = "Type de sortie" };
-        foreach (var t in Enum.GetValues<TypeSortie>())
+        var types = await _typesSortie.ListerProposesAsync(s.TypeId);
+        foreach (var t in types)
         {
-            type.Items.Add(new Choix<TypeSortie>(t, Libelles.De(t)));
+            type.Items.Add(new Choix<long>(t.Id, t.Nom));
         }
 
-        type.SelectedIndex = Array.IndexOf(Enum.GetValues<TypeSortie>(), s.Type);
+        type.SelectedIndex = Math.Max(0, types.ToList().FindIndex(t => t.Id == s.TypeId));
         var intitule = new ChampSaisie { Valeur = s.Intitule };
         intitule.Champ.AccessibleName = "Intitulé";
         var lieu = new ChampSaisie { Valeur = s.Lieu, TexteIndicatif = "Nom de la piscine, du site…" };
@@ -169,18 +178,31 @@ public sealed class EcranDepart : EcranScanBase
 
         moniteur.SelectedIndex = choix.FindIndex(m => m.Id == s.MoniteurId);
 
+        // Utilisations comptées : celles de la sortie ; un autre type reprend sa valeur par défaut.
+        var utilisations = new SelecteurNombre("Utilisations comptées pour cette sortie", n => Libelles.Pluriel(n, "utilisation")) { Nombre = s.Utilisations };
+        utilisations.Demande += (_, n) => utilisations.Nombre = Math.Clamp(n, TypeDeSortie.UtilisationsMin, TypeDeSortie.UtilisationsMax);
+        type.SelectedIndexChanged += (_, _) =>
+        {
+            if (type.SelectedItem is Choix<long> c && types.FirstOrDefault(t => t.Id == c.Valeur) is { } choisi)
+            {
+                utilisations.Nombre = choisi.Id == s.TypeId ? s.Utilisations : choisi.Utilisations;
+            }
+        };
+
         using var fenetre = new FenetreFormulaire("Modifier la sortie", "Enregistrer", () =>
             date.Date is not { } d
                 ? Task.FromResult(ResultatOperation.Echec("Date invalide : écrivez-la comme 08/11/2026."))
                 : _sorties.ModifierAsync(SortieId, new NouvelleSortie(
                     d,
-                    (type.SelectedItem as Choix<TypeSortie>)?.Valeur ?? s.Type,
+                    s.Type,
                     intitule.Valeur,
                     (moniteur.SelectedItem as Choix<long>)?.Valeur,
                     lieu.Valeur,
-                    notes.Valeur)));
+                    notes.Valeur,
+                    (type.SelectedItem as Choix<long>)?.Valeur,
+                    utilisations.Nombre)));
         fenetre.DeuxChamps("Date", date, "Type", type);
-        fenetre.Champ("Intitulé", intitule);
+        fenetre.DeuxChamps("Intitulé", intitule, "Utilisations (compteur)", utilisations);
         fenetre.DeuxChamps("Moniteur responsable", moniteur, "Lieu", lieu);
         fenetre.Champ("Notes (facultatif)", notes, 96);
 
@@ -196,7 +218,8 @@ public sealed class EcranDepart : EcranScanBase
     /// <summary>Supprimer une sortie créée par erreur (bouton visible seulement si aucun matériel n'est scanné).</summary>
     private async Task SupprimerAsync()
     {
-        if (!Dialogues.Confirmer(FindForm(), $"Supprimer la sortie « {_intitule} » ?\n\nElle ne contient aucun matériel. Cette action est définitive."))
+        if (!_garde.Exiger(FindForm(), ActionProtegee.SupprimerSortie, "Supprimer une sortie")
+            || !Dialogues.Confirmer(FindForm(), $"Supprimer la sortie « {_intitule} » ?\n\nElle ne contient aucun matériel. Cette action est définitive."))
         {
             ZoneScan.PrendreFocus();
             return;
