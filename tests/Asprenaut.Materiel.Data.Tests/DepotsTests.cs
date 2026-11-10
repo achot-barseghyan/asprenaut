@@ -67,8 +67,34 @@ public class DepotsTests : IAsyncLifetime
         var actifs = await depot.ListerAsync(actifsSeulement: true);
         var tous = await depot.ListerAsync(actifsSeulement: false);
 
-        Assert.Equal("Pascal Durand", Assert.Single(actifs).NomComplet);
-        Assert.Equal(2, tous.Count);
+        // La migration 008 ajoute les classes Niveau 1 à 4, listées après les moniteurs.
+        Assert.Equal("Pascal Durand", Assert.Single(actifs, m => !m.EstClasse).NomComplet);
+        Assert.Equal(2, tous.Count(m => !m.EstClasse));
+        Assert.Equal(["Pascal Durand", "Niveau 1", "Niveau 2", "Niveau 3", "Niveau 4"], actifs.Select(m => m.NomComplet));
+    }
+
+    [Fact]
+    public async Task Une_classe_garde_son_genre_et_son_abreviation()
+    {
+        var depot = new MoniteurRepository(_base.Fabrique);
+        var id = await depot.AjouterAsync(new Moniteur { Genre = GenreResponsable.Classe, Nom = "Plongée enfants", Abrege = "PE" });
+
+        var relue = (await depot.ObtenirAsync(id))!;
+        Assert.Equal((GenreResponsable.Classe, "Plongée enfants", "PE"), (relue.Genre, relue.NomComplet, relue.Abrege));
+        relue.Abrege = "ENF";
+        relue.Actif = false;
+        await depot.MettreAJourAsync(relue);
+
+        await using var cx = await _base.Fabrique.OuvrirAsync();
+        // Le genre est stocké par son nom (CHECK en SQL), pas par sa valeur numérique.
+        Assert.Equal(("Classe", "ENF", 0L), await cx.QuerySingleAsync<(string, string, long)>(
+            "SELECT genre, abrege, actif FROM moniteur WHERE id = @id;", new { id }));
+        await Assert.ThrowsAnyAsync<Exception>(() => cx.ExecuteAsync("INSERT INTO moniteur (nom, prenom, genre) VALUES ('x', '', 'Groupe');"));
+
+        // Une sortie dont la classe est responsable : le résumé le dit (« Classe : … »).
+        await cx.ExecuteAsync("INSERT INTO sortie (date_sortie, type, intitule, moniteur_id) VALUES ('2026-11-08', 'Fosse', 'Fosse N2', @id);", new { id });
+        var resume = Assert.Single(await new SortieRepository(_base.Fabrique).ListerResumesAsync(cloturees: false));
+        Assert.Equal((GenreResponsable.Classe, "Classe : Plongée enfants"), (resume.MoniteurGenre, resume.LibelleResponsable));
     }
 
     /// <summary>Scénario complet sur SQLite : départ, retour partiel, clôture avec manquant, manquant retrouvé.</summary>

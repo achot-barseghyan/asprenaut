@@ -87,7 +87,7 @@ public abstract class EcranScanBase : EcranBase
         _fil.Courant = $"{s.DateSortie.ToString("d MMMM", Libelles.Culture)} · {s.Intitule}";
         _date.Date = s.DateSortie;
         _titreSortie.Text = s.Intitule;
-        var infos = $"{s.LibelleType} · {Libelles.Pluriel(s.Utilisations, "utilisation")} · Moniteur : {s.MoniteurNom}";
+        var infos = $"{s.LibelleType} · {Libelles.Pluriel(s.Utilisations, "utilisation")} · {s.LibelleResponsable}";
         if (!string.IsNullOrWhiteSpace(s.Lieu))
         {
             infos += $" · {s.Lieu}";

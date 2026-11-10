@@ -38,7 +38,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
 ```
 
 - **Core/Services** : `ServiceScan` (scan départ/retour, retrait), `ServiceSortie` (créer, valider départ, aperçu et clôture),
-  `ServiceInventaire`, `ServiceMoniteurs` (cartes, fiche, ajout/modification, saison au 1er septembre), `ServiceRevisions`
+  `ServiceInventaire`, `ServiceMoniteurs` (moniteurs et classes : cartes, fiche, ajout/modification, saison au 1er septembre), `ServiceRevisions`
   (échéancier, contrôles, atelier, séances TIV), `ServiceReglages`, `ServiceHistorique` (journal lisible, période, regroupement,
   export CSV, vie d'un équipement), `ServiceGestion` (mode consultation / mode gestion, code gestionnaire),
   `ServiceBilan` (bilan de saison pour l'AG). Toutes les règles métier sont ici.
@@ -62,7 +62,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   `ListeDeroulante` (cadre et bouton repeints par-dessus Windows dans `WndProc`), `ListeMateriel` (styles Depart / ARendre / Rendu),
   `ScanInput` + `BandeauMessage`, `BandeauAccueil`, `Logo`, `CarteScanner`, `Tableaux` (pastilles et pictogrammes dans les DataGridView),
   `FiltreCategories` (puces « Tout 12 / Blocs 3 », `CouleurPoint` et `Unite` optionnels), `FenetreFormulaire` (fenêtre modale sombre ;
-  la validation passe par un service et ne ferme qu'en cas de succès), `Interrupteur`, `SelecteurNombre`, `CarteSection`, `LigneReglage`,
+  la validation passe par un service et ne ferme qu'en cas de succès), `Interrupteur`, `SelecteurNombre`, `Bascule` (options côte à côte, nombres), `ChoixResponsable`, `CarteSection`, `LigneReglage`,
   `JournalHistorique` (journal par jour dessiné dans un seul contrôle défilant : seule la partie visible est peinte, le clic sur un
   code est retrouvé par calcul — à préférer à un contrôle par ligne dès qu'une liste peut compter des milliers d'éléments).
   `EcranBilan` : cartes entièrement dessinées (classes imbriquées), placées par `PageBilan` selon la largeur (4/2 chiffres,
@@ -85,6 +85,8 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
 - **Icône de l'application** : `Ressources/Asprenaut.ico` (16 à 256 px ; tailles ≤ 96 en bitmap, 128 et 256 en PNG), fabriquée
   depuis `Ressources/Asprenaut.png` (1024 px). `ApplicationIcon` dans le .csproj pour le .exe, ressource embarquée lue par
   `Icones.IconeFenetre` pour `MainForm` et `FenetreFormulaire` (barre de titre, barre des tâches).
+- **Logo du club** : `Ressources/LogoClub.png` (image de la maquette, ressource `LogoClub.png`), dessiné par `LogoClub` (`Controles/Decor.cs`)
+  dans une tuile blanche (`Theme.FondLogoClub`, fixe dans les deux thèmes) à gauche du bandeau de l'écran Sorties.
 
 ## Règles métier (chacune a au moins un test dans Core.Tests)
 
@@ -127,8 +129,10 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
 16. Mode gestion (`ServiceGestion`, maquette « Déverrouillage » et Paramètres › Sécurité) : sans code gestionnaire, rien n'est verrouillé.
     Avec un code (4 à 6 chiffres, haché PBKDF2-SHA256 salé dans `Reglages.CodeGestionnaire`), l'appli démarre en consultation ;
     les `ActionProtegee` (matériel, moniteurs, supprimer une sortie, révisions/atelier/séances, paramètres, restaurer une sauvegarde,
+    `CompteurSortie` : utilisations d'une sortie différentes de celles de son type, à la création comme en modification,
     et clôturer avec des manquants si `CodePourCloturerAvecManquants`) sont refusées par les services tant que le mode gestion n'est
-    pas ouvert. Tous les paramètres (thème compris) sont protégés. Libres : créer/modifier une sortie en préparation, scanner,
+    pas ouvert. Tous les paramètres (thème compris) sont protégés. Libres : créer/modifier une sortie en préparation (avec les
+    utilisations de son type), scanner,
     valider, clôturer sans manquant, consulter, tester le pistolet, faire une sauvegarde.
     Retour en consultation après `MinutesDeverrouillage` (5/15/30/60) sans activité ; `VerrouillerALaFermeture` coupé → le mode
     gestion ouvert est repris au lancement (`DeverrouilleAuDemarrage`). Changer ou retirer le code demande l'ancien.
@@ -136,7 +140,8 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     pour les tests qui n'en ont pas besoin). App : `GardeGestion.Exiger(...)` avant chaque action protégée (pavé
     `DialogueDeverrouillage`, chiffres lus d'après le caractère tapé : AZERTY), `CarteModeGestion` dans le menu, `FiltreActivite`.
     Visuel « verrouillé » : `GardeGestion.Lier(controle, action)` met `Verrouille` à jour à chaque changement de mode —
-    cadenas après le texte d'un `BoutonArrondi`, badge « Code requis » d'une `CarteSection`. Tout nouveau bouton d'action protégée doit être lié.
+    cadenas après le texte d'un `BoutonArrondi` ou la valeur d'un `SelecteurNombre` (compteur de Nouvelle sortie et de Modifier la
+    sortie : le clic demande le code), badge « Code requis » d'une `CarteSection`. Tout nouveau bouton d'action protégée doit être lié.
     Code oublié : supprimer la ligne `CodeGestionnaire` de `parametres.json` (application fermée).
 17. Bilan de saison (`ServiceBilan`, consultation libre) : saison précédente ou en cours (1er septembre → 31 août), seules les
     sorties parties comptent (en cours ou clôturées, datées dans la saison). Mois de septembre à juin, juillet/août seulement s'il
@@ -187,6 +192,14 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     « Bloqué pour les sorties » suit les réglages (`DepartSiRevisionDepassee`, `BloquerAuSeuil`), sans les changer.
     Intervention (`EnregistrerInterventionAsync`) : contrôle avec nature (`NaturesPour`) et intervenant (controle.nature /
     intervenant) ; depuis l'atelier, ferme le passage et remet en service, sauf refusé (reste HorsService).
+24. Moniteurs et classes (migration 008, maquette « Moniteurs et classes ») : une classe (Niveau 1 à 4 créées par la migration)
+    est responsable d'une sortie comme un moniteur. Rangée dans la table moniteur (`Moniteur.Genre` = `GenreResponsable.Classe`,
+    colonne moniteur.genre) : sortie.moniteur_id reste l'unique responsable. Classe : nom obligatoire (dans `Nom`, prénom vide),
+    unique sans tenir compte des majuscules, 30 caractères au plus ; abréviation de la pastille (`Abrege`, 4 au plus, proposée par
+    `ServiceMoniteurs.AbregeDe` : « Niveau 2 » → « N2 ») ; ni téléphone, ni niveau, ni TIV (jamais inspecteur). Le genre ne change
+    pas à la modification. Journal `ClasseCreee` / `ClasseModifiee`. Afficher `SortieResume.LibelleResponsable`
+    (« Moniteur : … » / « Classe : … »). App : onglets `Bascule` dans `EcranMoniteurs`, `ChoixResponsable` (Moniteur | Classe
+    puis la liste) dans Nouvelle sortie et Modifier la sortie. Données de démo : chargées si aucun moniteur (genre Moniteur).
 
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
@@ -209,12 +222,13 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   supprimerait en cascade son matériel (sortie_equipement) ; depuis 005 : colonnes de fiche de equipement (marque, modele,
   numero_serie, montage CHECK Etrier/Din, marque/modele/numero_deuxieme_etage, direct_system 0/1, manometre, octopus, numero_octopus) ;
   depuis 006 : type_sortie.utilisations et sortie.utilisations (1 à 10, sorties existantes reprises de leur type) ;
-  depuis 007 : seance_equipement (blocs planifiés à une séance TIV, ON DELETE CASCADE), controle.nature et controle.intervenant.
+  depuis 007 : seance_equipement (blocs planifiés à une séance TIV, ON DELETE CASCADE), controle.nature et controle.intervenant ;
+  depuis 008 : moniteur.genre (CHECK Moniteur/Classe) et moniteur.abrege, classes Niveau 1 à 4.
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/008_xxx.sql`, sans jamais modifier un script déjà livré
+- Nouvelle migration : ajouter `Migrations/009_xxx.sql`, sans jamais modifier un script déjà livré
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.

@@ -97,7 +97,8 @@ public class RevisionsDepotsTests : IAsyncLifetime
         Assert.Equal(["Pascal Durand"], seance!.Inspecteurs);
 
         var fiches = await serviceMoniteurs.ListerFichesAsync();
-        Assert.Equal(2, fiches.Count);
+        Assert.Equal(2, fiches.Count(f => !f.Moniteur.EstClasse));
+        Assert.Equal(["Niveau 1", "Niveau 2", "Niveau 3", "Niveau 4"], fiches.Where(f => f.Moniteur.EstClasse).Select(f => f.Moniteur.NomComplet));
         Assert.All(fiches, f => Assert.Equal(0, f.NbDehors));
     }
 

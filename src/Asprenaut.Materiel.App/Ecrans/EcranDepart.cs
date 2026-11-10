@@ -1,4 +1,4 @@
-using Asprenaut.Materiel.App.Apparence;
+﻿using Asprenaut.Materiel.App.Apparence;
 using Asprenaut.Materiel.App.Controles;
 using Asprenaut.Materiel.App.Infrastructure;
 using Asprenaut.Materiel.App.Navigation;
@@ -143,7 +143,7 @@ public sealed class EcranDepart : EcranScanBase
         await RafraichirAsync();
     }
 
-    /// <summary>Modifier date, type, intitulé, moniteur, lieu, notes : fenêtre préremplie, validée par ServiceSortie.</summary>
+    /// <summary>Modifier date, type, intitulé, responsable, lieu, notes : fenêtre préremplie, validée par ServiceSortie.</summary>
     private async Task ModifierAsync()
     {
         if (await _sorties.ObtenirAsync(SortieId) is not { } s || IsDisposed)
@@ -168,19 +168,20 @@ public sealed class EcranDepart : EcranScanBase
         var notes = new ChampSaisie(multiligne: true) { Valeur = s.Notes, TexteIndicatif = "Groupe N1, 8 élèves…" };
         notes.Champ.AccessibleName = "Notes";
 
-        // Moniteurs actifs, plus le responsable actuel s'il est devenu inactif.
-        var moniteur = new ListeDeroulante { AccessibleName = "Moniteur responsable" };
-        var choix = (await _moniteurs.ListerTousAsync()).Where(m => m.Actif || m.Id == s.MoniteurId).ToList();
-        foreach (var m in choix)
-        {
-            moniteur.Items.Add(new Choix<long>(m.Id, m.NomComplet));
-        }
-
-        moniteur.SelectedIndex = choix.FindIndex(m => m.Id == s.MoniteurId);
+        // Moniteurs et classes actifs, plus le responsable actuel s'il est devenu inactif.
+        var responsable = new ChoixResponsable();
+        responsable.Remplir((await _moniteurs.ListerTousAsync()).Where(m => m.Actif || m.Id == s.MoniteurId).ToList(), s.MoniteurId);
 
         // Utilisations comptées : celles de la sortie ; un autre type reprend sa valeur par défaut.
         var utilisations = new SelecteurNombre("Utilisations comptées pour cette sortie", n => Libelles.Pluriel(n, "utilisation")) { Nombre = s.Utilisations };
-        utilisations.Demande += (_, n) => utilisations.Nombre = Math.Clamp(n, TypeDeSortie.UtilisationsMin, TypeDeSortie.UtilisationsMax);
+        _garde.Lier(utilisations, ActionProtegee.CompteurSortie);
+        utilisations.Demande += (_, n) =>
+        {
+            if (_garde.Exiger(utilisations.FindForm(), ActionProtegee.CompteurSortie, "Changer les utilisations"))
+            {
+                utilisations.Nombre = Math.Clamp(n, TypeDeSortie.UtilisationsMin, TypeDeSortie.UtilisationsMax);
+            }
+        };
         type.SelectedIndexChanged += (_, _) =>
         {
             if (type.SelectedItem is Choix<long> c && types.FirstOrDefault(t => t.Id == c.Valeur) is { } choisi)
@@ -196,14 +197,15 @@ public sealed class EcranDepart : EcranScanBase
                     d,
                     s.Type,
                     intitule.Valeur,
-                    (moniteur.SelectedItem as Choix<long>)?.Valeur,
+                    responsable.ResponsableId,
                     lieu.Valeur,
                     notes.Valeur,
                     (type.SelectedItem as Choix<long>)?.Valeur,
                     utilisations.Nombre)));
         fenetre.DeuxChamps("Date", date, "Type", type);
         fenetre.DeuxChamps("Intitulé", intitule, "Utilisations (compteur)", utilisations);
-        fenetre.DeuxChamps("Moniteur responsable", moniteur, "Lieu", lieu);
+        fenetre.Champ("Responsable", responsable); // Toute la largeur : « Moniteur | Classe » puis la liste.
+        fenetre.Champ("Lieu", lieu);
         fenetre.Champ("Notes (facultatif)", notes, 96);
 
         if (fenetre.ShowDialog(FindForm()) == DialogResult.OK && !IsDisposed)

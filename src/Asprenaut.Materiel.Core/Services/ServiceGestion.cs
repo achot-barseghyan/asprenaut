@@ -25,6 +25,9 @@ public enum ActionProtegee
     Parametres,
 
     RestaurerSauvegarde,
+
+    /// <summary>Changer les utilisations comptées d'une sortie (autre valeur que celle de son type).</summary>
+    CompteurSortie,
 }
 
 /// <summary>
@@ -226,6 +229,7 @@ public sealed class ServiceGestion
         ActionProtegee.CloturerAvecManquants => "Clôturer avec des manquants",
         ActionProtegee.Revisions => "Enregistrer une révision",
         ActionProtegee.Parametres => "Paramètres",
+        ActionProtegee.CompteurSortie => "Utilisations d'une sortie",
         _ => "Restaurer une sauvegarde",
     };
 

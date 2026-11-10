@@ -196,7 +196,7 @@ public sealed class MainForm : Form
 
         Ajouter<EcranSorties>(EntreeMenu.Sorties, "Sorties", Icones.Sorties);
         Ajouter<EcranInventaire>(EntreeMenu.Inventaire, "Inventaire", Icones.Inventaire);
-        Ajouter<EcranMoniteurs>(EntreeMenu.Moniteurs, "Moniteurs", Icones.Moniteurs);
+        Ajouter<EcranMoniteurs>(EntreeMenu.Moniteurs, "Moniteurs et classes", Icones.Moniteurs);
         Ajouter<EcranHistorique>(EntreeMenu.Historique, "Historique", Icones.Historique);
         Ajouter<EcranBilan>(EntreeMenu.Bilan, "Bilan de saison", Icones.Bilan);
         Ajouter<EcranRevisions>(EntreeMenu.Revisions, "Révisions", Icones.Revisions);

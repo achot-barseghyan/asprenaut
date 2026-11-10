@@ -52,6 +52,8 @@ public sealed class ServiceHistorique(
         [ActionsJournal.RetraitSeanceTiv] = (TypeEvenement.Revision, "Retiré de la séance TIV"),
         [ActionsJournal.MoniteurCree] = (TypeEvenement.Autre, "Moniteur ajouté"),
         [ActionsJournal.MoniteurModifie] = (TypeEvenement.Autre, "Moniteur modifié"),
+        [ActionsJournal.ClasseCreee] = (TypeEvenement.Autre, "Classe ajoutée"),
+        [ActionsJournal.ClasseModifiee] = (TypeEvenement.Autre, "Classe modifiée"),
         ["DonneesDemo"] = (TypeEvenement.Autre, "Données de démonstration"),
     };
 

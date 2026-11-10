@@ -27,7 +27,7 @@ public sealed class EcranSorties : EcranBase
         Theme.AppliquerGrille(_cloturees);
         Tableaux.AjouterColonne(_cloturees, "date", "Date", 70);
         Tableaux.AjouterColonne(_cloturees, "intitule", "Sortie", 170);
-        Tableaux.AjouterColonne(_cloturees, "moniteur", "Moniteur", 110);
+        Tableaux.AjouterColonne(_cloturees, "moniteur", "Responsable", 110);
         Tableaux.AjouterColonne(_cloturees, "materiel", "Matériel", 90);
         Tableaux.AjouterColonne(_cloturees, "bilan", "Bilan", 90);
         _cloturees.AccessibleName = "Sorties clôturées";
@@ -162,8 +162,18 @@ public sealed class EcranSorties : EcranBase
         inventaire.Click += (_, _) => _navigation.AllerA<EcranInventaire>();
 
         var contenu = Ui.Pile(_date, titre, _resume, Ui.Rangee(true, nouvelle, inventaire));
+        var logo = new LogoClub();
+        bandeau.Controls.Add(logo);
         bandeau.Controls.Add(contenu);
-        bandeau.Layout += (_, _) => contenu.Location = new Point(bandeau.Padding.Left, Math.Max(bandeau.Padding.Top / 2, (bandeau.Height - contenu.Height) / 2));
+
+        // Logo du club à gauche (150 px, moins si le bandeau est réduit), textes et boutons à sa droite, centrés en hauteur.
+        bandeau.Layout += (_, _) =>
+        {
+            var marge = (int)Dessin.Echelle(bandeau, 23);
+            var cote = Math.Max(0, Math.Min((int)Dessin.Echelle(bandeau, 150), bandeau.Height - (2 * marge)));
+            logo.Bounds = new Rectangle(bandeau.Padding.Left, (bandeau.Height - cote) / 2, cote, cote);
+            contenu.Location = new Point(logo.Right + (int)Dessin.Echelle(bandeau, 30), Math.Max(bandeau.Padding.Top / 2, (bandeau.Height - contenu.Height) / 2));
+        };
         return bandeau;
     }
 
@@ -192,7 +202,7 @@ public sealed class EcranSorties : EcranBase
             titre.AutoEllipsis = true;
             titre.Height = 32;
             var moniteur = Ui.Libelle(
-                string.IsNullOrWhiteSpace(s.Lieu) ? $"Moniteur : {s.MoniteurNom}" : $"Moniteur : {s.MoniteurNom} · {s.Lieu}",
+                string.IsNullOrWhiteSpace(s.Lieu) ? s.LibelleResponsable : $"{s.LibelleResponsable} · {s.Lieu}",
                 Theme.Police(9.75f),
                 Theme.TexteSecondaireClair);
             moniteur.AutoSize = false;

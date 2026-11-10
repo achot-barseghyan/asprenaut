@@ -239,7 +239,7 @@ public sealed class EcranParametres : EcranBase
         titreActions.Margin = new Padding(0, 14, 0, 8);
         carte.Ajouter(titreActions);
         var actions = new FlowLayoutPanel { AutoSize = true, WrapContents = true, BackColor = Color.Transparent, Margin = Padding.Empty };
-        foreach (var a in new[] { ActionProtegee.Materiel, ActionProtegee.Moniteurs, ActionProtegee.SupprimerSortie, ActionProtegee.Revisions, ActionProtegee.Parametres, ActionProtegee.RestaurerSauvegarde })
+        foreach (var a in new[] { ActionProtegee.Materiel, ActionProtegee.Moniteurs, ActionProtegee.SupprimerSortie, ActionProtegee.Revisions, ActionProtegee.CompteurSortie, ActionProtegee.Parametres, ActionProtegee.RestaurerSauvegarde })
         {
             actions.Controls.Add(new Pastille(ServiceGestion.Libelle(a), Theme.Teinte(Theme.Avertissement, 0.10f), Theme.Avertissement, police: Theme.PoliceTitre(9f), hauteur: 30)
             {

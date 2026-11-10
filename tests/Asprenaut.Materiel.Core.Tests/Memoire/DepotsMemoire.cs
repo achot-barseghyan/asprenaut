@@ -290,6 +290,7 @@ public sealed class SortieRepositoryMemoire(BaseMemoire db) : ISortieRepository
             ClotureeLe = s.ClotureeLe,
             MoniteurId = s.MoniteurId,
             MoniteurNom = db.Moniteurs.FirstOrDefault(m => m.Id == s.MoniteurId)?.NomComplet ?? "",
+            MoniteurGenre = db.Moniteurs.FirstOrDefault(m => m.Id == s.MoniteurId)?.Genre ?? GenreResponsable.Moniteur,
             NbTotal = lignes.Count,
             NbRendus = lignes.Count(a => a.Statut == StatutSortieEquipement.Rendu),
             NbManquants = lignes.Count(a => a.Statut == StatutSortieEquipement.Manquant),

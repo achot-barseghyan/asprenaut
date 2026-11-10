@@ -144,18 +144,21 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
 
 public sealed class MoniteurRepository(FabriqueConnexion fabrique) : IMoniteurRepository
 {
+    private const string Colonnes = "id, genre, nom, prenom, niveau, telephone, abrege, inspecteur_tiv, actif";
+
     public async Task<Moniteur?> ObtenirAsync(long id, CancellationToken ct = default)
     {
         await using var cx = await fabrique.OuvrirAsync(ct);
         return await cx.QuerySingleOrDefaultAsync<Moniteur>(new CommandDefinition(
-            "SELECT id, nom, prenom, niveau, telephone, inspecteur_tiv, actif FROM moniteur WHERE id = @id;", new { id }, cancellationToken: ct));
+            $"SELECT {Colonnes} FROM moniteur WHERE id = @id;", new { id }, cancellationToken: ct));
     }
 
+    /// <summary>Moniteurs puis classes, chacun par ordre alphabétique.</summary>
     public async Task<IReadOnlyList<Moniteur>> ListerAsync(bool actifsSeulement, CancellationToken ct = default)
     {
         await using var cx = await fabrique.OuvrirAsync(ct);
         var lignes = await cx.QueryAsync<Moniteur>(new CommandDefinition(
-            "SELECT id, nom, prenom, niveau, telephone, inspecteur_tiv, actif FROM moniteur WHERE (@actifsSeulement = 0 OR actif = 1) ORDER BY prenom, nom;",
+            $"SELECT {Colonnes} FROM moniteur WHERE (@actifsSeulement = 0 OR actif = 1) ORDER BY genre = 'Classe', prenom, nom;",
             new { actifsSeulement }, cancellationToken: ct));
         return lignes.AsList();
     }
@@ -164,8 +167,11 @@ public sealed class MoniteurRepository(FabriqueConnexion fabrique) : IMoniteurRe
     {
         await using var cx = await fabrique.OuvrirAsync(ct);
         moniteur.Id = await cx.ExecuteScalarAsync<long>(new CommandDefinition(
-            "INSERT INTO moniteur (nom, prenom, niveau, telephone, inspecteur_tiv, actif) VALUES (@Nom, @Prenom, @Niveau, @Telephone, @InspecteurTiv, @Actif) RETURNING id;",
-            moniteur, cancellationToken: ct));
+            """
+            INSERT INTO moniteur (genre, nom, prenom, niveau, telephone, abrege, inspecteur_tiv, actif)
+            VALUES (@Genre, @Nom, @Prenom, @Niveau, @Telephone, @Abrege, @InspecteurTiv, @Actif) RETURNING id;
+            """,
+            Parametres(moniteur), cancellationToken: ct));
         return moniteur.Id;
     }
 
@@ -173,9 +179,27 @@ public sealed class MoniteurRepository(FabriqueConnexion fabrique) : IMoniteurRe
     {
         await using var cx = await fabrique.OuvrirAsync(ct);
         await cx.ExecuteAsync(new CommandDefinition(
-            "UPDATE moniteur SET nom = @Nom, prenom = @Prenom, niveau = @Niveau, telephone = @Telephone, inspecteur_tiv = @InspecteurTiv, actif = @Actif WHERE id = @Id;",
-            moniteur, cancellationToken: ct));
+            """
+            UPDATE moniteur SET genre = @Genre, nom = @Nom, prenom = @Prenom, niveau = @Niveau, telephone = @Telephone,
+                abrege = @Abrege, inspecteur_tiv = @InspecteurTiv, actif = @Actif
+            WHERE id = @Id;
+            """,
+            Parametres(moniteur), cancellationToken: ct));
     }
+
+    // Dapper ignore les TypeHandler des enums en paramètre : le genre est passé en texte.
+    private static object Parametres(Moniteur m) => new
+    {
+        m.Id,
+        Genre = m.Genre.ToString(),
+        m.Nom,
+        m.Prenom,
+        m.Niveau,
+        m.Telephone,
+        m.Abrege,
+        m.InspecteurTiv,
+        m.Actif,
+    };
 }
 
 public sealed class JournalRepository(FabriqueConnexion fabrique) : IJournalRepository

@@ -196,3 +196,62 @@ public sealed class CarteScanner : ControleDessine
         Dessin.Texte(g, "Visez l'étiquette QR", sous, new Rectangle(gauche, y + hTitre + (int)E(2), Width - gauche - 8, hSous), Theme.RetourClair);
     }
 }
+
+/// <summary>
+/// Logo du club dans une tuile blanche arrondie, entourée d'un halo clair (bandeau d'accueil de l'écran Sorties).
+/// L'image (Ressources/LogoClub.png, ressource LogoClub.png) est chargée une fois et gardée.
+/// </summary>
+public sealed class LogoClub : ControleDessine
+{
+    private static Image? _image;
+
+    public LogoClub()
+    {
+        Size = new Size(150, 150);
+        AccessibleName = "Logo Asprenaut, Chalon-sur-Saône";
+        AccessibleRole = AccessibleRole.Graphic;
+    }
+
+    private static Image Image
+    {
+        get
+        {
+            if (_image is null)
+            {
+                using var flux = typeof(LogoClub).Assembly.GetManifestResourceStream("LogoClub.png")
+                    ?? throw new InvalidOperationException("Logo du club introuvable (ressource LogoClub.png).");
+                using var lu = Image.FromStream(flux);
+                _image = new Bitmap(lu); // Copie : l'image reste valable après la fermeture du flux.
+            }
+
+            return _image;
+        }
+    }
+
+    protected override void Peindre(Graphics g)
+    {
+        // Halo de 5 px, puis tuile blanche (rayon 26) et l'image dans une marge de 8 px.
+        var halo = E(5);
+        var r = new RectangleF(0.5f, 0.5f, Width - 2, Height - 2);
+        using (var chemin = Dessin.Arrondi(r, E(26) + halo))
+        using (var pinceau = new SolidBrush(Theme.HaloLogoClub))
+        {
+            g.FillPath(pinceau, chemin);
+        }
+
+        var tuile = RectangleF.Inflate(r, -halo, -halo);
+        using (var chemin = Dessin.Arrondi(tuile, E(26)))
+        using (var fond = new SolidBrush(Theme.FondLogoClub))
+        {
+            g.FillPath(fond, chemin);
+        }
+
+        var zone = RectangleF.Inflate(tuile, -E(8), -E(8));
+        var image = Image;
+        var echelle = Math.Min(zone.Width / image.Width, zone.Height / image.Height);
+        var l = image.Width * echelle;
+        var h = image.Height * echelle;
+        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+        g.DrawImage(image, zone.X + ((zone.Width - l) / 2), zone.Y + ((zone.Height - h) / 2), l, h);
+    }
+}

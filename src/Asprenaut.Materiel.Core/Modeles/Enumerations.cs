@@ -73,3 +73,10 @@ public enum MontageDetendeur
     Etrier,
     Din,
 }
+
+/// <summary>Responsable d'une sortie : un moniteur, ou une classe (Niveau 1, Niveau 2…). Stocké dans moniteur.genre.</summary>
+public enum GenreResponsable
+{
+    Moniteur,
+    Classe,
+}

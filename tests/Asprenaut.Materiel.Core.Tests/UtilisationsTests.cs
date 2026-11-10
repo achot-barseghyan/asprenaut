@@ -98,4 +98,28 @@ public class UtilisationsTests
         Assert.Equal("« Lac » de nouveau proposé.", (await _ctx.TypesSortie.BasculerMasqueAsync(Type("Lac"))).Message);
         Assert.Contains(await _ctx.TypesSortie.ListerProposesAsync(), t => t.Nom == "Lac");
     }
+
+    // Règle : en mode consultation, changer les utilisations d'une sortie (autre valeur que celle du type) demande le code.
+    [Fact]
+    public async Task Changer_les_utilisations_demande_le_mode_gestion()
+    {
+        Assert.True(_ctx.Gestion.DefinirCode(null, "1234", "1234").Reussi);
+        _ctx.Gestion.Verrouiller();
+        NouvelleSortie Demande(int? utilisations, string type = "Mer") =>
+            new(new DateOnly(2026, 11, 7), TypeSortie.Autre, "Sortie", _ctx.Pascal.Id, TypeId: Type(type), Utilisations: utilisations);
+
+        // Valeur du type (ou rien) : libre. Autre valeur : refusée.
+        Assert.True((await _ctx.Sorties.CreerAsync(Demande(4))).Reussi);
+        var id = (await _ctx.Sorties.CreerAsync(Demande(null))).Id!.Value;
+        Assert.Equal(ServiceGestion.MessageVerrouille, (await _ctx.Sorties.CreerAsync(Demande(2))).Message);
+
+        // Modifier : garder la valeur, ou prendre celle du nouveau type, reste libre.
+        Assert.True((await _ctx.Sorties.ModifierAsync(id, Demande(4))).Reussi);
+        Assert.True((await _ctx.Sorties.ModifierAsync(id, Demande(2, "Lac"))).Reussi);
+        Assert.Equal(ServiceGestion.MessageVerrouille, (await _ctx.Sorties.ModifierAsync(id, Demande(3, "Lac"))).Message);
+        Assert.Equal(2, _ctx.Db.Sorties.Single(s => s.Id == id).Utilisations);
+
+        Assert.True(_ctx.Gestion.Deverrouiller("1234").Reussi);
+        Assert.True((await _ctx.Sorties.ModifierAsync(id, Demande(3, "Lac"))).Reussi);
+    }
 }

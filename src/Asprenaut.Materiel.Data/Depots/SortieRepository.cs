@@ -15,7 +15,7 @@ public sealed class SortieRepository(FabriqueConnexion fabrique) : ISortieReposi
 
     private const string SelectResume = """
         SELECT s.id, s.date_sortie, s.type, s.type_sortie_id AS type_id, s.utilisations, ts.nom AS type_nom, s.intitule, s.lieu, s.statut, s.moniteur_id, s.depart_valide_le, s.cloturee_le,
-               TRIM(m.prenom || ' ' || m.nom) AS moniteur_nom,
+               TRIM(m.prenom || ' ' || m.nom) AS moniteur_nom, m.genre AS moniteur_genre,
                COUNT(se.id) AS nb_total,
                COALESCE(SUM(se.statut = 'Rendu'), 0) AS nb_rendus,
                COALESCE(SUM(se.statut = 'Manquant'), 0) AS nb_manquants

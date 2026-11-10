@@ -30,8 +30,8 @@ public sealed class ExportRepository(FabriqueConnexion fabrique) : IExportReposi
              new("D.S", GenreColonne.OuiNon), new("Mano"), new("Octopus"), new("N° octopus"), new("Notes"),
              new("Ajouté le", GenreColonne.Horodatage)]),
         ("moniteurs.csv",
-            "SELECT m.prenom, m.nom, m.niveau, m.telephone, m.inspecteur_tiv, m.actif FROM moniteur m ORDER BY m.nom, m.prenom",
-            [new("Prénom"), new("Nom"), new("Niveau"), new("Téléphone"), new("Inspecteur TIV", GenreColonne.OuiNon), new("Actif", GenreColonne.OuiNon)]),
+            "SELECT m.genre, m.prenom, m.nom, m.abrege, m.niveau, m.telephone, m.inspecteur_tiv, m.actif FROM moniteur m ORDER BY m.genre = 'Classe', m.nom, m.prenom",
+            [new("Responsable"), new("Prénom"), new("Nom"), new("Abrégé"), new("Niveau"), new("Téléphone"), new("Inspecteur TIV", GenreColonne.OuiNon), new("Actif", GenreColonne.OuiNon)]),
         ("sorties.csv",
             $"""
             SELECT s.id, s.date_sortie, COALESCE(ts.nom, s.type), s.intitule, {Moniteur}, s.lieu, s.statut,

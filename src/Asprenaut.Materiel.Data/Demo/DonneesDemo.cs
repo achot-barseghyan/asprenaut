@@ -15,7 +15,7 @@ public static class DonneesDemo
     {
         await using var cx = await fabrique.OuvrirAsync(ct);
         var existant = await cx.ExecuteScalarAsync<long>(
-            "SELECT (SELECT COUNT(*) FROM moniteur) + (SELECT COUNT(*) FROM equipement);");
+            "SELECT (SELECT COUNT(*) FROM moniteur WHERE genre = 'Moniteur') + (SELECT COUNT(*) FROM equipement);");
         if (existant > 0)
         {
             return false;

@@ -38,4 +38,6 @@ public static class ActionsJournal
     public const string RetraitSeanceTiv = "RetraitSeanceTiv";
     public const string MoniteurCree = "MoniteurCree";
     public const string MoniteurModifie = "MoniteurModifie";
+    public const string ClasseCreee = "ClasseCreee";
+    public const string ClasseModifiee = "ClasseModifiee";
 }

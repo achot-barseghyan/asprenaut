@@ -106,7 +106,7 @@ public class SauvegardeTests : IAsyncLifetime
         Assert.True(resultat.Reussi, resultat.Message);
         await using (var cx = await _base.Fabrique.OuvrirAsync())
         {
-            Assert.Equal(1, await cx.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM moniteur;"));
+            Assert.Equal(1, await cx.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM moniteur WHERE genre = 'Moniteur';"));
             Assert.Equal("wal", await cx.ExecuteScalarAsync<string>("PRAGMA journal_mode;"));
         }
 
@@ -114,7 +114,7 @@ public class SauvegardeTests : IAsyncLifetime
         Assert.True(File.Exists(securite));
         await using var avant = new SqliteConnection($"Data Source={securite};Pooling=False");
         await avant.OpenAsync();
-        Assert.Equal(2, await avant.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM moniteur;"));
+        Assert.Equal(2, await avant.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM moniteur WHERE genre = 'Moniteur';"));
     }
 
     [Fact]

@@ -20,6 +20,8 @@
     <!-- Même icône pour la barre de titre et la barre des tâches (Form.Icon). -->
     <EmbeddedResource Include="Ressources\Asprenaut.ico" LogicalName="Asprenaut.ico" />
     <None Remove="Ressources\Asprenaut.png" />
+    <!-- Logo du club (bandeau de l'écran Sorties). -->
+    <EmbeddedResource Include="Ressources\LogoClub.png" LogicalName="LogoClub.png" />
   </ItemGroup>
 
   <ItemGroup>

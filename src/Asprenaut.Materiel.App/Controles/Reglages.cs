@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using Asprenaut.Materiel.App.Apparence;
 
 namespace Asprenaut.Materiel.App.Controles;
@@ -60,7 +60,7 @@ public sealed class Interrupteur : CheckBox
 }
 
 /// <summary>Sélecteur numérique « − 3 j + » dans un cadre arrondi.</summary>
-public sealed class SelecteurNombre : Panel
+public sealed class SelecteurNombre : Panel, IVerrouillable
 {
     private readonly BoutonArrondi _moins;
     private readonly BoutonArrondi _plus;
@@ -82,8 +82,48 @@ public sealed class SelecteurNombre : Panel
         _valeur.TextAlign = ContentAlignment.MiddleCenter;
         _moins.Click += (_, _) => Demande?.Invoke(this, _nombre - 1);
         _plus.Click += (_, _) => Demande?.Invoke(this, _nombre + 1);
+        _valeur.Paint += (_, e) => PeindreCadenas(e.Graphics);
         Controls.AddRange([_moins, _valeur, _plus]);
         Size = new Size(44 + 72 + 44 + 10, 52);
+    }
+
+    private bool _verrouille;
+
+    /// <summary>
+    /// Changer la valeur demande le code gestionnaire : cadenas après la valeur (voir GardeGestion.Lier).
+    /// Les clics lèvent toujours <see cref="Demande"/> : l'écran demande le code avant d'accepter.
+    /// </summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool Verrouille
+    {
+        get => _verrouille;
+        set
+        {
+            if (_verrouille == value)
+            {
+                return;
+            }
+
+            _verrouille = value;
+            _moins.AccessibleDescription = _plus.AccessibleDescription = value ? "Code gestionnaire requis" : null;
+            _valeur.Invalidate();
+            _moins.Invalidate();
+            _plus.Invalidate();
+        }
+    }
+
+    private void PeindreCadenas(Graphics g)
+    {
+        if (!_verrouille)
+        {
+            return;
+        }
+
+        Dessin.Qualite(g);
+        var largeurTexte = TextRenderer.MeasureText(g, _valeur.Text, _valeur.Font).Width;
+        var t = Dessin.Echelle(this, 14);
+        var x = Math.Min(_valeur.Width - t - 2, ((_valeur.Width + largeurTexte) / 2f) + Dessin.Echelle(this, 2));
+        Icones.Dessiner(g, Icones.Cadenas, new RectangleF(x, (_valeur.Height - t) / 2, t, t), Theme.Avertissement, 2.2f);
     }
 
     /// <summary>L'utilisateur demande une nouvelle valeur ; l'écran la fait valider puis appelle <see cref="Nombre"/>.</summary>

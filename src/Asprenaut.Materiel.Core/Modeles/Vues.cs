@@ -25,6 +25,12 @@ public sealed class SortieResume
     public StatutSortie Statut { get; set; }
     public long MoniteurId { get; set; }
     public string MoniteurNom { get; set; } = "";
+
+    /// <summary>Le responsable est un moniteur ou une classe.</summary>
+    public GenreResponsable MoniteurGenre { get; set; }
+
+    /// <summary>« Moniteur : Pascal Durand » ou « Classe : Niveau 2 ».</summary>
+    public string LibelleResponsable => $"{(MoniteurGenre == GenreResponsable.Classe ? "Classe" : "Moniteur")} : {MoniteurNom}";
     public DateTime? DepartValideLe { get; set; }
     public DateTime? ClotureeLe { get; set; }
     public int NbTotal { get; set; }

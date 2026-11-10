@@ -157,6 +157,10 @@ public static class Theme
     public static readonly Color LogoFonce = Hex("#0F5F86");
     public static readonly Color TexteSurLogo = Hex("#04222B");
 
+    /// <summary>Tuile blanche du logo du club (bandeau d'accueil) : fond d'origine de l'image.</summary>
+    public static readonly Color FondLogoClub = Hex("#FFFFFF");
+    public static readonly Color HaloLogoClub = Color.FromArgb(36, 0xD9, 0xFB, 0xFF);
+
     // --- Pastilles des moniteurs (dégradés de la maquette, du clair au foncé), initiales foncées dans les deux thèmes ---
     public static readonly (Color Clair, Color Fonce)[] DegradesAvatar =
     [

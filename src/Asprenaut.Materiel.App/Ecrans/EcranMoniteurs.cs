@@ -10,8 +10,9 @@ using Asprenaut.Materiel.Core.Services;
 namespace Asprenaut.Materiel.App.Ecrans;
 
 /// <summary>
-/// Moniteurs : une carte par moniteur (sorties de la saison, matériel dehors) et la fiche du moniteur choisi
-/// (matériel dehors sous sa responsabilité, dernières sorties, modifier, créer une sortie).
+/// Moniteurs et classes : onglets « Moniteurs | Classes », une carte par responsable (sorties de la saison, matériel dehors)
+/// et la fiche du responsable choisi (matériel dehors sous sa responsabilité, dernières sorties, modifier, créer une sortie).
+/// Une classe (Niveau 1, Niveau 2…) est responsable d'une sortie comme un moniteur ; elle a une pastille carrée (N2).
 /// </summary>
 public sealed class EcranMoniteurs : EcranBase
 {
@@ -20,8 +21,11 @@ public sealed class EcranMoniteurs : EcranBase
     private readonly GrilleAdaptative _cartes = new() { LargeurMin = 250, HauteurElement = 176, Ecart = 14, Margin = new Padding(0, 0, 22, 0) };
     private readonly Panel _fiche = new() { AutoScroll = true, BackColor = Theme.Surface, Margin = Padding.Empty };
     private readonly Carte _carteFiche = new() { Padding = new Padding(24), CouleurBordure = Theme.BordureForte };
+    private readonly Bascule _onglets = new("Moniteurs", "Classes");
+    private readonly BoutonArrondi _ajouter = new("Ajouter un moniteur", StyleBouton.Principal, Icones.Plus);
+    private readonly Dictionary<GenreResponsable, long?> _selection = [];
+    private IReadOnlyList<FicheMoniteur> _tous = [];
     private IReadOnlyList<FicheMoniteur> _liste = [];
-    private long? _selection;
 
     private readonly GardeGestion _garde;
 
@@ -31,36 +35,57 @@ public sealed class EcranMoniteurs : EcranBase
         _moniteurs = moniteurs;
         _navigation = navigation;
 
-        var ajouter = new BoutonArrondi("Ajouter un moniteur", StyleBouton.Principal, Icones.Plus);
-        _garde.Lier(ajouter, ActionProtegee.Moniteurs);
-        ajouter.Click += (_, _) => Executer(() => ModifierAsync(null));
+        _garde.Lier(_ajouter, ActionProtegee.Moniteurs);
+        _ajouter.Click += (_, _) => Executer(() => ModifierAsync(null, Genre));
+
+        _onglets.AccessibleName = "Type de responsable";
+        _onglets.Margin = new Padding(0, 0, 0, 22);
+        _onglets.Changement += (_, _) => Executer(AfficherGenreAsync);
 
         Natif.ScrollbarsDuTheme(_fiche);
         _fiche.Dock = DockStyle.Fill;
         _carteFiche.Controls.Add(_fiche);
 
+        var onglets = Ui.Rangee(true, _onglets);
         Controls.Add(Ui.Colonne(
-            (Ui.Entete(Ui.Pile(Ui.Titre(Titre), Ui.SousTitre("Les responsables de sortie et le matériel qu'ils ont encore dehors.")), ajouter), SizeType.AutoSize, 0),
+            (Ui.Entete(Ui.Pile(Ui.Titre(Titre), Ui.SousTitre("Les responsables de sortie, moniteur ou classe, et le matériel encore dehors.")), _ajouter), SizeType.AutoSize, 0),
+            (onglets, SizeType.AutoSize, 0),
             (Ui.Colonnes((_cartes, SizeType.Percent, 60), (_carteFiche, SizeType.Percent, 40)), SizeType.Percent, 100)));
     }
 
-    public override string Titre => "Moniteurs";
+    public override string Titre => "Moniteurs et classes";
 
     public override EntreeMenu Menu => EntreeMenu.Moniteurs;
+
+    private GenreResponsable Genre => _onglets.SelectedIndex == 1 ? GenreResponsable.Classe : GenreResponsable.Moniteur;
+
+    private bool Classes => Genre == GenreResponsable.Classe;
 
     protected override Task ChargerAsync(object? parametre) => RechargerAsync();
 
     private async Task RechargerAsync()
     {
-        _liste = await _moniteurs.ListerFichesAsync();
+        _tous = await _moniteurs.ListerFichesAsync();
         if (IsDisposed)
         {
             return;
         }
 
-        if (_selection is null || _liste.All(f => f.Moniteur.Id != _selection))
+        _onglets.DefinirNombre(0, _tous.Count(f => !f.Moniteur.EstClasse));
+        _onglets.DefinirNombre(1, _tous.Count(f => f.Moniteur.EstClasse));
+        await AfficherGenreAsync();
+    }
+
+    /// <summary>Cartes de l'onglet choisi (moniteurs ou classes) et fiche du responsable choisi dans cet onglet.</summary>
+    private async Task AfficherGenreAsync()
+    {
+        var genre = Genre;
+        _ajouter.Text = Classes ? "Ajouter une classe" : "Ajouter un moniteur";
+        _ajouter.AccessibleName = _ajouter.Text;
+        _liste = _tous.Where(f => f.Moniteur.Genre == genre).ToList();
+        if (!_selection.TryGetValue(genre, out var choisi) || _liste.All(f => f.Moniteur.Id != choisi))
         {
-            _selection = _liste.FirstOrDefault()?.Moniteur.Id;
+            _selection[genre] = _liste.FirstOrDefault()?.Moniteur.Id;
         }
 
         _cartes.SuspendLayout();
@@ -74,7 +99,7 @@ public sealed class EcranMoniteurs : EcranBase
         for (var i = 0; i < _liste.Count; i++)
         {
             var fiche = _liste[i];
-            var carte = new CarteMoniteur(fiche, i) { Selectionne = fiche.Moniteur.Id == _selection };
+            var carte = new CarteMoniteur(fiche, i) { Selectionne = fiche.Moniteur.Id == _selection[genre] };
             carte.Click += (_, _) => Executer(() => ChoisirAsync(fiche.Moniteur.Id));
             _cartes.Controls.Add(carte);
         }
@@ -85,7 +110,7 @@ public sealed class EcranMoniteurs : EcranBase
 
     private async Task ChoisirAsync(long id)
     {
-        _selection = id;
+        _selection[Genre] = id;
         foreach (var carte in _cartes.Controls.OfType<CarteMoniteur>())
         {
             carte.Selectionne = carte.MoniteurId == id;
@@ -96,7 +121,7 @@ public sealed class EcranMoniteurs : EcranBase
 
     private async Task AfficherFicheAsync()
     {
-        var detail = _selection is { } id ? await _moniteurs.ObtenirDetailAsync(id) : null;
+        var detail = _selection.GetValueOrDefault(Genre) is { } id ? await _moniteurs.ObtenirDetailAsync(id) : null;
         if (IsDisposed)
         {
             return;
@@ -113,7 +138,7 @@ public sealed class EcranMoniteurs : EcranBase
 
         if (detail is null)
         {
-            Ligne(Ui.Libelle("Aucun moniteur. Cliquez sur « Ajouter un moniteur ».", Theme.Police(11f), Theme.TexteSecondaireClair));
+            Ligne(Ui.Libelle(Classes ? "Aucune classe. Cliquez sur « Ajouter une classe »." : "Aucun moniteur. Cliquez sur « Ajouter un moniteur ».", Theme.Police(11f), Theme.TexteSecondaireClair));
         }
         else
         {
@@ -138,10 +163,11 @@ public sealed class EcranMoniteurs : EcranBase
         var m = detail.Moniteur;
         var index = Math.Max(0, _liste.ToList().FindIndex(f => f.Moniteur.Id == m.Id));
 
-        // En-tête : pastille, nom, niveau, téléphone.
+        // En-tête : pastille, nom, niveau (ou « Classe »), téléphone.
         var nom = Ui.Libelle(m.NomComplet, Theme.PoliceGrasse(16f));
         nom.Margin = new Padding(0, 0, 0, 4);
-        var qualite = Ui.Libelle(Qualite(m), Theme.Police(9.75f), Theme.TexteSecondaireClair);
+        var sortiesSaison = _liste.FirstOrDefault(f => f.Moniteur.Id == m.Id)?.SortiesSaison ?? 0;
+        var qualite = Ui.Libelle(Qualite(m, sortiesSaison), Theme.Police(9.75f), Theme.TexteSecondaireClair);
         var textes = Ui.Pile(nom, qualite);
         if (m.Telephone.Length > 0)
         {
@@ -160,7 +186,7 @@ public sealed class EcranMoniteurs : EcranBase
         ligne(entete);
 
         // Matériel dehors sous sa responsabilité.
-        ligne(Section("Matériel dehors sous sa responsabilité"));
+        ligne(Section(m.EstClasse ? "Matériel dehors pour cette classe" : "Matériel dehors sous sa responsabilité"));
         if (detail.EnCours.Count == 0)
         {
             var rien = new BandeauMessage { Margin = new Padding(0, 0, 0, 18), Height = 60 };
@@ -190,7 +216,7 @@ public sealed class EcranMoniteurs : EcranBase
         // Actions.
         var modifier = new BoutonArrondi("Modifier", StyleBouton.Secondaire) { AutoSize = false, Margin = new Padding(0, 0, 10, 0) };
         _garde.Lier(modifier, ActionProtegee.Moniteurs);
-        modifier.Click += (_, _) => Executer(() => ModifierAsync(m));
+        modifier.Click += (_, _) => Executer(() => ModifierAsync(m, m.Genre));
         var creer = new BoutonArrondi("Créer une sortie", StyleBouton.Principal) { AutoSize = false, Margin = Padding.Empty, Enabled = m.Actif };
         creer.Click += (_, _) => _navigation.AllerA<EcranNouvelleSortie>(m.Id);
         var actions = Ui.Colonnes((modifier, SizeType.Percent, 42), (creer, SizeType.Percent, 58));
@@ -252,17 +278,26 @@ public sealed class EcranMoniteurs : EcranBase
         return l;
     }
 
-    private static string Qualite(Moniteur m)
+    private static string Qualite(Moniteur m, int sortiesSaison)
     {
-        var parties = new List<string> { "Moniteur" };
-        if (!string.IsNullOrWhiteSpace(m.Niveau))
+        var parties = new List<string>();
+        if (m.EstClasse)
         {
-            parties.Add(m.Niveau);
+            parties.Add("Classe");
+            parties.Add($"{Libelles.Pluriel(sortiesSaison, "sortie")} cette saison");
         }
-
-        if (m.InspecteurTiv)
+        else
         {
-            parties.Add("TIV");
+            parties.Add("Moniteur");
+            if (!string.IsNullOrWhiteSpace(m.Niveau))
+            {
+                parties.Add(m.Niveau);
+            }
+
+            if (m.InspecteurTiv)
+            {
+                parties.Add("TIV");
+            }
         }
 
         if (!m.Actif)
@@ -273,32 +308,65 @@ public sealed class EcranMoniteurs : EcranBase
         return string.Join(" · ", parties);
     }
 
-    /// <summary>Ajout (m = null) ou modification d'un moniteur dans une petite fenêtre.</summary>
-    private async Task ModifierAsync(Moniteur? m)
+    /// <summary>Ajout (m = null) ou modification d'un moniteur ou d'une classe dans une petite fenêtre.</summary>
+    private async Task ModifierAsync(Moniteur? m, GenreResponsable genre)
     {
-        if (!_garde.Exiger(FindForm(), ActionProtegee.Moniteurs, m is null ? "Ajouter un moniteur" : "Modifier un moniteur"))
+        var classe = genre == GenreResponsable.Classe;
+        var titre = classe
+            ? m is null ? "Ajouter une classe" : "Modifier la classe"
+            : m is null ? "Ajouter un moniteur" : "Modifier le moniteur";
+        if (!_garde.Exiger(FindForm(), ActionProtegee.Moniteurs, titre))
         {
             return;
         }
 
-        var prenom = new ChampSaisie { Valeur = m?.Prenom ?? "" };
-        var nom = new ChampSaisie { Valeur = m?.Nom ?? "" };
-        var niveau = new ChampSaisie { Valeur = m?.Niveau ?? "", TexteIndicatif = "E3, MF1, MF2…" };
-        var telephone = new ChampSaisie { Valeur = m?.Telephone ?? "", TexteIndicatif = "06 12 34 56 78" };
-        var tiv = new Interrupteur("Inspecteur TIV") { Checked = m?.InspecteurTiv ?? false };
-        var actif = new Interrupteur("Actif") { Checked = m?.Actif ?? true };
-        prenom.Champ.AccessibleName = "Prénom";
-        nom.Champ.AccessibleName = "Nom";
-        niveau.Champ.AccessibleName = "Niveau";
-        telephone.Champ.AccessibleName = "Téléphone";
-
         ResultatOperation? enregistre = null;
-        using var fenetre = new FenetreFormulaire(
-            m is null ? "Ajouter un moniteur" : "Modifier le moniteur",
-            m is null ? "Ajouter" : "Enregistrer",
-            async () => enregistre = await _moniteurs.EnregistrerAsync(new Moniteur
+        var actif = new Interrupteur("Actif") { Checked = m?.Actif ?? true };
+        FenetreFormulaire fenetre;
+        if (classe)
+        {
+            var nom = new ChampSaisie { Valeur = m?.NomComplet ?? "", TexteIndicatif = "Niveau 1, Niveau 2…" };
+            var abrege = new ChampSaisie { Valeur = m?.Abrege ?? "", TexteIndicatif = "N1" };
+            nom.Champ.AccessibleName = "Nom de la classe";
+            nom.Champ.MaxLength = ServiceMoniteurs.LongueurMaxClasse;
+            abrege.Champ.AccessibleName = "Abréviation";
+            abrege.Champ.MaxLength = ServiceMoniteurs.LongueurMaxAbrege;
+            abrege.Champ.CharacterCasing = CharacterCasing.Upper;
+
+            // Abréviation proposée d'après le nom, tant qu'elle n'a pas été tapée.
+            nom.Champ.TextChanged += (_, _) => abrege.TexteIndicatif = ServiceMoniteurs.AbregeDe(nom.Valeur) is { Length: > 0 } a ? a : "N1";
+
+            fenetre = new FenetreFormulaire(titre, m is null ? "Ajouter" : "Enregistrer", async () => enregistre = await _moniteurs.EnregistrerAsync(new Moniteur
             {
                 Id = m?.Id ?? 0,
+                Genre = GenreResponsable.Classe,
+                Nom = nom.Valeur,
+                Abrege = abrege.Valeur,
+                Actif = actif.Checked,
+            }));
+            fenetre.Champ("Nom de la classe", nom);
+            fenetre.Champ("Abréviation (pastille, 4 caractères au plus)", abrege);
+            if (m is not null)
+            {
+                fenetre.Ajouter(new LigneReglage("Active", "Une classe inactive n'est plus proposée pour les sorties", actif));
+            }
+        }
+        else
+        {
+            var prenom = new ChampSaisie { Valeur = m?.Prenom ?? "" };
+            var nom = new ChampSaisie { Valeur = m?.Nom ?? "" };
+            var niveau = new ChampSaisie { Valeur = m?.Niveau ?? "", TexteIndicatif = "E3, MF1, MF2…" };
+            var telephone = new ChampSaisie { Valeur = m?.Telephone ?? "", TexteIndicatif = "06 12 34 56 78" };
+            var tiv = new Interrupteur("Inspecteur TIV") { Checked = m?.InspecteurTiv ?? false };
+            prenom.Champ.AccessibleName = "Prénom";
+            nom.Champ.AccessibleName = "Nom";
+            niveau.Champ.AccessibleName = "Niveau";
+            telephone.Champ.AccessibleName = "Téléphone";
+
+            fenetre = new FenetreFormulaire(titre, m is null ? "Ajouter" : "Enregistrer", async () => enregistre = await _moniteurs.EnregistrerAsync(new Moniteur
+            {
+                Id = m?.Id ?? 0,
+                Genre = GenreResponsable.Moniteur,
                 Prenom = prenom.Valeur,
                 Nom = nom.Valeur,
                 Niveau = niveau.Valeur,
@@ -306,58 +374,78 @@ public sealed class EcranMoniteurs : EcranBase
                 InspecteurTiv = tiv.Checked,
                 Actif = actif.Checked,
             }));
-        fenetre.Champ("Prénom", prenom);
-        fenetre.Champ("Nom", nom);
-        fenetre.Champ("Niveau", niveau);
-        fenetre.Champ("Téléphone", telephone);
-        fenetre.Ajouter(new LigneReglage("Inspecteur TIV", "Peut faire les TIV des blocs du club", tiv, filet: false));
-        if (m is not null)
-        {
-            fenetre.Ajouter(new LigneReglage("Actif", "Un moniteur inactif n'est plus proposé pour les sorties", actif));
+            fenetre.Champ("Prénom", prenom);
+            fenetre.Champ("Nom", nom);
+            fenetre.Champ("Niveau", niveau);
+            fenetre.Champ("Téléphone", telephone);
+            fenetre.Ajouter(new LigneReglage("Inspecteur TIV", "Peut faire les TIV des blocs du club", tiv, filet: false));
+            if (m is not null)
+            {
+                fenetre.Ajouter(new LigneReglage("Actif", "Un moniteur inactif n'est plus proposé pour les sorties", actif));
+            }
         }
 
-        if (fenetre.ShowDialog(FindForm()) == DialogResult.OK && enregistre?.Id is { } id)
+        using (fenetre)
         {
-            _selection = id;
-            await RechargerAsync();
+            if (fenetre.ShowDialog(FindForm()) == DialogResult.OK && enregistre?.Id is { } id)
+            {
+                _selection[genre] = id;
+                await RechargerAsync();
+            }
         }
     }
 
-    /// <summary>Pastille ronde avec les initiales, en dégradé.</summary>
+    /// <summary>Pastille avec les initiales en dégradé : ronde pour un moniteur, carrée arrondie avec l'abréviation pour une classe.</summary>
     private sealed class Avatar : ControleDessine
     {
         private readonly string _initiales;
         private readonly (Color Clair, Color Fonce) _degrade;
         private readonly bool _actif;
+        private readonly bool _classe;
 
         public Avatar(Moniteur m, int index, int taille)
         {
             _initiales = Initiales(m);
-            _degrade = Theme.DegradesAvatar[index % Theme.DegradesAvatar.Length];
+            _degrade = Degrade(m, index);
             _actif = m.Actif;
+            _classe = m.EstClasse;
             Size = new Size(taille, taille);
             AccessibleRole = AccessibleRole.Graphic;
             AccessibleName = m.NomComplet;
         }
 
-        public static string Initiales(Moniteur m) =>
-            $"{m.Prenom.FirstOrDefault()}{m.Nom.FirstOrDefault()}".ToUpper(Libelles.Culture);
+        public static string Initiales(Moniteur m) => m.EstClasse
+            ? (m.Abrege.Length > 0 ? m.Abrege : ServiceMoniteurs.AbregeDe(m.NomComplet))
+            : $"{m.Prenom.FirstOrDefault()}{m.Nom.FirstOrDefault()}".ToUpper(Libelles.Culture);
 
-        protected override void Peindre(Graphics g) => Dessiner(g, new RectangleF(0, 0, Width - 1, Height - 1), _initiales, _degrade, _actif, this);
+        /// <summary>Les classes commencent plus loin dans les dégradés (comme la maquette) : N1 n'a pas la couleur du premier moniteur.</summary>
+        public static (Color Clair, Color Fonce) Degrade(Moniteur m, int index) =>
+            Theme.DegradesAvatar[(index + (m.EstClasse ? 2 : 0)) % Theme.DegradesAvatar.Length];
 
-        public static void Dessiner(Graphics g, RectangleF r, string initiales, (Color Clair, Color Fonce) degrade, bool actif, Control c)
+        protected override void Peindre(Graphics g) => Dessiner(g, new RectangleF(0, 0, Width - 1, Height - 1), _initiales, _degrade, _actif, _classe, this);
+
+        public static void Dessiner(Graphics g, RectangleF r, string initiales, (Color Clair, Color Fonce) degrade, bool actif, bool classe, Control c)
         {
             var (clair, fonce) = actif ? degrade : (Theme.TexteSecondaire, Theme.SurfaceActive);
             using (var pinceau = new LinearGradientBrush(r, clair, fonce, 40f))
             {
-                g.FillEllipse(pinceau, r);
+                if (classe)
+                {
+                    using var forme = Dessin.Arrondi(r, r.Height * 0.3f);
+                    g.FillPath(pinceau, forme);
+                }
+                else
+                {
+                    g.FillEllipse(pinceau, r);
+                }
             }
 
-            Dessin.Texte(g, initiales, Theme.PoliceGrasse(r.Height * 72 / c.DeviceDpi / 2.9f), Rectangle.Round(r), Theme.TexteSurAvatar, centre: true);
+            var diviseur = initiales.Length > 2 ? 3.6f : 2.9f;
+            Dessin.Texte(g, initiales, Theme.PoliceGrasse(r.Height * 72 / c.DeviceDpi / diviseur), Rectangle.Round(r), Theme.TexteSurAvatar, centre: true);
         }
     }
 
-    /// <summary>Carte d'un moniteur dans la grille (bouton accessible au clavier).</summary>
+    /// <summary>Carte d'un moniteur ou d'une classe dans la grille (bouton accessible au clavier).</summary>
     private sealed class CarteMoniteur : Button
     {
         private readonly FicheMoniteur _fiche;
@@ -431,17 +519,21 @@ public sealed class EcranMoniteurs : EcranBase
                 }
             }
 
-            // Pastille, nom, niveau et TIV.
+            // Pastille, nom, niveau et TIV (« CLASSE » pour une classe).
             var x = E(18);
             var y = E(18);
             var d = E(52);
-            Avatar.Dessiner(g, new RectangleF(x, y, d, d), Avatar.Initiales(m), Theme.DegradesAvatar[_index % Theme.DegradesAvatar.Length], m.Actif, this);
+            Avatar.Dessiner(g, new RectangleF(x, y, d, d), Avatar.Initiales(m), Avatar.Degrade(m, _index), m.Actif, m.EstClasse, this);
             var gauche = (int)(x + d + E(14));
             var nom = Theme.PoliceTitre(12.75f);
             Dessin.Texte(g, m.NomComplet, nom, new Rectangle(gauche, (int)(y + E(2)), Width - gauche - (int)E(12), (int)E(26)), m.Actif ? Theme.Texte : Theme.TexteSecondaire);
             var px = (float)gauche;
             var py = y + E(32);
-            if (!string.IsNullOrWhiteSpace(m.Niveau))
+            if (m.EstClasse)
+            {
+                px = Pastille(g, "CLASSE", px, py, Theme.AccentClair) + E(6);
+            }
+            else if (!string.IsNullOrWhiteSpace(m.Niveau))
             {
                 px = Pastille(g, m.Niveau.ToUpper(Libelles.Culture), px, py, Theme.AccentClair) + E(6);
             }

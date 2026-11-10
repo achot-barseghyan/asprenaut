@@ -84,13 +84,13 @@ public sealed class ServiceSortie(
 
         if (demande.MoniteurId is not { } moniteurId)
         {
-            return ResultatOperation.Echec("Choisissez le moniteur responsable.");
+            return ResultatOperation.Echec("Choisissez le responsable : un moniteur ou une classe.");
         }
 
         var moniteur = await moniteurs.ObtenirAsync(moniteurId, ct);
         if (moniteur is null || !moniteur.Actif)
         {
-            return ResultatOperation.Echec("Ce moniteur n'est pas disponible.");
+            return ResultatOperation.Echec(moniteur?.EstClasse == true ? "Cette classe n'est pas disponible." : "Ce moniteur n'est pas disponible.");
         }
 
         var (famille, typeId, utilisationsDuType, erreurType) = await TypeAsync(demande, null, ct);
@@ -99,12 +99,19 @@ public sealed class ServiceSortie(
             return erreurType;
         }
 
+        // Changer les utilisations du type (compteur) demande le mode gestion.
+        var utilisations = demande.Utilisations ?? utilisationsDuType;
+        if (utilisations != utilisationsDuType && gestion?.Exiger(ActionProtegee.CompteurSortie) is { Reussi: false } refusCompteur)
+        {
+            return refusCompteur;
+        }
+
         var sortie = new Sortie
         {
             DateSortie = demande.Date,
             Type = famille,
             TypeId = typeId,
-            Utilisations = demande.Utilisations ?? utilisationsDuType,
+            Utilisations = utilisations,
             Intitule = intitule,
             MoniteurId = moniteurId,
             Lieu = demande.Lieu.Trim(),
@@ -143,13 +150,13 @@ public sealed class ServiceSortie(
 
         if (demande.MoniteurId is not { } moniteurId)
         {
-            return ResultatOperation.Echec("Choisissez le moniteur responsable.");
+            return ResultatOperation.Echec("Choisissez le responsable : un moniteur ou une classe.");
         }
 
         var moniteur = await moniteurs.ObtenirAsync(moniteurId, ct);
         if (moniteur is null || (!moniteur.Actif && moniteurId != sortie.MoniteurId))
         {
-            return ResultatOperation.Echec("Ce moniteur n'est pas disponible.");
+            return ResultatOperation.Echec(moniteur?.EstClasse == true ? "Cette classe n'est pas disponible." : "Ce moniteur n'est pas disponible.");
         }
 
         var (famille, typeId, utilisationsDuType, erreurType) = await TypeAsync(demande, sortie.TypeId, ct);
@@ -159,7 +166,15 @@ public sealed class ServiceSortie(
         }
 
         // Sans valeur donnée : la sortie garde la sienne, ou prend celle du nouveau type si le type change.
-        sortie.Utilisations = demande.Utilisations ?? (typeId != sortie.TypeId ? utilisationsDuType : sortie.Utilisations);
+        // Une autre valeur (compteur changé à la main) demande le mode gestion.
+        var attendues = typeId != sortie.TypeId ? utilisationsDuType : sortie.Utilisations;
+        var utilisations = demande.Utilisations ?? attendues;
+        if (utilisations != attendues && gestion?.Exiger(ActionProtegee.CompteurSortie) is { Reussi: false } refusCompteur)
+        {
+            return refusCompteur;
+        }
+
+        sortie.Utilisations = utilisations;
         sortie.DateSortie = demande.Date;
         sortie.Type = famille;
         sortie.TypeId = typeId;

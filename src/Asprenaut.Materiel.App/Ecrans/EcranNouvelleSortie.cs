@@ -1,4 +1,4 @@
-using Asprenaut.Materiel.App.Apparence;
+﻿using Asprenaut.Materiel.App.Apparence;
 using Asprenaut.Materiel.App.Controles;
 using Asprenaut.Materiel.App.Navigation;
 using Asprenaut.Materiel.Core.Modeles;
@@ -6,7 +6,7 @@ using Asprenaut.Materiel.Core.Services;
 
 namespace Asprenaut.Materiel.App.Ecrans;
 
-/// <summary>Formulaire de création d'une sortie : type en tuiles, date, moniteur, intitulé, lieu, notes.</summary>
+/// <summary>Formulaire de création d'une sortie : type en tuiles, date, responsable (moniteur ou classe), intitulé, lieu, notes.</summary>
 public sealed class EcranNouvelleSortie : EcranBase
 {
     private const int LargeurMax = 820;
@@ -15,10 +15,11 @@ public sealed class EcranNouvelleSortie : EcranBase
     private readonly ServiceMoniteurs _moniteurs;
     private readonly INavigation _navigation;
     private readonly ServiceTypesSortie _typesSortie;
+    private readonly GardeGestion _garde;
     private readonly List<(Tuile Tuile, long Id)> _types = [];
     private readonly GrilleAdaptative _tuiles = new() { LargeurMin = 96, HauteurElement = 96, Ecart = 10, ColonnesMax = 6, Margin = new Padding(0, 0, 0, 26) };
     private readonly ChampDate _date = new();
-    private readonly ListeDeroulante _moniteur = new();
+    private readonly ChoixResponsable _responsable = new();
     private readonly ChampSaisie _intitule = new() { TexteIndicatif = "Ex. : Cours en piscine" };
     private readonly ChampSaisie _lieu = new() { TexteIndicatif = "Nom de la piscine, du site…" };
     private readonly ChampSaisie _notes = new(multiligne: true) { TexteIndicatif = "Groupe N1, 8 élèves…" };
@@ -32,22 +33,23 @@ public sealed class EcranNouvelleSortie : EcranBase
     private readonly Dictionary<long, (string Nom, int Utilisations)> _utilisationsParType = [];
     private int? _utilisationsChoisies;
 
-    public EcranNouvelleSortie(ServiceSortie sorties, ServiceMoniteurs moniteurs, INavigation navigation, ServiceTypesSortie typesSortie)
+    public EcranNouvelleSortie(ServiceSortie sorties, ServiceMoniteurs moniteurs, INavigation navigation, ServiceTypesSortie typesSortie, GardeGestion garde)
     {
         _sorties = sorties;
         _moniteurs = moniteurs;
         _navigation = navigation;
         _typesSortie = typesSortie;
+        _garde = garde;
 
         // Type de sortie : une tuile par type proposé (Paramètres › Types de sortie), ajoutées au chargement.
 
         _date.Date = DateOnly.FromDateTime(DateTime.Today);
-        _moniteur.AccessibleName = "Moniteur responsable";
+
         _intitule.Champ.AccessibleName = "Intitulé";
         _lieu.Champ.AccessibleName = "Lieu";
         _notes.Champ.AccessibleName = "Notes";
 
-        // Grille 2 × 2 : Date | Moniteur, Intitulé | Lieu.
+        // Grille 2 × 2 : Date | Responsable (moniteur ou classe), Intitulé | Lieu.
         var grille = new TableLayoutPanel { ColumnCount = 2, RowCount = 4, Dock = DockStyle.Fill, AutoSize = true, BackColor = Color.Transparent, Margin = new Padding(0, 0, 0, 2) };
         grille.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         grille.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
@@ -68,13 +70,10 @@ public sealed class EcranNouvelleSortie : EcranBase
         }
 
         Champ(0, 0, "Date", _date);
-        Champ(1, 0, "Moniteur responsable", _moniteur);
+        Champ(1, 0, "Responsable", _responsable);
         Champ(0, 1, "Intitulé", _intitule);
         Champ(1, 1, "Lieu", _lieu);
 
-        // La liste déroulante a sa propre hauteur : on la cale en haut de sa ligne.
-        _moniteur.Dock = DockStyle.None;
-        _moniteur.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top;
 
         var notes = Ui.Libelle("Notes", Theme.PoliceTitre(9.75f), Theme.TexteSecondaireClair);
         var facultatif = Ui.Libelle("(facultatif)", Theme.Police(9.75f), Theme.TexteSecondaire);
@@ -181,22 +180,12 @@ public sealed class EcranNouvelleSortie : EcranBase
             ChoisirType(types[0].Id);
         }
 
-        var moniteurs = await _moniteurs.ListerActifsAsync();
-        _moniteur.Items.Clear();
-        foreach (var m in moniteurs)
+        // Moniteurs et classes actifs ; ouvert depuis une fiche de « Moniteurs et classes » : ce responsable est déjà choisi.
+        var responsables = await _moniteurs.ListerActifsAsync();
+        _responsable.Remplir(responsables, parametre as long?);
+        if (responsables.Count == 0)
         {
-            _moniteur.Items.Add(new Choix<long>(m.Id, m.NomComplet));
-        }
-
-        // Ouvert depuis la fiche d'un moniteur : il est déjà choisi.
-        if (parametre is long moniteurId)
-        {
-            _moniteur.SelectedItem = _moniteur.Items.OfType<Choix<long>>().FirstOrDefault(c => c.Valeur == moniteurId);
-        }
-
-        if (_moniteur.Items.Count == 0)
-        {
-            _message.Text = "Aucun moniteur enregistré. Ajoutez-en un dans « Moniteurs ».";
+            _message.Text = "Aucun responsable enregistré. Ajoutez un moniteur ou une classe dans « Moniteurs et classes ».";
         }
 
         _intitule.Champ.Focus();
@@ -225,8 +214,15 @@ public sealed class EcranNouvelleSortie : EcranBase
         textes.Anchor = AnchorStyles.Left;
         _utilisations.Anchor = AnchorStyles.Right;
         _utilisations.Margin = new Padding(12, 0, 0, 0);
+        // En mode consultation, changer le compteur demande le code gestionnaire (cadenas sur le sélecteur).
+        _garde.Lier(_utilisations, ActionProtegee.CompteurSortie);
         _utilisations.Demande += (_, n) =>
         {
+            if (!_garde.Exiger(FindForm(), ActionProtegee.CompteurSortie, "Changer les utilisations"))
+            {
+                return;
+            }
+
             _utilisationsChoisies = Math.Clamp(n, TypeDeSortie.UtilisationsMin, TypeDeSortie.UtilisationsMax);
             AfficherUtilisations();
         };
@@ -276,7 +272,7 @@ public sealed class EcranNouvelleSortie : EcranBase
                 date,
                 Core.Modeles.TypeSortie.Autre,
                 _intitule.Valeur,
-                (_moniteur.SelectedItem as Choix<long>)?.Valeur,
+                _responsable.ResponsableId,
                 _lieu.Valeur,
                 _notes.Valeur,
                 _typeId,
