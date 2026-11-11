@@ -77,7 +77,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   (en Dock Top, la barre de défilement apparue après coup recouvrait le bord droit des cartes).
 - **Impression/** : `DocumentPdf` dessine des `BlocPdf` en GDI+ (thème clair) et les envoie à l'imprimante Windows
   « Microsoft Print to PDF » (`PrintToFile`), sans bibliothèque ; pagination par blocs, titre gardé avec la suite.
-  `RapportBilan` (bilan pour l'AG), `RegistrePdf` (registre des contrôles, bouton « Registre PDF » de Révisions).
+  `RapportBilan` (bilan pour l'AG), `RegistrePdf` (registre des contrôles, bouton « Registre PDF » de Révisions), `FicheSuiviPdf` (fiche de suivi EPI).
   `Infrastructure/Fichiers` : `EnregistrerPdfAsync` (imprimante, dialogue, erreurs, ouvrir) et `EnregistrerCsvAsync` (UTF-8 avec BOM).
 - **Exports CSV** : `Core/Saisie/Csv` (séparateur « ; », guillemets, apostrophe devant = + - @). Inventaire : lignes affichées
   (`ServiceInventaire.ExporterCsv`). Paramètres › Exporter CSV : toutes les tables dans « Export Asprenaut AAAA-MM-JJ »
@@ -238,10 +238,28 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     au plus. Une catégorie utilisée par un équipement ou un manuel ne se supprime pas (la requête SQL re-vérifie) ; il en reste toujours
     une. La liste est relue après chaque ajout / suppression (le code proposé suit la catégorie choisie).
 
-27. Fiche de suivi (Inventaire) : clic sur le nom souligné, double-clic sur la ligne, Entrée ou bouton « Suivi » (à gauche de
-    « Modifier » dans la colonne d'actions) ouvrent `Ecrans/FicheSuivi` en lecture seule : identité, sorties de la saison, où est
-    l'équipement, prochaine échéance et parcours complet (sorties, contrôles, ateliers). Elle lit `ServiceHistorique.ObtenirVieAsync(id)`
-    et partage l'en-tête, les tuiles et la frise avec l'historique (`Controles/FicheVie`). « Modifier » reste l'édition, protégée par Materiel.
+27. Fiche de suivi EPI (maquette « Fiche de suivi EPI », migration 011) : clic sur le nom souligné, double-clic, Entrée ou bouton
+    « Suivi » de l'inventaire → `AllerA<EcranFicheSuivi>(idEquipement)` (fil d'Ariane « Inventaire › Fiche de suivi EPI · A05 »).
+    `ServiceHistorique.ObtenirFicheSuiviAsync` : `VieEquipement`, titre (nom puis modèles sans la marque répétée, sans le manomètre),
+    composants (`ServiceInventaire.ComposantsDe` : détendeur → Premier étage, puis Deuxième étage / Octopus / Manomètre renseignés ;
+    autre → une carte « Équipement complet »), interventions (contrôles + passages en atelier, du plus récent ; nature « : détails »).
+    Une intervention peut viser un composant (`controle.composant`, vide = équipement complet ; composant absent → refusé) :
+    elle ne change ni les échéances ni le compteur de l'équipement (seul un refus le met hors service) et ne compte pas comme
+    « dernier contrôle » / « dernière révision » de l'équipement (requêtes filtrées sur `composant = ''`). Tuile « Dernier contrôle »
+    d'une carte : le composant ou l'équipement complet ; filtre par composant (`InterventionsDe`) idem. Écran : en-tête (code, statut,
+    compteur, prochaine révision, « Manuel » si un manuel correspond, « Imprimer la fiche » → `Impression/FicheSuiviPdf`), cartes
+    dessinées, puces `FiltreCategories`, formulaire « Ajouter une intervention » (Révisions, avec composant et détails ;
+    `ChoixResultat` partagé) et tableau dessiné. « + Ajouter un composant » / « Modifier la fiche » ouvre `FormulaireEquipement`
+    (Materiel) ; « Ajouter une intervention » demande Revisions. `Controles/FicheVie` reste la fiche de l'Historique.
+    Ajouter un composant (migration 012, `ServiceInventaire.AjouterComposantAsync`, Materiel, fenêtre `Ecrans/FormulaireComposant`) :
+    détendeur seulement, deuxième étage / octopus / manomètre absent (`Composition`, `ComposantsAjoutables`) ; modèle obligatoire
+    (marque pour le manomètre), puces des modèles connus (`ModelesConnusAsync` : deuxièmes étages et octopus confondus) ;
+    fabrication « MM/AAAA » (`LireMoisAnnee`) et mise en service ni futures, mise en service pas avant la fabrication ; origine
+    neuve / récupérée. Modèle et n° dans la fiche matériel (n° du manomètre dans la table composant), fabrication, mise en service
+    et origine dans la table composant (tuiles Fabrication / Mise en service / Origine de la carte). Journal `ComposantAjoute` ;
+    option « Noter « Montage octopus » » : intervention conforme sur ce composant, datée de la mise en service. Bouton
+    « + Ajouter un composant » de la fiche s'il manque un composant, sinon « Modifier la fiche » (`FormulaireEquipement`).
+    `FenetreFormulaire.EnTete(sousTitre, badge)` : sous-titre et pastille « Mode gestion ».
 
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
@@ -268,12 +286,13 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   depuis 008 : moniteur.genre (CHECK Moniteur/Classe) et moniteur.abrege, classes Niveau 1 à 4 ;
   depuis 009 : manuel (fichier, nb_pages, sommaire et entretien en texte, une ligne par entrée ; PDF dans `Manuels\` à côté
   de la base, non copiés par les sauvegardes de la base) ; 010 : codes des médailles (DET-007 → A07, GIL-012 → S12, journal
-  corrigé ; un code déjà pris reste inchangé).
+  corrigé ; un code déjà pris reste inchangé) ; 011 : controle.composant (vide = équipement complet) ; 012 : composant (equipement_id + role, numero_serie, fabrication,
+  mise_en_service, origine CHECK Neuve/Recuperee).
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/011_xxx.sql`, sans jamais modifier un script déjà livré
+- Nouvelle migration : ajouter `Migrations/013_xxx.sql`, sans jamais modifier un script déjà livré
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.

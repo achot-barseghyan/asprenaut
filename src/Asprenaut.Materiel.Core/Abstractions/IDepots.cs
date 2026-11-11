@@ -36,6 +36,12 @@ public interface IEquipementRepository
     /// (tous types), ou depuis toujours s'il n'en a pas.
     /// </summary>
     Task<IReadOnlyList<CompteurEquipement>> ListerCompteursAsync(long? equipementId, CancellationToken ct = default);
+
+    /// <summary>Détails des composants ajoutés à un équipement (table composant).</summary>
+    Task<IReadOnlyList<DetailComposant>> ListerComposantsAsync(long equipementId, CancellationToken ct = default);
+
+    /// <summary>Enregistre (ou remplace) le détail d'un composant.</summary>
+    Task EnregistrerComposantAsync(DetailComposant detail, CancellationToken ct = default);
 }
 
 public interface IMoniteurRepository

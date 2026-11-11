@@ -40,4 +40,5 @@ public static class ActionsJournal
     public const string MoniteurModifie = "MoniteurModifie";
     public const string ClasseCreee = "ClasseCreee";
     public const string ClasseModifiee = "ClasseModifiee";
+    public const string ComposantAjoute = "ComposantAjoute";
 }

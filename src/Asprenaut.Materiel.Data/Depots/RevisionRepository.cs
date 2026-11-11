@@ -13,8 +13,8 @@ public sealed class RevisionRepository(FabriqueConnexion fabrique) : IRevisionRe
     public async Task<long> AjouterControleAsync(Controle controle, CancellationToken ct = default)
     {
         const string sql = """
-            INSERT INTO controle (equipement_id, type, date_controle, resultat, inspecteur_id, notes, saisi_le, nature, intervenant)
-            VALUES (@EquipementId, @Type, @DateControle, @Resultat, @InspecteurId, @Notes, @SaisiLe, @Nature, @Intervenant)
+            INSERT INTO controle (equipement_id, type, date_controle, resultat, inspecteur_id, notes, saisi_le, nature, intervenant, composant)
+            VALUES (@EquipementId, @Type, @DateControle, @Resultat, @InspecteurId, @Notes, @SaisiLe, @Nature, @Intervenant, @Composant)
             RETURNING id;
             """;
         await using var cx = await fabrique.OuvrirAsync(ct);
@@ -29,6 +29,7 @@ public sealed class RevisionRepository(FabriqueConnexion fabrique) : IRevisionRe
             SaisiLe = FormatIso.Ecrire(controle.SaisiLe),
             controle.Nature,
             controle.Intervenant,
+            controle.Composant,
         }, cancellationToken: ct));
         return controle.Id;
     }
@@ -37,7 +38,7 @@ public sealed class RevisionRepository(FabriqueConnexion fabrique) : IRevisionRe
     {
         await using var cx = await fabrique.OuvrirAsync(ct);
         var lignes = await cx.QueryAsync<DernierControle>(new CommandDefinition(
-            "SELECT equipement_id, type, MAX(date_controle) AS date_controle FROM controle GROUP BY equipement_id, type;",
+            "SELECT equipement_id, type, MAX(date_controle) AS date_controle FROM controle WHERE composant = '' GROUP BY equipement_id, type;",
             cancellationToken: ct));
         return lignes.AsList();
     }
@@ -47,7 +48,7 @@ public sealed class RevisionRepository(FabriqueConnexion fabrique) : IRevisionRe
         await using var cx = await fabrique.OuvrirAsync(ct);
         var lignes = await cx.QueryAsync<Controle>(new CommandDefinition(
             """
-            SELECT id, equipement_id, type, date_controle, resultat, inspecteur_id, notes, saisi_le, nature, intervenant
+            SELECT id, equipement_id, type, date_controle, resultat, inspecteur_id, notes, saisi_le, nature, intervenant, composant
             FROM controle WHERE equipement_id = @equipementId ORDER BY date_controle DESC, id DESC;
             """,
             new { equipementId }, cancellationToken: ct));
@@ -59,7 +60,7 @@ public sealed class RevisionRepository(FabriqueConnexion fabrique) : IRevisionRe
         await using var cx = await fabrique.OuvrirAsync(ct);
         var lignes = await cx.QueryAsync<Controle>(new CommandDefinition(
             """
-            SELECT id, equipement_id, type, date_controle, resultat, inspecteur_id, notes, saisi_le, nature, intervenant
+            SELECT id, equipement_id, type, date_controle, resultat, inspecteur_id, notes, saisi_le, nature, intervenant, composant
             FROM controle WHERE date_controle BETWEEN @du AND @au ORDER BY date_controle, id;
             """,
             new { du = FormatIso.Ecrire(du), au = FormatIso.Ecrire(au) }, cancellationToken: ct));

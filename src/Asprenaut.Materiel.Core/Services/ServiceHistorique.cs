@@ -44,6 +44,7 @@ public sealed class ServiceHistorique(
         [ActionsJournal.SortieSupprimee] = (TypeEvenement.Sortie, "Sortie supprimée"),
         [ActionsJournal.EquipementCree] = (TypeEvenement.Materiel, "Ajout"),
         [ActionsJournal.EquipementModifie] = (TypeEvenement.Materiel, "Modification"),
+        [ActionsJournal.ComposantAjoute] = (TypeEvenement.Materiel, "Composant ajouté"),
         [ActionsJournal.ControleEnregistre] = (TypeEvenement.Revision, "Contrôle"),
         [ActionsJournal.EnvoiAtelier] = (TypeEvenement.Revision, "Envoi en atelier"),
         [ActionsJournal.RetourAtelier] = (TypeEvenement.Revision, "Retour d'atelier"),
@@ -163,6 +164,7 @@ public sealed class ServiceHistorique(
                     l.MoniteurNom)),
             ActionsJournal.EquipementCree => (equipement, l.EquipementId is null ? "" : Joindre("Nouvel équipement", l.Categorie)),
             ActionsJournal.EquipementModifie => (equipement, l.Categorie ?? ""),
+            ActionsJournal.ComposantAjoute => (equipement, SansCode(l.Details, l.Code)),
             ActionsJournal.ControleEnregistre or ActionsJournal.EnvoiAtelier or ActionsJournal.RetourAtelier
                 or ActionsJournal.AjoutSeanceTiv or ActionsJournal.RetraitSeanceTiv =>
                 (equipement, SansCode(l.Details, l.Code)),
@@ -247,26 +249,191 @@ public sealed class ServiceHistorique(
             return null;
         }
 
-        return await ConstruireVieAsync(e, ct);
+        return ConstruireVie(e, await ChargerAsync(e, ct));
     }
 
     /// <summary>Fiche d'un équipement par son identifiant (depuis l'inventaire) ; null s'il n'existe plus.</summary>
     public async Task<VieEquipement?> ObtenirVieAsync(long equipementId, CancellationToken ct = default) =>
-        await equipements.ObtenirAsync(equipementId, ct) is { } e ? await ConstruireVieAsync(e, ct) : null;
+        await equipements.ObtenirAsync(equipementId, ct) is { } e ? ConstruireVie(e, await ChargerAsync(e, ct)) : null;
 
-    private async Task<VieEquipement> ConstruireVieAsync(Equipement e, CancellationToken ct)
+    /// <summary>
+    /// Fiche de suivi complète : la vie de l'équipement (où il est, échéance, parcours), ses composants et toutes
+    /// ses interventions (contrôles et passages en atelier), de la plus récente à la plus ancienne.
+    /// </summary>
+    public async Task<FicheSuiviEquipement?> ObtenirFicheSuiviAsync(long equipementId, CancellationToken ct = default)
+    {
+        if (await equipements.ObtenirAsync(equipementId, ct) is not { } e)
+        {
+            return null;
+        }
+
+        var donnees = await ChargerAsync(e, ct);
+        var composants = Composants(e, donnees.Categorie, donnees.Controles, await equipements.ListerComposantsAsync(e.Id, ct));
+        return new FicheSuiviEquipement(ConstruireVie(e, donnees), TitreDe(e, composants), composants, Interventions(donnees),
+            donnees.Controles.Where(c => c.Type == TypeControle.Revision && c.Composant.Length == 0).Select(c => (DateOnly?)c.DateControle).Max());
+    }
+
+    private sealed record DonneesVie(
+        string Categorie,
+        IReadOnlyList<PassageSortie> Passages,
+        IReadOnlyList<Controle> Controles,
+        IReadOnlyList<PassageAtelier> Ateliers,
+        IReadOnlyDictionary<long, string> Noms);
+
+    private async Task<DonneesVie> ChargerAsync(Equipement e, CancellationToken ct)
     {
         var categorie = (await categories.ListerAsync(ct)).FirstOrDefault(c => c.Id == e.CategorieId)?.Nom ?? "";
         var passages = await sorties.ListerPassagesAsync(e.Id, ct);
         var controles = await revisions.ListerControlesAsync(e.Id, ct);
         var ateliers = await revisions.ListerPassagesAtelierAsync(e.Id, ct);
         var noms = (await moniteurs.ListerAsync(actifsSeulement: false, ct)).ToDictionary(m => m.Id, m => m.NomComplet);
+        return new DonneesVie(categorie, passages, controles, ateliers, noms);
+    }
 
+    private VieEquipement ConstruireVie(Equipement e, DonneesVie d)
+    {
         var debutSaison = ServiceMoniteurs.DebutSaison(horloge.AujourdHui);
-        var sortiesSaison = passages.Where(p => p.DateSortie >= debutSaison).Select(p => p.SortieId).Distinct().Count();
-        var (statut, libelle, precision) = Statut(e, passages, ateliers);
-        var (echeance, etat) = Echeance(e, categorie);
-        return new VieEquipement(e, categorie, sortiesSaison, statut, libelle, precision, echeance, etat, Etapes(e, categorie, passages, controles, ateliers, noms));
+        var sortiesSaison = d.Passages.Where(p => p.DateSortie >= debutSaison).Select(p => p.SortieId).Distinct().Count();
+        var (statut, libelle, precision) = Statut(e, d.Passages, d.Ateliers);
+        var (echeance, etat) = Echeance(e, d.Categorie);
+        return new VieEquipement(e, d.Categorie, sortiesSaison, statut, libelle, precision, echeance, etat,
+            Etapes(e, d.Categorie, d.Passages, d.Controles, d.Ateliers, d.Noms));
+    }
+
+    // ---------------------------------------------------------------- Composants et interventions de la fiche
+
+    /// <summary>
+    /// Cartes « Composants » : un détendeur est détaillé (premier étage, puis deuxième étage, octopus et manomètre
+    /// renseignés dans sa fiche) ; les autres équipements n'ont qu'une carte « Équipement complet ».
+    /// </summary>
+    private static IReadOnlyList<ComposantSuivi> Composants(Equipement e, string categorie, IReadOnlyList<Controle> controles, IReadOnlyList<DetailComposant> details)
+    {
+        var roles = ServiceInventaire.ComposantsDe(e, categorie);
+        if (roles.Count == 0)
+        {
+            return [new ComposantSuivi(ServiceInventaire.ComposantComplet, ModeleDe(e.Marque, e.Modele, e.Libelle), e.NumeroSerie, Tuiles(e, controles, null))];
+        }
+
+        return roles.Select(role =>
+        {
+            var detail = details.FirstOrDefault(d => d.Role == role);
+            var tuiles = Tuiles(e, controles, role, detail);
+            return role switch
+            {
+                "Deuxième étage" => new ComposantSuivi(role, ModeleDe(e.MarqueDeuxiemeEtage, e.ModeleDeuxiemeEtage), e.NumeroDeuxiemeEtage, tuiles),
+                "Octopus" => new ComposantSuivi(role, ModeleDe(e.Octopus), e.NumeroOctopus, tuiles),
+                "Manomètre" => new ComposantSuivi(role, ModeleDe(e.Manometre), detail?.NumeroSerie ?? "", tuiles),
+                _ => new ComposantSuivi(role, ModeleDe(e.Marque, e.Modele), e.NumeroSerie, tuiles),
+            };
+        }).ToList();
+    }
+
+    /// <summary>
+    /// Tuiles d'une carte : date d'ajout, dernier contrôle (de ce composant ou de tout l'équipement), prochaine révision et
+    /// état (ceux de l'équipement : la base ne suit pas les échéances composant par composant).
+    /// </summary>
+    private static IReadOnlyList<TuileComposant> Tuiles(Equipement e, IReadOnlyList<Controle> controles, string? role, DetailComposant? detail = null)
+    {
+        var ajoute = DateOnly.FromDateTime(e.CreeLe.ToLocalTime());
+        var siens = controles.Where(c => c.Composant.Length == 0 || string.Equals(c.Composant, role, StringComparison.OrdinalIgnoreCase)).ToList();
+        var dernier = siens.Count == 0 ? (DateOnly?)null : siens.Max(c => c.DateControle);
+        TuileComposant derniereTuile = new("Dernier contrôle", dernier is { } date ? Libelles.Date(date) : "—");
+        TuileComposant prochaine = new("Prochaine révision", e.ProchaineEcheance is { } revision ? revision.ToString("MM/yyyy", Libelles.Culture) : "—");
+        TuileComposant etat = new("État", Libelles.De(e.Etat));
+        if (detail is null)
+        {
+            return [new("Ajouté le", Libelles.Date(ajoute)), derniereTuile, prochaine, etat];
+        }
+
+        // Composant ajouté depuis la fiche de suivi : fabrication, mise en service et origine connues.
+        return
+        [
+            new("Fabrication", detail.Fabrication is { } f ? f.ToString("MM/yyyy", Libelles.Culture) : "—"),
+            new("Mise en service", detail.MiseEnService is { } s ? Libelles.Date(s) : "—"),
+            derniereTuile,
+            prochaine,
+            new("Origine", detail.Origine == OrigineComposant.Neuve ? "Pièce neuve" : "Récupérée"),
+            etat,
+        ];
+    }
+
+    /// <summary>
+    /// Titre de la fiche : le nom, puis le modèle de chaque composant sans les mots déjà écrits (la marque) :
+    /// « Détendeur Scubapro · MK2 · R295 · R095 ». Le manomètre (une marque seulement) n'y figure pas.
+    /// </summary>
+    private static string TitreDe(Equipement e, IReadOnlyList<ComposantSuivi> composants)
+    {
+        var parties = new List<string> { e.Libelle.Trim().Length > 0 ? e.Libelle.Trim() : e.Code };
+        foreach (var modele in composants.Where(c => c.Role != "Manomètre").Select(c => c.Modele).Where(m => m != "—"))
+        {
+            var deja = string.Join(" ", parties).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var nouveau = string.Join(" ", modele.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Where(mot => !deja.Contains(mot, StringComparer.OrdinalIgnoreCase)));
+            if (nouveau.Length > 0)
+            {
+                parties.Add(nouveau);
+            }
+        }
+
+        return string.Join(" · ", parties);
+    }
+
+    /// <summary>
+    /// Contrôles et passages en atelier, du plus récent au plus ancien (à date égale, le dernier saisi d'abord).
+    /// Nature : celle saisie (sinon celle du contrôle) suivie des détails ; atelier : le motif, « En atelier » ou la date de retour.
+    /// </summary>
+    private static IReadOnlyList<InterventionSuivie> Interventions(DonneesVie d)
+    {
+        var interventions = new List<(InterventionSuivie Ligne, int Ordre)>();
+        foreach (var c in d.Controles)
+        {
+            var nature = c.Nature.Trim();
+            if (nature.Length == 0)
+            {
+                nature = ServiceRevisions.LibelleControle(c.Type, d.Categorie);
+            }
+
+            if (c.Notes.Trim().Length > 0)
+            {
+                nature = $"{nature} : {c.Notes.Trim()}";
+            }
+
+            var intervenant = c.Intervenant.Trim();
+            if (intervenant.Length == 0 && c.InspecteurId is { } id && d.Noms.TryGetValue(id, out var nom))
+            {
+                intervenant = nom;
+            }
+
+            interventions.Add((new InterventionSuivie(c.DateControle, c.Composant.Length > 0 ? c.Composant : ServiceInventaire.ComposantComplet,
+                nature, intervenant.Length > 0 ? intervenant : "—", TypeInterventionSuivie.Controle,
+                ServiceRevisions.LibelleResultat(c.Resultat), c.Resultat), 1));
+        }
+
+        foreach (var a in d.Ateliers)
+        {
+            var motif = a.Motif.Trim();
+            var prestataire = a.Prestataire.Trim();
+            interventions.Add((new InterventionSuivie(a.EnvoyeLe, ServiceInventaire.ComposantComplet,
+                motif.Length > 0 ? motif : "Envoi en atelier", prestataire.Length > 0 ? prestataire : "—", TypeInterventionSuivie.Atelier,
+                a.RevenuLe is { } revenu ? $"Revenu le {Libelles.Date(revenu)}" : "En atelier", null), 0));
+        }
+
+        // Les contrôles arrivent déjà du plus récent au plus ancien (date puis saisie) : le tri stable garde cet ordre.
+        return interventions.OrderByDescending(i => i.Ligne.Date).ThenByDescending(i => i.Ordre).Select(i => i.Ligne).ToList();
+    }
+
+    private static string ModeleDe(string? marque, string? modele = null, string? libelle = null)
+    {
+        var parties = new[] { marque, modele }
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => p!.Trim())
+            .ToArray();
+        if (parties.Length > 0)
+        {
+            return string.Join(" ", parties);
+        }
+
+        return string.IsNullOrWhiteSpace(libelle) ? "—" : libelle.Trim();
     }
 
     private (StatutInventaire, string, string) Statut(Equipement e, IReadOnlyList<PassageSortie> passages, IReadOnlyList<PassageAtelier> ateliers)
@@ -329,7 +496,7 @@ public sealed class ServiceHistorique(
         IReadOnlyList<PassageSortie> passages,
         IReadOnlyList<Controle> controles,
         IReadOnlyList<PassageAtelier> ateliers,
-        Dictionary<long, string> noms)
+        IReadOnlyDictionary<long, string> noms)
     {
         var etapes = new List<EtapeVie>();
         foreach (var p in passages)

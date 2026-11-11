@@ -64,6 +64,16 @@ public static class FicheVie
         _ => Theme.TexteSecondaireClair,
     };
 
+    /// <summary>Couleur d'un statut d'inventaire (disponible vert, dehors orange, manquant rouge...).</summary>
+    public static Color CouleurStatut(StatutInventaire statut) => statut switch
+    {
+        StatutInventaire.Disponible => Theme.Retour,
+        StatutInventaire.Dehors => Theme.DepartClair,
+        StatutInventaire.Manquant => Theme.Erreur,
+        StatutInventaire.HorsService => Theme.Avertissement,
+        _ => Theme.TexteSecondaireClair,
+    };
+
     /// <summary>Pictogramme d'un type d'événement.</summary>
     public static string Icone(TypeEvenement type) => type switch
     {
@@ -97,14 +107,7 @@ public static class FicheVie
             Encadre(g, new RectangleF(0, 0, l, Height - 1), _vie.SortiesSaison.ToString(Libelles.Culture), Theme.PoliceGrasse(15f),
                 "sorties cette saison", fond, Theme.Texte, Theme.TexteSecondaire);
 
-            var statut = _vie.Statut switch
-            {
-                StatutInventaire.Disponible => Theme.Retour,
-                StatutInventaire.Dehors => Theme.DepartClair,
-                StatutInventaire.Manquant => Theme.Erreur,
-                StatutInventaire.HorsService => Theme.Avertissement,
-                _ => Theme.TexteSecondaireClair,
-            };
+            var statut = CouleurStatut(_vie.Statut);
             Encadre(g, new RectangleF(l + ecart, 0, l, Height - 1), _vie.LibelleStatut, Theme.PoliceTitre(10.5f),
                 _vie.PrecisionStatut, Theme.Teinte(statut, 0.12f), statut, statut);
 

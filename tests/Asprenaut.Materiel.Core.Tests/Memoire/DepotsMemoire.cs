@@ -13,6 +13,7 @@ public sealed class BaseMemoire
     public List<SortieEquipement> Affectations { get; } = [];
     public List<EntreeJournal> Journal { get; } = [];
     public List<Controle> Controles { get; } = [];
+    public List<DetailComposant> Composants { get; } = [];
     public List<TypeDeSortie> TypesSortie { get; } = [];
 
     private long _sequence;
@@ -91,7 +92,7 @@ public sealed class EquipementRepositoryMemoire(BaseMemoire db) : IEquipementRep
                     Manometre = e.Manometre,
                     Octopus = e.Octopus,
                     NumeroOctopus = e.NumeroOctopus,
-                    DerniereRevision = db.Controles.Where(c => c.EquipementId == e.Id && c.Type == TypeControle.Revision).Select(c => (DateOnly?)c.DateControle).Max(),
+                    DerniereRevision = db.Controles.Where(c => c.EquipementId == e.Id && c.Type == TypeControle.Revision && c.Composant.Length == 0).Select(c => (DateOnly?)c.DateControle).Max(),
                 };
             })
             .OrderBy(l => l.Code)
@@ -113,7 +114,7 @@ public sealed class EquipementRepositoryMemoire(BaseMemoire db) : IEquipementRep
             .Where(e => equipementId is null || e.Id == equipementId)
             .Select(e =>
             {
-                var dernier = db.Controles.Where(c => c.EquipementId == e.Id).Select(c => (DateOnly?)c.DateControle).Max();
+                var dernier = db.Controles.Where(c => c.EquipementId == e.Id && c.Composant.Length == 0).Select(c => (DateOnly?)c.DateControle).Max();
                 var apres = dernier is { } d ? d.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc) : DateTime.MinValue;
                 return new CompteurEquipement
                 {
@@ -123,6 +124,16 @@ public sealed class EquipementRepositoryMemoire(BaseMemoire db) : IEquipementRep
                 };
             })
             .ToList());
+
+    public Task<IReadOnlyList<DetailComposant>> ListerComposantsAsync(long equipementId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<DetailComposant>>(db.Composants.Where(c => c.EquipementId == equipementId).OrderBy(c => c.Role).ToList());
+
+    public Task EnregistrerComposantAsync(DetailComposant detail, CancellationToken ct = default)
+    {
+        db.Composants.RemoveAll(c => c.EquipementId == detail.EquipementId && c.Role == detail.Role);
+        db.Composants.Add(detail);
+        return Task.CompletedTask;
+    }
 }
 
 public sealed class MoniteurRepositoryMemoire(BaseMemoire db) : IMoniteurRepository

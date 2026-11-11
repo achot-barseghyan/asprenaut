@@ -12,7 +12,7 @@ namespace Asprenaut.Materiel.App.Ecrans;
 public sealed class EcranInventaire : EcranBase
 {
     private readonly ServiceInventaire _inventaire;
-    private readonly ServiceHistorique _historique;
+    private readonly INavigation _navigation;
     private readonly ServiceReglages _reglages;
     private readonly ServiceCompteur _compteur;
     private IReadOnlyDictionary<long, UtilisationInventaire> _utilisations = new Dictionary<long, UtilisationInventaire>();
@@ -25,11 +25,11 @@ public sealed class EcranInventaire : EcranBase
 
     private readonly GardeGestion _garde;
 
-    public EcranInventaire(ServiceInventaire inventaire, ServiceHistorique historique, ServiceReglages reglages, ServiceCompteur compteur, GardeGestion garde)
+    public EcranInventaire(ServiceInventaire inventaire, INavigation navigation, ServiceReglages reglages, ServiceCompteur compteur, GardeGestion garde)
     {
         _garde = garde;
         _inventaire = inventaire;
-        _historique = historique;
+        _navigation = navigation;
         _compteur = compteur;
         _reglages = reglages;
 
@@ -257,9 +257,12 @@ public sealed class EcranInventaire : EcranBase
         }
     }
 
-    /// <summary>Fiche de suivi (lecture seule) : état, échéance et parcours de l'équipement.</summary>
-    private Task OuvrirSuiviAsync(LigneInventaire ligne) =>
-        FicheSuivi.OuvrirAsync(FindForm(), _historique, ligne.EquipementId);
+    /// <summary>Fiche de suivi EPI : composants, interventions, statut et échéance de l'équipement.</summary>
+    private Task OuvrirSuiviAsync(LigneInventaire ligne)
+    {
+        _navigation.AllerA<EcranFicheSuivi>(ligne.EquipementId);
+        return Task.CompletedTask;
+    }
 
     /// <summary>Modification de l'équipement (action protégée), puis la liste est rechargée.</summary>
     private async Task ModifierEquipementAsync(LigneInventaire ligne)

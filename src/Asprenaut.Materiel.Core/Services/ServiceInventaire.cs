@@ -144,6 +144,222 @@ public sealed class ServiceInventaire(
         return c.StartsWith("Détendeur", StringComparison.OrdinalIgnoreCase) || c.StartsWith("Detendeur", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>Composant des interventions qui visent tout l'équipement (aucun composant).</summary>
+    public const string ComposantComplet = "Équipement complet";
+
+    /// <summary>
+    /// Composants suivis d'un équipement (fiche de suivi, interventions) : pour un détendeur, le premier étage puis le deuxième
+    /// étage, l'octopus et le manomètre s'ils sont renseignés dans la fiche ; aucun pour les autres équipements.
+    /// </summary>
+    public static IReadOnlyList<string> ComposantsDe(Equipement e, string? categorie)
+    {
+        if (!EstDetendeur(categorie))
+        {
+            return [];
+        }
+
+        var composants = new List<string> { "Premier étage" };
+        if (Renseigne(e.MarqueDeuxiemeEtage, e.ModeleDeuxiemeEtage, e.NumeroDeuxiemeEtage))
+        {
+            composants.Add("Deuxième étage");
+        }
+
+        if (Renseigne(e.Octopus, e.NumeroOctopus))
+        {
+            composants.Add("Octopus");
+        }
+
+        if (Renseigne(e.Manometre))
+        {
+            composants.Add("Manomètre");
+        }
+
+        return composants;
+
+        static bool Renseigne(params string[] valeurs) => valeurs.Any(v => !string.IsNullOrWhiteSpace(v));
+    }
+
+    /// <summary>Composants qu'on peut ajouter à un détendeur (le premier étage est l'équipement lui-même).</summary>
+    public static readonly IReadOnlyList<string> ComposantsAjoutables = ["Deuxième étage", "Octopus", "Manomètre"];
+
+    /// <summary>« Composition actuelle » d'un détendeur : les quatre composants, présents ou non, avec leur modèle.</summary>
+    public static IReadOnlyList<EtatComposant> Composition(Equipement e)
+    {
+        var presents = ComposantsDe(e, "Détendeurs");
+        static string Joindre(params string[] p) => string.Join(" ", p.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()));
+        return
+        [
+            new("Premier étage", true, Joindre(e.Modele).Length > 0 ? Joindre(e.Modele) : Joindre(e.Marque)),
+            new("Deuxième étage", presents.Contains("Deuxième étage"), Joindre(e.ModeleDeuxiemeEtage).Length > 0 ? Joindre(e.ModeleDeuxiemeEtage) : Joindre(e.MarqueDeuxiemeEtage)),
+            new("Octopus", presents.Contains("Octopus"), Joindre(e.Octopus)),
+            new("Manomètre", presents.Contains("Manomètre"), Joindre(e.Manometre)),
+        ];
+    }
+
+    /// <summary>Intervention notée dans l'historique quand on ajoute un composant : « Montage octopus ».</summary>
+    public static string NatureMontage(string role) => $"Montage {role.ToLower(Libelles.Culture)}";
+
+    /// <summary>
+    /// Modèles déjà connus dans l'inventaire pour ce composant, les plus fréquents d'abord (6 au plus) : deuxièmes étages et
+    /// octopus pour un deuxième étage ou un octopus (ce sont les mêmes pièces), marques de manomètre pour un manomètre.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> ModelesConnusAsync(string role, CancellationToken ct = default)
+    {
+        var lignes = await equipements.ListerInventaireAsync(null, null, ct);
+        var modeles = role == "Manomètre"
+            ? lignes.Select(l => l.Manometre)
+            : lignes.SelectMany(l => new[] { l.ModeleDeuxiemeEtage, l.Octopus });
+        return modeles.Where(m => !string.IsNullOrWhiteSpace(m)).Select(m => m.Trim())
+            .GroupBy(m => m, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(g => g.Count()).ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First()).Take(6).ToList();
+    }
+
+    /// <summary>Lit un mois « 03/2019 » (ou « 3/2019 ») : premier jour du mois ; null si vide ; erreur si illisible.</summary>
+    public static (DateOnly? Date, bool Valide) LireMoisAnnee(string? texte)
+    {
+        var t = (texte ?? "").Trim();
+        if (t.Length == 0)
+        {
+            return (null, true);
+        }
+
+        var morceaux = t.Split('/', '-', '.', ' ');
+        return morceaux.Length == 2
+            && int.TryParse(morceaux[0], out var mois) && mois is >= 1 and <= 12
+            && int.TryParse(morceaux[1], out var annee) && annee is >= 1950 and <= 2200
+            ? (new DateOnly(annee, mois, 1), true)
+            : (null, false);
+    }
+
+    /// <summary>
+    /// Ajoute un composant à un détendeur (fiche de suivi, action protégée Matériel) : deuxième étage, octopus ou manomètre
+    /// absent jusque-là ; modèle obligatoire (marque pour un manomètre) ; fabrication « MM/AAAA » et mise en service ni dans le
+    /// futur ni la mise en service avant la fabrication. Le modèle et le numéro vont dans la fiche matériel, le reste dans la
+    /// table composant. Option : intervention « Montage octopus » (conforme, sur ce composant) datée de la mise en service.
+    /// </summary>
+    public async Task<ResultatOperation> AjouterComposantAsync(long equipementId, NouveauComposant n, CancellationToken ct = default)
+    {
+        if (gestion?.Exiger(ActionProtegee.Materiel) is { Reussi: false } refus)
+        {
+            return refus;
+        }
+
+        if (await equipements.ObtenirAsync(equipementId, ct) is not { } e)
+        {
+            return ResultatOperation.Echec("Équipement introuvable.");
+        }
+
+        var categorie = (await categories.ListerAsync(ct)).FirstOrDefault(c => c.Id == e.CategorieId)?.Nom;
+        if (!EstDetendeur(categorie))
+        {
+            return ResultatOperation.Echec("Seul un détendeur a des composants à ajouter.");
+        }
+
+        if (e.Etat == EtatEquipement.Reforme)
+        {
+            return ResultatOperation.Echec($"{e.Code} est réformé.");
+        }
+
+        var role = ComposantsAjoutables.FirstOrDefault(r => string.Equals(r, (n.Role ?? "").Trim(), StringComparison.OrdinalIgnoreCase));
+        if (role is null)
+        {
+            return ResultatOperation.Echec("Choisissez le composant à ajouter.");
+        }
+
+        if (ComposantsDe(e, categorie).Contains(role))
+        {
+            return ResultatOperation.Echec($"{e.Code} a déjà un {role.ToLower(Libelles.Culture)}.");
+        }
+
+        var modele = (n.Modele ?? "").Trim();
+        if (modele.Length == 0)
+        {
+            return ResultatOperation.Echec(role == "Manomètre" ? "Indiquez la marque du manomètre." : "Indiquez le modèle.");
+        }
+
+        var (fabrication, lisible) = LireMoisAnnee(n.Fabrication);
+        if (!lisible)
+        {
+            return ResultatOperation.Echec("Date de fabrication : écrivez le mois et l'année, comme 03/2019.");
+        }
+
+        var aujourdHui = horloge.AujourdHui;
+        if (fabrication > aujourdHui)
+        {
+            return ResultatOperation.Echec("La date de fabrication ne peut pas être dans le futur.");
+        }
+
+        if (n.MiseEnService > aujourdHui)
+        {
+            return ResultatOperation.Echec("La mise en service ne peut pas être dans le futur.");
+        }
+
+        if (n.MiseEnService is { } service && fabrication is { } fab && service < fab)
+        {
+            return ResultatOperation.Echec("La mise en service ne peut pas précéder la fabrication.");
+        }
+
+        var numero = (n.NumeroSerie ?? "").Trim();
+        switch (role)
+        {
+            case "Deuxième étage":
+                e.ModeleDeuxiemeEtage = modele;
+                e.NumeroDeuxiemeEtage = numero;
+                break;
+            case "Octopus":
+                e.Octopus = modele;
+                e.NumeroOctopus = numero;
+                break;
+            default:
+                e.Manometre = modele;
+                break;
+        }
+
+        await equipements.MettreAJourAsync(e, ct);
+        await equipements.EnregistrerComposantAsync(new DetailComposant
+        {
+            EquipementId = e.Id,
+            Role = role,
+            NumeroSerie = role == "Manomètre" ? numero : "",
+            Fabrication = fabrication,
+            MiseEnService = n.MiseEnService,
+            Origine = n.Origine,
+        }, ct);
+
+        var origine = n.Origine == OrigineComposant.Neuve ? "pièce neuve" : "récupéré sur un autre détendeur";
+        await journal.AjouterAsync(new EntreeJournal
+        {
+            Horodatage = horloge.MaintenantUtc,
+            Action = ActionsJournal.ComposantAjoute,
+            Details = $"{e.Code} : {role.ToLower(Libelles.Culture)} {modele} ajouté ({origine})",
+            EquipementId = e.Id,
+        }, ct);
+
+        if (n.NoterDansHistorique && revisions is not null)
+        {
+            var details = new List<string> { n.Origine == OrigineComposant.Neuve ? "Pièce neuve" : "Récupéré sur un autre détendeur" };
+            if (fabrication is { } f)
+            {
+                details.Add($"fabriqué en {f.ToString("MM/yyyy", Libelles.Culture)}");
+            }
+
+            await revisions.AjouterControleAsync(new Controle
+            {
+                EquipementId = e.Id,
+                Type = TypeControle.Revision,
+                DateControle = n.MiseEnService ?? aujourdHui,
+                Resultat = ResultatControle.Conforme,
+                SaisiLe = horloge.MaintenantUtc,
+                Nature = NatureMontage(role),
+                Composant = role,
+                Notes = string.Join(", ", details),
+            }, ct);
+        }
+
+        return ResultatOperation.Ok($"{role} {modele} ajouté à {e.Code}.", e.Id);
+    }
+
     /// <summary>Catégorie « Gilets » (stabs) : marque, modèle, taille, numéro de série.</summary>
     public static bool EstGilet(string? categorie) =>
         (categorie ?? "").Trim().StartsWith("Gilet", StringComparison.OrdinalIgnoreCase)

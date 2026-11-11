@@ -74,7 +74,7 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
                    e.taille, e.etat, e.date_prochaine_revision, e.date_requalification,
                    e.marque, e.modele, e.numero_serie, e.montage, e.marque_deuxieme_etage, e.modele_deuxieme_etage,
                    e.numero_deuxieme_etage, e.direct_system, e.manometre, e.octopus, e.numero_octopus,
-                   (SELECT MAX(ct.date_controle) FROM controle ct WHERE ct.equipement_id = e.id AND ct.type = 'Revision') AS derniere_revision,
+                   (SELECT MAX(ct.date_controle) FROM controle ct WHERE ct.equipement_id = e.id AND ct.type = 'Revision' AND ct.composant = '') AS derniere_revision,
                    s.id AS sortie_en_cours_id, s.intitule AS sortie_en_cours_intitule,
                    EXISTS (SELECT 1 FROM sortie_equipement m
                            WHERE m.equipement_id = e.id AND m.statut = 'Manquant') AS est_manquant
@@ -131,7 +131,7 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
                    (SELECT COALESCE(SUM(s.utilisations), 0) FROM sortie_equipement se
                     JOIN sortie s ON s.id = se.sortie_id
                     WHERE se.equipement_id = e.id AND se.scanne_retour_le IS NOT NULL
-                      AND se.scanne_retour_le > COALESCE((SELECT MAX(c.date_controle) FROM controle c WHERE c.equipement_id = e.id) || 'T23:59:59.999Z', '')
+                      AND se.scanne_retour_le > COALESCE((SELECT MAX(c.date_controle) FROM controle c WHERE c.equipement_id = e.id AND c.composant = '') || 'T23:59:59.999Z', '')
                    ) AS utilisations
             FROM equipement e
             WHERE @equipementId IS NULL OR e.id = @equipementId;
@@ -139,6 +139,36 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
         await using var cx = await fabrique.OuvrirAsync(ct);
         var lignes = await cx.QueryAsync<CompteurEquipement>(new CommandDefinition(sql, new { equipementId }, cancellationToken: ct));
         return lignes.AsList();
+    }
+
+    public async Task<IReadOnlyList<DetailComposant>> ListerComposantsAsync(long equipementId, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        var lignes = await cx.QueryAsync<DetailComposant>(new CommandDefinition(
+            "SELECT equipement_id, role, numero_serie, fabrication, mise_en_service, origine FROM composant WHERE equipement_id = @equipementId ORDER BY role;",
+            new { equipementId }, cancellationToken: ct));
+        return lignes.AsList();
+    }
+
+    public async Task EnregistrerComposantAsync(DetailComposant detail, CancellationToken ct = default)
+    {
+        const string sql = """
+            INSERT INTO composant (equipement_id, role, numero_serie, fabrication, mise_en_service, origine)
+            VALUES (@EquipementId, @Role, @NumeroSerie, @Fabrication, @MiseEnService, @Origine)
+            ON CONFLICT (equipement_id, role) DO UPDATE SET
+                numero_serie = excluded.numero_serie, fabrication = excluded.fabrication,
+                mise_en_service = excluded.mise_en_service, origine = excluded.origine;
+            """;
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        await cx.ExecuteAsync(new CommandDefinition(sql, new
+        {
+            detail.EquipementId,
+            detail.Role,
+            detail.NumeroSerie,
+            Fabrication = FormatIso.Ecrire(detail.Fabrication),
+            MiseEnService = FormatIso.Ecrire(detail.MiseEnService),
+            Origine = detail.Origine.ToString(),
+        }, cancellationToken: ct));
     }
 
     private static object Parametres(Equipement e) => new

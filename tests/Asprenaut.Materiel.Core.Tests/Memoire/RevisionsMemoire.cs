@@ -20,6 +20,7 @@ public sealed class RevisionRepositoryMemoire(BaseMemoire db) : IRevisionReposit
 
     public Task<IReadOnlyList<DernierControle>> ListerDerniersControlesAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<DernierControle>>(Controles
+            .Where(c => c.Composant.Length == 0)
             .GroupBy(c => (c.EquipementId, c.Type))
             .Select(g => new DernierControle { EquipementId = g.Key.EquipementId, Type = g.Key.Type, DateControle = g.Max(c => c.DateControle) })
             .ToList());

@@ -50,6 +50,9 @@ public sealed class Controle
 
     /// <summary>Qui l'a faite : inspecteur, magasin, organisme (texte libre).</summary>
     public string Intervenant { get; set; } = "";
+
+    /// <summary>Composant visé (« Premier étage », « Octopus »...) ; vide = l'équipement complet (migration 011).</summary>
+    public string Composant { get; set; } = "";
 }
 
 /// <summary>Un passage en atelier (envoi chez un prestataire, puis retour).</summary>
@@ -195,7 +198,10 @@ public sealed record TableauRevisions(ProchaineSeance? Seance, IReadOnlyList<Car
     }
 }
 
-/// <summary>Intervention enregistrée depuis le tableau (« Faire maintenant », « Enregistrer le résultat », « Retour d'atelier »).</summary>
+/// <summary>
+/// Intervention enregistrée depuis le tableau (« Faire maintenant », « Enregistrer le résultat », « Retour d'atelier »)
+/// ou depuis la fiche de suivi (composant visé, détails).
+/// </summary>
 public sealed record Intervention(
     long EquipementId,
     TypeControle Type,
@@ -204,4 +210,6 @@ public sealed record Intervention(
     string Nature,
     string Intervenant,
     long? InspecteurId = null,
-    long? PassageAtelierId = null);
+    long? PassageAtelierId = null,
+    string Composant = "",
+    string Notes = "");

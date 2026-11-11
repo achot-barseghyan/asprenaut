@@ -52,6 +52,36 @@ public class TableauRevisionsDepotsTests : IAsyncLifetime
         var relu = (await depot.ListerControlesAsync(bloc.Id)).First();
         Assert.Equal(("TIV", "Pascal Durand"), (relu.Nature, relu.Intervenant));
         Assert.Equal(EtapeRevision.Fait, (await revisions.TableauAsync()).Cartes.Single(c => c.Code == "BLOC-033").Etape);
+        Assert.Equal("", relu.Composant); // Équipement complet.
+
+        // Fiche de suivi (migration 011) : le composant visé et les détails sont enregistrés et relus.
+        var det = (await equipements.ObtenirParCodeAsync("A01"))!;
+        det.Octopus = "R095";
+        await equipements.MettreAJourAsync(det);
+        r = await revisions.EnregistrerInterventionAsync(new Intervention(
+            det.Id, TypeControle.Revision, ResultatControle.Conforme, horloge.AujourdHui, "Réparation", "Aquasub", Composant: "Octopus", Notes: "Flexible MP"));
+        Assert.True(r.Reussi, r.Message);
+        Assert.Equal(("Octopus", "Flexible MP"), await cx.QuerySingleAsync<(string, string)>(
+            "SELECT composant, notes FROM controle WHERE equipement_id = @id;", new { id = det.Id }));
+        var controleDet = (await depot.ListerControlesAsync(det.Id)).Single();
+        Assert.Equal(("Octopus", "Flexible MP"), (controleDet.Composant, controleDet.Notes));
+
+        // Un contrôle de composant ne compte pas comme dernier contrôle de l'équipement (échéancier, compteur, inventaire).
+        Assert.DoesNotContain(await depot.ListerDerniersControlesAsync(), d => d.EquipementId == det.Id);
+        Assert.Null((await equipements.ListerInventaireAsync(null, null)).Single(l => l.EquipementId == det.Id).DerniereRevision);
+
+        // Détails d'un composant ajouté (migration 012) : écrits, remplacés (même rôle), relus ; dates au format ISO.
+        await equipements.EnregistrerComposantAsync(new DetailComposant { EquipementId = det.Id, Role = "Octopus", Origine = OrigineComposant.Neuve });
+        await equipements.EnregistrerComposantAsync(new DetailComposant
+        {
+            EquipementId = det.Id, Role = "Octopus", NumeroSerie = "", Fabrication = new DateOnly(2019, 3, 1),
+            MiseEnService = new DateOnly(2026, 11, 6), Origine = OrigineComposant.Recuperee,
+        });
+        var detail = Assert.Single(await equipements.ListerComposantsAsync(det.Id));
+        Assert.Equal((new DateOnly(2019, 3, 1), new DateOnly(2026, 11, 6), OrigineComposant.Recuperee), (detail.Fabrication, detail.MiseEnService, detail.Origine));
+        Assert.Equal(("2019-03-01", "Recuperee"), await cx.QuerySingleAsync<(string, string)>(
+            "SELECT fabrication, origine FROM composant WHERE equipement_id = @id;", new { id = det.Id }));
+        Assert.Empty(await equipements.ListerComposantsAsync(bloc.Id));
 
         // Supprimer la séance supprime ses planifiés (ON DELETE CASCADE).
         await depot.AjouterASeanceAsync(seance.Id, bloc.Id);

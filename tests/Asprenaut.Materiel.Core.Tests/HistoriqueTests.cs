@@ -192,6 +192,155 @@ public class HistoriqueTests
         Assert.Null(await _ctx.Historique.ObtenirVieAsync("  "));
     }
 
+    // Règle : la fiche de suivi détaille les composants d'un détendeur et reprend les dates réelles de l'équipement.
+    [Fact]
+    public async Task La_fiche_detaillee_montre_les_composants_du_detendeur()
+    {
+        var det = _ctx.Equipement("DET-001", categorie: "Détendeurs");
+        det.CreeLe = new DateTime(2026, 11, 6, 0, 0, 0, DateTimeKind.Local);
+        det.Marque = "Scubapro";
+        det.Modele = "MK2";
+        det.NumeroSerie = "0614500681";
+        det.MarqueDeuxiemeEtage = "Scubapro";
+        det.ModeleDeuxiemeEtage = "R295";
+        det.NumeroDeuxiemeEtage = "0614500682";
+        det.Octopus = "R095";
+        det.NumeroOctopus = "1641000963";
+        det.Manometre = "Suunto";
+        await _ctx.Revisions.EnregistrerControleAsync(det.Id, TypeControle.Revision, ResultatControle.Conforme, new DateOnly(2026, 11, 5), null);
+        det.DateProchaineRevision = new DateOnly(2027, 3, 1);
+
+        var fiche = await _ctx.Historique.ObtenirFicheSuiviAsync(det.Id);
+
+        Assert.NotNull(fiche);
+        Assert.Equal(["Premier étage", "Deuxième étage", "Octopus", "Manomètre"], fiche.Composants.Select(c => c.Role));
+        Assert.Equal("Scubapro MK2", fiche.Composants[0].Modele);
+        Assert.Equal("0614500681", fiche.Composants[0].NumeroSerie);
+        Assert.Equal("Scubapro R295", fiche.Composants[1].Modele);
+        Assert.Equal("R095", fiche.Composants[2].Modele);
+        Assert.Equal("Suunto", fiche.Composants[3].Modele);
+        Assert.Equal(
+            [("Ajouté le", "06/11/2026"), ("Dernier contrôle", "05/11/2026"), ("Prochaine révision", "03/2027"), ("État", "En service")],
+            fiche.Composants[0].Tuiles.Select(t => (t.Libelle, t.Valeur)));
+    }
+
+    [Fact]
+    public async Task Un_detendeur_sans_sous_ensemble_n_a_qu_une_carte()
+    {
+        var det = _ctx.Equipement("DET-002", categorie: "Détendeurs");
+        det.Marque = "Aqualung";
+        det.Modele = "Calypso";
+
+        var fiche = await _ctx.Historique.ObtenirFicheSuiviAsync(det.Id);
+
+        Assert.NotNull(fiche);
+        var composant = Assert.Single(fiche.Composants);
+        Assert.Equal(("Premier étage", "Aqualung Calypso"), (composant.Role, composant.Modele));
+    }
+
+    [Fact]
+    public async Task Un_autre_equipement_n_a_qu_une_carte_equipement_complet()
+    {
+        var bloc = _ctx.Equipement("BLOC-031", revision: new DateOnly(2027, 5, 1));
+        bloc.Marque = "Aqualung";
+        bloc.Modele = "Wave";
+        bloc.NumeroSerie = "BB208115";
+
+        var fiche = await _ctx.Historique.ObtenirFicheSuiviAsync(bloc.Id);
+
+        Assert.NotNull(fiche);
+        var composant = Assert.Single(fiche.Composants);
+        Assert.Equal(("Équipement complet", "Aqualung Wave", "BB208115"), (composant.Role, composant.Modele, composant.NumeroSerie));
+        Assert.Equal("05/2027", composant.Tuiles[2].Valeur);
+    }
+
+    // Règle : les interventions de la fiche mêlent contrôles et passages en atelier, du plus récent au plus ancien.
+    [Fact]
+    public async Task Les_interventions_melangent_controles_et_ateliers()
+    {
+        var bloc = _ctx.Equipement("BLOC-031");
+        _ctx.Pascal.InspecteurTiv = true;
+        await _ctx.Revisions.EnregistrerControleAsync(bloc.Id, TypeControle.Tiv, ResultatControle.Conforme, new DateOnly(2026, 11, 5), _ctx.Pascal.Id);
+        await _ctx.Revisions.EnregistrerControleAsync(bloc.Id, TypeControle.Requalification, ResultatControle.ASurveiller, new DateOnly(2026, 10, 1), null,
+            "Contrôle visuel", "Aqua Service");
+        await _ctx.Revisions.EnvoyerEnAtelierAsync("BLOC-031", "Aqua Service", "Fuite", null);
+
+        var fiche = await _ctx.Historique.ObtenirFicheSuiviAsync(bloc.Id);
+
+        Assert.NotNull(fiche);
+        Assert.Equal(3, fiche.Interventions.Count);
+        Assert.Equal(new DateOnly(2026, 11, 6), fiche.Interventions[0].Date);
+        Assert.Equal(("Fuite", "Aqua Service", TypeInterventionSuivie.Atelier, "En atelier"),
+            (fiche.Interventions[0].Nature, fiche.Interventions[0].Intervenant, fiche.Interventions[0].Type, fiche.Interventions[0].Resultat));
+        Assert.Equal(("TIV annuelle", "Pascal Martin", TypeInterventionSuivie.Controle, "Conforme"),
+            (fiche.Interventions[1].Nature, fiche.Interventions[1].Intervenant, fiche.Interventions[1].Type, fiche.Interventions[1].Resultat));
+        Assert.Equal(("Contrôle visuel", "Aqua Service", "À surveiller"),
+            (fiche.Interventions[2].Nature, fiche.Interventions[2].Intervenant, fiche.Interventions[2].Resultat));
+        Assert.All(fiche.Interventions, i => Assert.Equal("Équipement complet", i.Composant));
+        Assert.Null(await _ctx.Historique.ObtenirFicheSuiviAsync(999_999));
+    }
+
+    // Règle : une intervention peut viser un composant du détendeur ; elle ne compte que pour lui, celle de l'équipement complet pour tous.
+    [Fact]
+    public async Task Une_intervention_sur_un_composant_reste_sur_ce_composant()
+    {
+        var det = _ctx.Equipement("A05", categorie: "Détendeurs");
+        det.Libelle = "Détendeur Scubapro";
+        det.Marque = "Scubapro";
+        det.Modele = "MK2";
+        det.ModeleDeuxiemeEtage = "R295";
+        det.Octopus = "R095";
+        await _ctx.Revisions.EnregistrerControleAsync(det.Id, TypeControle.Revision, ResultatControle.Conforme, new DateOnly(2026, 3, 17), null, "Révision", "Aquasub");
+        var echeance = det.DateProchaineRevision;
+        var r = await _ctx.Revisions.EnregistrerInterventionAsync(new Intervention(det.Id, TypeControle.Revision, ResultatControle.ASurveiller,
+            new DateOnly(2026, 11, 5), "Réparation", "Aquasub", Composant: "octopus", Notes: "  changement flexible MP "));
+        Assert.True(r.Reussi, r.Message);
+
+        // Un octopus réparé ne repousse pas (ni n'avance) la révision du détendeur.
+        Assert.Equal(new DateOnly(2028, 3, 17), echeance);
+        Assert.Equal(echeance, det.DateProchaineRevision);
+        Assert.Contains("ne changent pas", r.Message);
+        Assert.DoesNotContain(await _ctx.DepotRevisions.ListerDerniersControlesAsync(), d => d.DateControle == new DateOnly(2026, 11, 5));
+
+        var fiche = await _ctx.Historique.ObtenirFicheSuiviAsync(det.Id);
+
+        Assert.NotNull(fiche);
+        Assert.True(fiche.ParComposant);
+        Assert.Equal("Détendeur Scubapro · MK2 · R295 · R095", fiche.Titre);
+        var derniere = fiche.Interventions[0];
+        Assert.Equal(("Octopus", "Réparation : changement flexible MP", "À surveiller"), (derniere.Composant, derniere.Nature, derniere.Resultat));
+        Assert.Equal(ServiceInventaire.ComposantComplet, fiche.Interventions[1].Composant);
+        Assert.Equal(2, fiche.InterventionsDe("Octopus").Count);
+        Assert.Equal([new DateOnly(2026, 3, 17)], fiche.InterventionsDe("Deuxième étage").Select(i => i.Date));
+        Assert.Equal(2, fiche.InterventionsDe(null).Count);
+        string Dernier(string role) => fiche.Composants.Single(c => c.Role == role).Tuiles.Single(t => t.Libelle == "Dernier contrôle").Valeur;
+        Assert.Equal("05/11/2026", Dernier("Octopus"));
+        Assert.Equal("17/03/2026", Dernier("Premier étage"));
+        Assert.Equal(new DateOnly(2026, 3, 17), fiche.DerniereRevision); // Celle de l'équipement complet.
+    }
+
+    [Fact]
+    public async Task Un_composant_absent_de_l_equipement_est_refuse()
+    {
+        var det = _ctx.Equipement("A06", categorie: "Détendeurs");
+        var bloc = _ctx.Equipement("BLOC-031");
+
+        var sansOctopus = await _ctx.Revisions.EnregistrerInterventionAsync(new Intervention(det.Id, TypeControle.Revision, ResultatControle.Conforme,
+            new DateOnly(2026, 11, 5), "Révision", "", Composant: "Octopus"));
+        var surUnBloc = await _ctx.Revisions.EnregistrerControleAsync(bloc.Id, TypeControle.Requalification, ResultatControle.Conforme, new DateOnly(2026, 11, 5), null,
+            "Requalification", "", "Premier étage", null);
+        var complet = await _ctx.Revisions.EnregistrerInterventionAsync(new Intervention(det.Id, TypeControle.Revision, ResultatControle.Conforme,
+            new DateOnly(2026, 11, 5), "Révision", "", Composant: ServiceInventaire.ComposantComplet));
+
+        Assert.False(sansOctopus.Reussi);
+        Assert.Contains("Octopus", sansOctopus.Message);
+        Assert.False(surUnBloc.Reussi);
+        Assert.True(complet.Reussi, complet.Message);
+        Assert.Equal("", _ctx.Db.Controles.Single(c => c.EquipementId == det.Id).Composant);
+        Assert.Equal(["Premier étage"], ServiceInventaire.ComposantsDe(det, "Détendeurs"));
+        Assert.Empty(ServiceInventaire.ComposantsDe(bloc, "Blocs"));
+    }
+
     [Fact]
     public void L_export_csv_echappe_les_points_virgules()
     {

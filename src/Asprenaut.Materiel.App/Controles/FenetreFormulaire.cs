@@ -16,6 +16,8 @@ public sealed class FenetreFormulaire : Form
     private readonly Panel _cadre;
     private readonly Label _message = Ui.Libelle("", Theme.PoliceTitre(10.5f), Theme.Erreur);
     private readonly BoutonArrondi _valider;
+    private readonly Label _sousTitre = Ui.Libelle("", Theme.Police(9.75f), Theme.TexteSecondaireClair);
+    private readonly Pastille _badge = new("", Theme.FondRetour, Theme.Retour, police: Theme.PoliceGrasse(7.5f), hauteur: 22);
     private readonly Func<Task<ResultatOperation>> _validation;
 
     public FenetreFormulaire(string titre, string texteValider, Func<Task<ResultatOperation>> validation)
@@ -66,11 +68,21 @@ public sealed class FenetreFormulaire : Form
         _message.Visible = false; // Affiché seulement en cas d'erreur.
 
         var titreLibelle = Ui.Libelle(titre, Theme.PoliceGrasse(16f));
-        titreLibelle.Margin = new Padding(0, 0, 0, 18);
+        titreLibelle.Margin = Padding.Empty;
+        _sousTitre.Margin = new Padding(0, 2, 0, 0);
+        _sousTitre.Visible = false;
+        _badge.Visible = false;
+        _badge.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        _badge.Margin = new Padding(12, 4, 0, 0);
+        var entete = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, BackColor = Color.Transparent, Margin = new Padding(0, 0, 0, 18), Dock = DockStyle.Fill };
+        entete.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        entete.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        entete.Controls.Add(Ui.Pile(titreLibelle, _sousTitre), 0, 0);
+        entete.Controls.Add(_badge, 1, 0);
 
         var page = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, BackColor = Color.Transparent, Margin = Padding.Empty, MinimumSize = new Size(Largeur - 56, 0) };
         page.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        foreach (var (c, i) in new Control[] { titreLibelle, _cadre, _message, boutons }.Select((c, i) => (c, i)))
+        foreach (var (c, i) in new Control[] { entete, _cadre, _message, boutons }.Select((c, i) => (c, i)))
         {
             page.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             page.Controls.Add(c, 0, i);
@@ -78,6 +90,18 @@ public sealed class FenetreFormulaire : Form
 
         Controls.Add(page);
     }
+
+    /// <summary>Sous-titre sous le titre (« Détendeur Scubapro MK25 EVO · A700 ») et pastille optionnelle à droite (« Mode gestion »).</summary>
+    public void EnTete(string sousTitre, string? badge = null)
+    {
+        _sousTitre.Text = sousTitre;
+        _sousTitre.Visible = sousTitre.Length > 0;
+        _badge.Text = badge ?? "";
+        _badge.Visible = !string.IsNullOrEmpty(badge);
+    }
+
+    /// <summary>Texte du bouton de validation.</summary>
+    public BoutonArrondi Valider => _valider;
 
     /// <summary>Ajoute un champ : libellé au-dessus, contrôle pleine largeur.</summary>
     public T Champ<T>(string libelle, T controle, int hauteur = Theme.HauteurChamp)

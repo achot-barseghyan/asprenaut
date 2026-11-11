@@ -185,9 +185,17 @@ public sealed class ServiceRevisions(
             Dernier(TypeControle.Tiv), Dernier(TypeControle.Requalification), Dernier(TypeControle.Revision));
     }
 
-    /// <summary>Ce que le résultat va provoquer, affiché avant de valider.</summary>
-    public string Consequence(TypeControle type, ResultatControle resultat, DateOnly date, string? categorie = null)
+    /// <summary>
+    /// Ce que le résultat va provoquer, affiché avant de valider. <paramref name="surUnComposant"/> : intervention sur un
+    /// composant (octopus...), qui ne change pas les échéances de l'équipement (seul un refus le met hors service).
+    /// </summary>
+    public string Consequence(TypeControle type, ResultatControle resultat, DateOnly date, string? categorie = null, bool surUnComposant = false)
     {
+        if (surUnComposant && resultat != ResultatControle.Refuse)
+        {
+            return "Notée sur ce composant : les échéances et le compteur de l'équipement ne changent pas.";
+        }
+
         var (revision, requalif) = NouvellesEcheances(type, resultat, date, categorie);
         if (resultat == ResultatControle.Conforme && type == TypeControle.Revision && revision is null)
         {
@@ -216,7 +224,16 @@ public sealed class ServiceRevisions(
     /// </summary>
     public async Task<ResultatOperation> EnregistrerControleAsync(
         long equipementId, TypeControle type, ResultatControle resultat, DateOnly date, long? inspecteurId,
-        string? nature = null, string? intervenant = null, CancellationToken ct = default)
+        string? nature = null, string? intervenant = null, CancellationToken ct = default) =>
+        await EnregistrerControleAsync(equipementId, type, resultat, date, inspecteurId, nature, intervenant, composant: null, notes: null, ct);
+
+    /// <summary>
+    /// Enregistre un contrôle, visant éventuellement un composant de l'équipement (fiche de suivi : premier étage, octopus...)
+    /// avec des détails. Un composant qui n'existe pas sur l'équipement est refusé ; « Équipement complet » = aucun composant.
+    /// </summary>
+    public async Task<ResultatOperation> EnregistrerControleAsync(
+        long equipementId, TypeControle type, ResultatControle resultat, DateOnly date, long? inspecteurId,
+        string? nature, string? intervenant, string? composant, string? notes, CancellationToken ct = default)
     {
         if (gestion?.Exiger(ActionProtegee.Revisions) is { Reussi: false } refus)
         {
@@ -246,6 +263,23 @@ public sealed class ServiceRevisions(
                 : "TIV et requalification concernent seulement les blocs.");
         }
 
+        var composantVise = (composant ?? "").Trim();
+        if (string.Equals(composantVise, ServiceInventaire.ComposantComplet, StringComparison.OrdinalIgnoreCase))
+        {
+            composantVise = "";
+        }
+
+        if (composantVise.Length > 0)
+        {
+            var connu = ServiceInventaire.ComposantsDe(equipement, categorie).FirstOrDefault(c => string.Equals(c, composantVise, StringComparison.OrdinalIgnoreCase));
+            if (connu is null)
+            {
+                return ResultatOperation.Echec($"{equipement.Code} n'a pas de composant « {composantVise} ».");
+            }
+
+            composantVise = connu;
+        }
+
         if (type == TypeControle.Tiv)
         {
             var inspecteur = inspecteurId is { } id ? await moniteurs.ObtenirAsync(id, ct) : null;
@@ -270,6 +304,8 @@ public sealed class ServiceRevisions(
             SaisiLe = horloge.MaintenantUtc,
             Nature = (nature ?? "").Trim(),
             Intervenant = (intervenant ?? "").Trim(),
+            Composant = composantVise,
+            Notes = (notes ?? "").Trim(),
         }, ct);
 
         // Intervention faite : l'équipement quitte la séance TIV où il était prévu.
@@ -279,8 +315,10 @@ public sealed class ServiceRevisions(
         {
             equipement.Etat = EtatEquipement.HorsService;
         }
-        else
+        else if (composantVise.Length == 0)
         {
+            // Seule une intervention sur l'équipement complet recalcule ses échéances (un octopus réparé ne repousse pas
+            // la révision du détendeur) ; elle remet aussi son compteur d'utilisation à zéro (voir ListerCompteursAsync).
             var (revision, requalif) = NouvellesEcheances(type, resultat, date, categorie);
             equipement.DateProchaineRevision = revision;
             if (requalif is not null)
@@ -291,12 +329,12 @@ public sealed class ServiceRevisions(
 
         await equipements.MettreAJourAsync(equipement, ct);
         await JournaliserAsync(ActionsJournal.ControleEnregistre,
-            $"{equipement.Code} : {LibelleControle(type, categorie)} du {Libelles.Date(date)}, {LibelleResultat(resultat)}", ct, equipement.Id);
+            $"{equipement.Code}{(composantVise.Length > 0 ? $" ({composantVise.ToLower(Libelles.Culture)})" : "")} : {LibelleControle(type, categorie)} du {Libelles.Date(date)}, {LibelleResultat(resultat)}", ct, equipement.Id);
 
         return ResultatOperation.Ok(resultat switch
         {
             ResultatControle.Refuse => $"{equipement.Designation} refusé : il passe hors service.",
-            _ => $"{equipement.Designation} : contrôle enregistré. {Consequence(type, resultat, date, categorie)}",
+            _ => $"{equipement.Designation} : contrôle enregistré. {Consequence(type, resultat, date, categorie, composantVise.Length > 0)}",
         }, equipement.Id);
     }
 
@@ -500,7 +538,7 @@ public sealed class ServiceRevisions(
         }
 
         var resultat = await EnregistrerControleAsync(intervention.EquipementId, intervention.Type, intervention.Resultat, intervention.Date,
-            intervention.InspecteurId, intervention.Nature, intervention.Intervenant, ct);
+            intervention.InspecteurId, intervention.Nature, intervention.Intervenant, intervention.Composant, intervention.Notes, ct);
         if (!resultat.Reussi || intervention.PassageAtelierId is not { } passageAFermer)
         {
             return resultat;
