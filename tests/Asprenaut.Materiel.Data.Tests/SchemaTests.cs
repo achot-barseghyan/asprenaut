@@ -36,9 +36,47 @@ public class SchemaTests : IAsyncLifetime
     }
 
     [Fact]
-    public void Scripts_001_a_009_sont_embarques()
+    public void Scripts_001_a_010_sont_embarques()
     {
-        Assert.Equal([1, 2, 3, 4, 5, 6, 7, 8, 9], GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
+        Assert.Equal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
+    }
+
+    // 010 : les anciens codes DET-/GIL- deviennent ceux des médailles (A07, S12), sorties et journal compris.
+    [Fact]
+    public async Task La_migration_010_passe_aux_codes_des_medailles()
+    {
+        var fabrique = new Connexion.FabriqueConnexion(Path.Combine(_base.Dossier, "ancienne.db"));
+        var migrations = new GestionnaireMigrations(fabrique);
+        Assert.Equal(9, await migrations.AppliquerAsync(jusqua: 9));
+        await using (var cx = await fabrique.OuvrirAsync())
+        {
+            await cx.ExecuteAsync("""
+                INSERT INTO equipement (code, libelle, categorie_id, cree_le) VALUES
+                    ('DET-001', 'Détendeur', 3, '2026-01-01T00:00:00.000Z'),
+                    ('DET-002', 'Détendeur', 3, '2026-01-01T00:00:00.000Z'),
+                    ('A02', 'Déjà A02', 3, '2026-01-01T00:00:00.000Z'),
+                    ('DET-010', 'Détendeur', 3, '2026-01-01T00:00:00.000Z'),
+                    ('GIL-012', 'Gilet', 2, '2026-01-01T00:00:00.000Z'),
+                    ('BLOC-031', 'Bloc', 1, '2026-01-01T00:00:00.000Z'),
+                    ('DET-X', 'Autre forme', 3, '2026-01-01T00:00:00.000Z');
+                INSERT INTO moniteur (nom, prenom) VALUES ('Durand', 'Pascal');
+                INSERT INTO sortie (date_sortie, type, intitule, moniteur_id) VALUES ('2026-11-06', 'Piscine', 'Piscine', 1);
+                INSERT INTO sortie_equipement (sortie_id, equipement_id, scanne_depart_le) VALUES (1, 1, '2026-11-06T18:00:00.000Z');
+                INSERT INTO journal (horodatage, action, details, equipement_id) VALUES
+                    ('2026-11-06T18:00:00.000Z', 'ScanDepart', 'DET-010 part avec la sortie 1', 4),
+                    ('2026-11-06T18:01:00.000Z', 'EquipementCree', 'GIL-012 « Gilet » créé', 5);
+                """);
+        }
+
+        Assert.Equal(GestionnaireMigrations.VersionCible, await migrations.AppliquerAsync());
+
+        await using var verif = await fabrique.OuvrirAsync();
+        Assert.Equal(["A01", "DET-002", "A02", "A10", "S12", "BLOC-031", "DET-X"],
+            await verif.QueryAsync<string>("SELECT code FROM equipement ORDER BY id;"));
+        Assert.Equal("A01", await verif.ExecuteScalarAsync<string>(
+            "SELECT e.code FROM sortie_equipement se JOIN equipement e ON e.id = se.equipement_id;"));
+        Assert.Equal(["A10 part avec la sortie 1", "S12 « Gilet » créé"],
+            await verif.QueryAsync<string>("SELECT details FROM journal WHERE equipement_id IS NOT NULL ORDER BY id;"));
     }
 
     [Fact]

@@ -85,7 +85,7 @@ public class RevisionsDepotsTests : IAsyncLifetime
         var echeances = await revisions.ListerEcheancesAsync();
         Assert.Contains(echeances, l => l is { Code: "BLOC-033", Type: TypeControle.Tiv, Etat: EtatEcheance.EnRetard });
         Assert.Contains(echeances, l => l is { Code: "BLOC-032", Type: TypeControle.Requalification });
-        Assert.DoesNotContain(echeances, l => l.Code == "DET-003"); // Réformé.
+        Assert.DoesNotContain(echeances, l => l.Code == "E01"); // Réformé.
 
         var pascal = (await serviceMoniteurs.ListerInspecteursTivAsync()).Single();
         var bloc = (await equipements.ObtenirParCodeAsync("BLOC-033"))!;

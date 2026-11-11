@@ -317,7 +317,8 @@ public sealed class ServiceInventaire(
 
     /// <summary>
     /// Code proposé pour un nouvel équipement de cette catégorie : le préfixe déjà utilisé dans la catégorie
-    /// et le numéro suivant (BLOC-034 → BLOC-035). Catégorie vide : préfixe tiré de son nom (BLOC-001).
+    /// et le numéro suivant, dans la même forme (BLOC-034 → BLOC-035, A24 → A25). Catégorie vide : forme par défaut
+    /// (A01 pour les détendeurs, S01 pour les gilets, BLOC-001…).
     /// </summary>
     public async Task<string> ProposerCodeAsync(long categorieId, CancellationToken ct = default)
     {
@@ -329,28 +330,32 @@ public sealed class ServiceInventaire(
         var tous = (await equipements.ListerInventaireAsync(null, null, ct)).Select(l => l.Code).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         string prefixe;
+        string separateur;
         int suivant;
         int chiffres;
         if (codes.Count > 0)
         {
             prefixe = codes.GroupBy(c => c.Prefixe).OrderByDescending(g => g.Count()).ThenBy(g => g.Key, StringComparer.Ordinal).First().Key;
             var memes = codes.Where(c => c.Prefixe == prefixe).ToList();
+            separateur = memes.GroupBy(c => c.Separateur).OrderByDescending(g => g.Count()).First().Key;
             suivant = memes.Max(c => c.Numero) + 1;
-            chiffres = Math.Max(3, memes.Max(c => c.Chiffres));
+            chiffres = memes.Max(c => c.Chiffres);
         }
         else
         {
             var nom = (await categories.ListerAsync(ct)).FirstOrDefault(c => c.Id == categorieId)?.Nom ?? "";
             prefixe = PrefixeDeCategorie(nom);
+            var club = prefixe.Length == 1; // Étiquettes du club : A01, E01, S01.
+            separateur = club ? "" : "-";
             suivant = 1;
-            chiffres = 3;
+            chiffres = club ? 2 : 3;
         }
 
         // Au cas où le numéro serait déjà pris dans une autre catégorie.
         string code;
         do
         {
-            code = $"{prefixe}-{suivant.ToString(new string('0', chiffres), System.Globalization.CultureInfo.InvariantCulture)}";
+            code = $"{prefixe}{separateur}{suivant.ToString(new string('0', chiffres), System.Globalization.CultureInfo.InvariantCulture)}";
             suivant++;
         }
         while (tous.Contains(code));
@@ -359,14 +364,24 @@ public sealed class ServiceInventaire(
     }
 
     /// <summary>
-    /// Catégorie probable d'un code scanné inconnu : celle des équipements qui ont le même préfixe (GIL-010 → Gilets),
-    /// sinon celle dont le préfixe par défaut correspond, sinon « Autre » (ou null s'il n'y en a pas).
+    /// Catégorie probable d'un code scanné inconnu : celle du type écrit sur la médaille (« (Detendeur) A24 … »),
+    /// sinon celle des équipements qui ont le même préfixe (S10 → Gilets),
+    /// sinon celle dont un préfixe connu correspond (A, E → Détendeurs ; S → Gilets ; BLOC → Blocs), sinon « Autre »
+    /// (ou null s'il n'y en a pas).
     /// </summary>
-    public async Task<long?> DevinerCategorieAsync(string codeBrut, CancellationToken ct = default)
+    public async Task<long?> DevinerCategorieAsync(string codeBrut, string? typeLu = null, CancellationToken ct = default)
     {
-        var code = CodeScanne.Nettoyer(codeBrut, reglages.PrefixeEtiquette);
-        var prefixe = DecouperCode(code)?.Prefixe ?? (code.Contains('-') ? code[..code.LastIndexOf('-')] : code);
+        var (code, typeMedaille) = CodeScanne.Lire(codeBrut, reglages.PrefixeEtiquette);
+        var type = string.IsNullOrWhiteSpace(typeLu) ? typeMedaille : typeLu;
         var liste = await categories.ListerAsync(ct);
+
+        // Médaille « (Detendeur) A24 … » : le type écrit dessus désigne la catégorie (Detendeur → Détendeurs, Stab → Gilets).
+        if (type is not null && liste.FirstOrDefault(c => PrefixeDeCategorie(c.Nom) == PrefixeDeCategorie(type)) is { } parType)
+        {
+            return parType.Id;
+        }
+
+        var prefixe = DecouperCode(code)?.Prefixe ?? (code.Contains('-') ? code[..code.LastIndexOf('-')] : code);
         var memePrefixe = (await equipements.ListerInventaireAsync(null, null, ct))
             .Where(l => DecouperCode(l.Code)?.Prefixe == prefixe)
             .GroupBy(l => l.CategorieId)
@@ -374,27 +389,46 @@ public sealed class ServiceInventaire(
             .Select(g => (long?)g.Key)
             .FirstOrDefault();
         return memePrefixe
-            ?? liste.FirstOrDefault(c => prefixe.Length > 0 && PrefixeDeCategorie(c.Nom) == prefixe)?.Id
+            ?? liste.FirstOrDefault(c => prefixe.Length > 0 && PrefixesDeCategorie(c.Nom).Contains(prefixe))?.Id
             ?? liste.FirstOrDefault(c => string.Equals(c.Nom, "Autre", StringComparison.OrdinalIgnoreCase))?.Id;
     }
 
-    /// <summary>Préfixe par défaut d'une catégorie : « Blocs » → BLOC, « Détendeurs » → DET, sinon 4 lettres sans accent.</summary>
-    public static string PrefixeDeCategorie(string nom)
+    /// <summary>
+    /// Nom proposé pour un code scanné inconnu, d'après les étiquettes du club : A24 → « Détendeur adulte »,
+    /// E03 → « Détendeur enfant », S12 → « Gilet stabilisateur » ; sinon vide.
+    /// </summary>
+    public static string NomPropose(string code) => DecouperCode(code)?.Prefixe switch
+    {
+        "A" => "Détendeur adulte",
+        "E" => "Détendeur enfant",
+        "S" => "Gilet stabilisateur",
+        _ => "",
+    };
+
+    /// <summary>
+    /// Préfixe par défaut d'une catégorie : « Détendeurs » → A (adulte), « Gilets » → S (stab), comme les étiquettes
+    /// du club ; « Blocs » → BLOC ; sinon 4 lettres sans accent.
+    /// </summary>
+    public static string PrefixeDeCategorie(string nom) => PrefixesDeCategorie(nom)[0];
+
+    /// <summary>Préfixes reconnus pour une catégorie (le premier est celui proposé) ; DET et GIL restent reconnus.</summary>
+    private static string[] PrefixesDeCategorie(string nom)
     {
         var simple = new string(nom.Normalize(System.Text.NormalizationForm.FormD)
             .Where(c => char.IsLetter(c) && System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark)
             .ToArray()).ToUpperInvariant();
         return simple switch
         {
-            var s when s.StartsWith("BLOC", StringComparison.Ordinal) => "BLOC",
-            var s when s.StartsWith("GILET", StringComparison.Ordinal) => "GIL",
-            var s when s.StartsWith("DETENDEUR", StringComparison.Ordinal) => "DET",
-            var s when s.StartsWith("COMBI", StringComparison.Ordinal) => "COMB",
-            var s when s.StartsWith("PALME", StringComparison.Ordinal) => "PALM",
-            var s when s.StartsWith("MASQUE", StringComparison.Ordinal) => "MASQ",
-            var s when s.StartsWith("ORDI", StringComparison.Ordinal) => "ORDI",
-            "" => "EQ",
-            var s => s[..Math.Min(4, s.Length)],
+            var s when s.StartsWith("BLOC", StringComparison.Ordinal) => ["BLOC"],
+            var s when s.StartsWith("GILET", StringComparison.Ordinal) => ["S", "GIL"],
+            var s when s.StartsWith("STAB", StringComparison.Ordinal) => ["S", "GIL"],
+            var s when s.StartsWith("DETENDEUR", StringComparison.Ordinal) => ["A", "E", "DET"],
+            var s when s.StartsWith("COMBI", StringComparison.Ordinal) => ["COMB"],
+            var s when s.StartsWith("PALME", StringComparison.Ordinal) => ["PALM"],
+            var s when s.StartsWith("MASQUE", StringComparison.Ordinal) => ["MASQ"],
+            var s when s.StartsWith("ORDI", StringComparison.Ordinal) => ["ORDI"],
+            "" => ["EQ"],
+            var s => [s[..Math.Min(4, s.Length)]],
         };
     }
 
@@ -469,18 +503,26 @@ public sealed class ServiceInventaire(
         return ResultatOperation.Ok($"{code} · {nouveau.Libelle} ajouté à l'inventaire.", id);
     }
 
-    /// <summary>« BLOC-031 » → (BLOC, 31, 3 chiffres) ; null si le code n'a pas cette forme.</summary>
-    private static (string Prefixe, int Numero, int Chiffres)? DecouperCode(string code)
+    /// <summary>
+    /// « BLOC-031 » → (BLOC, « - », 31, 3 chiffres) ; « A24 » → (A, « », 24, 2 chiffres) : lettres, tiret facultatif,
+    /// puis le numéro. Null si le code n'a pas cette forme.
+    /// </summary>
+    private static (string Prefixe, string Separateur, int Numero, int Chiffres)? DecouperCode(string code)
     {
-        var tiret = code.LastIndexOf('-');
-        if (tiret <= 0 || tiret == code.Length - 1)
+        var debut = code.Length;
+        while (debut > 0 && char.IsAsciiDigit(code[debut - 1]))
+        {
+            debut--;
+        }
+
+        var numero = code[debut..];
+        var fin = debut > 0 && code[debut - 1] == '-' ? debut - 1 : debut;
+        var prefixe = code[..fin].ToUpperInvariant();
+        if (numero.Length == 0 || numero.Length > 9 || prefixe.Length == 0 || !prefixe.Any(char.IsLetter))
         {
             return null;
         }
 
-        var numero = code[(tiret + 1)..];
-        return numero.All(char.IsAsciiDigit) && int.TryParse(numero, out var n)
-            ? (code[..tiret].ToUpperInvariant(), n, numero.Length)
-            : null;
+        return (prefixe, fin == debut ? "" : "-", int.Parse(numero, System.Globalization.CultureInfo.InvariantCulture), numero.Length);
     }
 }

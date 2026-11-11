@@ -81,6 +81,79 @@ public class CompteurTests
         Assert.Equal(new UsageEquipement(1, 3, EtatCompteur.Normal), await _ctx.Compteur.UsageAsync(det));
     }
 
+    // Inventaire, colonne « Utilisation » : utilisations de chaque équipement, avec le seuil et son origine s'il y en a un.
+    [Fact]
+    public async Task L_inventaire_montre_les_utilisations_et_l_origine_du_seuil()
+    {
+        _ctx.Equipement("DET-001", categorie: "Détendeurs");
+        _ctx.Equipement("DET-002", categorie: "Détendeurs").Libelle = "Détendeur Mares";
+        _ctx.Equipement("DET-003", categorie: "Détendeurs");
+        _ctx.Equipement("BLOC-001", categorie: "Blocs");
+        _ctx.Equipement("DET-009", EtatEquipement.Reforme, categorie: "Détendeurs");
+        _ctx.Reglages.SeuilsSorties["Détendeurs"] = 10;
+        _ctx.Reglages.SeuilsSpecifiques.Add(new SeuilSpecifique { Portee = PorteeSeuil.Modele, Cle = "Détendeur Mares", Sorties = 20 });
+        _ctx.Reglages.SeuilsSpecifiques.Add(new SeuilSpecifique { Portee = PorteeSeuil.Equipement, Cle = "DET-003", Sorties = 2 });
+        await SortirAsync("DET-001", 9);
+        await SortirAsync("DET-003", 2);
+        await SortirAsync("BLOC-001", 3);
+
+        var u = await _ctx.Compteur.ListerUtilisationsAsync(await _ctx.Inventaire.ListerAsync(null, null));
+        var parCode = (await _ctx.Inventaire.ListerAsync(null, null)).Where(l => u.ContainsKey(l.EquipementId)).ToDictionary(l => l.Code, l => u[l.EquipementId]);
+
+        Assert.Equal(new UtilisationInventaire(9, 10, EtatCompteur.Proche, OrigineSeuil.Categorie), parCode["DET-001"]);
+        Assert.Equal(new UtilisationInventaire(0, 20, EtatCompteur.Normal, OrigineSeuil.Modele), parCode["DET-002"]);
+        Assert.Equal(new UtilisationInventaire(2, 2, EtatCompteur.Atteint, OrigineSeuil.Equipement), parCode["DET-003"]);
+        Assert.Equal("9 / 10 utilisations", parCode["DET-001"].Texte);
+        Assert.Equal("3 utilisations", parCode["BLOC-001"].Texte); // Pas de compteur pour les blocs : le nombre seul.
+        Assert.Null(parCode["BLOC-001"].Seuil);
+        Assert.False(parCode.ContainsKey("DET-009")); // Réformé.
+    }
+
+    // Paramètres › Ajouter un seuil spécifique : modèles et équipements de l'inventaire, avec leur seuil actuel.
+    [Fact]
+    public async Task Les_modeles_et_equipements_proposes_montrent_leur_seuil_actuel()
+    {
+        _ctx.Equipement("A05", categorie: "Détendeurs").Libelle = "Détendeur Scubapro MK2";
+        var a07 = _ctx.Equipement("A07", categorie: "Détendeurs");
+        a07.Libelle = "Détendeur Scubapro MK2";
+        a07.Marque = "Scubapro";
+        a07.Modele = "MK2";
+        _ctx.Equipement("E03", categorie: "Détendeurs").Libelle = "Détendeur enfant";
+        _ctx.Equipement("A99", EtatEquipement.Reforme, categorie: "Détendeurs").Libelle = "Détendeur réformé";
+        _ctx.Db.Categories.Add(new Categorie { Id = _ctx.Db.ProchainId(), Nom = "Combinaisons" });
+        _ctx.Equipement("COMB-001", categorie: "Combinaisons").Libelle = "Combinaison 5 mm"; // Pas de compteur : jamais proposée.
+        _ctx.Reglages.SeuilsSorties["Détendeurs"] = 100;
+        _ctx.Reglages.SeuilsSpecifiques.Add(new SeuilSpecifique { Portee = PorteeSeuil.Modele, Cle = "Détendeur Scubapro MK2", Sorties = 120 });
+        _ctx.Reglages.SeuilsSpecifiques.Add(new SeuilSpecifique { Portee = PorteeSeuil.Equipement, Cle = "A07", Sorties = 150 });
+        await SortirAsync("A07", 2);
+
+        var modeles = await _ctx.Compteur.ListerModelesAsync();
+        Assert.Equal([new ModeleCandidat("Détendeur enfant", "Détendeurs", 1, 100), new ModeleCandidat("Détendeur Scubapro MK2", "Détendeurs", 2, 120)], modeles);
+        Assert.Single(await _ctx.Compteur.ListerModelesAsync("ENFANT"));
+
+        var equipements = await _ctx.Compteur.ListerEquipementsAsync();
+        Assert.Equal(["A05", "A07", "E03"], equipements.Select(e => e.Code));
+        var a07Propose = equipements[1];
+        Assert.Equal(("Scubapro MK2", 2, 150, OrigineSeuil.Equipement), (a07Propose.Fiche, a07Propose.Usage.Utilisations, a07Propose.Usage.Seuil, a07Propose.Usage.Origine));
+        Assert.Equal(OrigineSeuil.Modele, equipements[0].Usage.Origine);
+
+        // Recherche : médaille scannée, marque.
+        Assert.Equal("A07", Assert.Single(await _ctx.Compteur.ListerEquipementsAsync("(Detendeur) A07 Asprenaut Chalon 14 71-0025")).Code);
+        Assert.Equal(["A05", "A07"], (await _ctx.Compteur.ListerEquipementsAsync("scubapro")).Select(e => e.Code)); // Nom ou marque.
+    }
+
+    [Fact]
+    public async Task Le_seuil_specifique_ajoute_prend_la_valeur_choisie_bornee()
+    {
+        _ctx.Equipement("A24", categorie: "Détendeurs");
+        _ctx.Equipement("E03", categorie: "Détendeurs");
+
+        Assert.True((await _ctx.Compteur.AjouterSeuilSpecifiqueAsync(PorteeSeuil.Equipement, "(Detendeur) A24 Asprenaut Chalon 14 71-0025", 150)).Reussi);
+        Assert.True((await _ctx.Compteur.AjouterSeuilSpecifiqueAsync(PorteeSeuil.Equipement, "E03", 5000)).Reussi);
+
+        Assert.Equal([("A24", 150), ("E03", ServiceCompteur.SeuilSpecifiqueMax)], _ctx.Reglages.SeuilsSpecifiques.Select(s => (s.Cle, s.Sorties)));
+    }
+
     // Règle : dans Révisions, seuil atteint → en retard ; à 90 % → à planifier (si « Prévenir à 90 % »).
     [Fact]
     public async Task L_echeancier_montre_les_equipements_proches_ou_au_seuil()

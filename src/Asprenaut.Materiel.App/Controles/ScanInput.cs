@@ -14,10 +14,13 @@ public enum ModeScan
     Retour,
 }
 
-public sealed class CodeScanneEventArgs(string code) : EventArgs
+public sealed class CodeScanneEventArgs(string code, string? type = null) : EventArgs
 {
     /// <summary>Code déjà nettoyé (espaces, préfixe "ASP:", majuscules).</summary>
     public string Code { get; } = code;
+
+    /// <summary>Type écrit sur la médaille (« (Detendeur) A24 … » → Detendeur), ou null.</summary>
+    public string? Type { get; } = type;
 }
 
 /// <summary>
@@ -171,7 +174,7 @@ public sealed class ScanInput : UserControl, IFondDessine
     /// <summary>Simule un scan (tests manuels, saisie au clavier).</summary>
     public void Soumettre(string brut)
     {
-        var code = Saisie.CodeScanne.Nettoyer(brut, Prefixe);
+        var (code, type) = Saisie.CodeScanne.Lire(brut, Prefixe);
         if (code.Length == 0)
         {
             return;
@@ -184,7 +187,7 @@ public sealed class ScanInput : UserControl, IFondDessine
         }
 
         _dernierCode = code;
-        CodeScanne?.Invoke(this, new CodeScanneEventArgs(code));
+        CodeScanne?.Invoke(this, new CodeScanneEventArgs(code, type));
     }
 
     protected override void OnHandleCreated(EventArgs e)

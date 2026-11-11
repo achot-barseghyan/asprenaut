@@ -28,7 +28,7 @@ public abstract class EcranScanBase : EcranBase
         Etapes = new IndicateurEtapes { EtapeActive = mode == ModeScan.Depart ? 1 : 2 };
         ZoneScan = new ScanInput { Mode = mode };
         ZoneScan.Configurer(reglages.Actuels);
-        ZoneScan.CodeScanne += (_, e) => Executer(() => TraiterUnParUnAsync(e.Code));
+        ZoneScan.CodeScanne += (_, e) => Executer(() => TraiterUnParUnAsync(e.Code, e.Type));
     }
 
     public override EntreeMenu Menu => EntreeMenu.Sorties;
@@ -100,6 +100,9 @@ public abstract class EcranScanBase : EcranBase
     /// <summary>Traite un code scanné (appelé un code à la fois).</summary>
     protected abstract Task TraiterCodeAsync(string code);
 
+    /// <summary>Type écrit sur la médaille du code en cours de traitement (« Detendeur »), ou null.</summary>
+    protected string? TypeLu { get; private set; }
+
     protected void AfficherSortie(SortieResume s, string? complement = null)
     {
         _fil.Courant = $"{s.DateSortie.ToString("d MMMM", Libelles.Culture)} · {s.Intitule}";
@@ -144,13 +147,14 @@ public abstract class EcranScanBase : EcranBase
         base.Dispose(disposing);
     }
 
-    private async Task TraiterUnParUnAsync(string code)
+    private async Task TraiterUnParUnAsync(string code, string? type)
     {
         await _unParUn.WaitAsync();
         try
         {
             if (!IsDisposed)
             {
+                TypeLu = type;
                 await TraiterCodeAsync(code);
             }
         }

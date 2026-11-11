@@ -30,17 +30,21 @@ public sealed class ServiceCompteur(
     // ---------------------------------------------------------------- Règles
 
     /// <summary>Seuil qui s'applique à cet équipement, ou null s'il n'a pas de compteur.</summary>
-    public static int? Seuil(Reglages r, string code, string libelle, string categorie)
+    public static int? Seuil(Reglages r, string code, string libelle, string categorie) => SeuilEtOrigine(r, code, libelle, categorie)?.Seuil;
+
+    /// <summary>Seuil qui s'applique et d'où il vient (code, modèle ou catégorie), ou null s'il n'y a pas de compteur.</summary>
+    public static (int Seuil, OrigineSeuil Origine)? SeuilEtOrigine(Reglages r, string code, string libelle, string categorie)
     {
         var propre = r.SeuilsSpecifiques.FirstOrDefault(s => s.Portee == PorteeSeuil.Equipement && string.Equals(s.Cle, code, StringComparison.OrdinalIgnoreCase))
             ?? r.SeuilsSpecifiques.FirstOrDefault(s => s.Portee == PorteeSeuil.Modele && string.Equals(s.Cle, libelle.Trim(), StringComparison.OrdinalIgnoreCase));
         if (propre is not null)
         {
-            return propre.Sorties > 0 ? propre.Sorties : null;
+            var origine = propre.Portee == PorteeSeuil.Equipement ? OrigineSeuil.Equipement : OrigineSeuil.Modele;
+            return propre.Sorties > 0 ? (propre.Sorties, origine) : null;
         }
 
         var parCategorie = r.SeuilsSorties.FirstOrDefault(p => string.Equals(p.Key, categorie.Trim(), StringComparison.OrdinalIgnoreCase));
-        return parCategorie.Value > 0 ? parCategorie.Value : null;
+        return parCategorie.Value > 0 ? (parCategorie.Value, OrigineSeuil.Categorie) : null;
     }
 
     /// <summary>Atteint au seuil ; proche à 90 % (arrondi au-dessus) si le club veut être prévenu.</summary>
@@ -79,6 +83,74 @@ public sealed class ServiceCompteur(
         return usages;
     }
 
+    /// <summary>
+    /// Colonne « Utilisation » de l'inventaire : tous les équipements hors réformés, avec ou sans seuil
+    /// (« 64 / 80 utilisations », sinon « 23 utilisations »).
+    /// </summary>
+    public async Task<IReadOnlyDictionary<long, UtilisationInventaire>> ListerUtilisationsAsync(IReadOnlyList<LigneInventaire> inventaire, CancellationToken ct = default)
+    {
+        var compteurs = (await equipements.ListerCompteursAsync(null, ct)).ToDictionary(c => c.EquipementId, c => c.Utilisations);
+        var resultat = new Dictionary<long, UtilisationInventaire>();
+        foreach (var e in inventaire.Where(e => e.Etat != EtatEquipement.Reforme))
+        {
+            var utilisations = compteurs.GetValueOrDefault(e.EquipementId);
+            resultat[e.EquipementId] = SeuilEtOrigine(reglages, e.Code, e.Libelle, e.Categorie) is ({ } seuil, var origine)
+                ? new UtilisationInventaire(utilisations, seuil, Etat(utilisations, seuil, reglages.PrevenirAvantSeuil), origine)
+                : new UtilisationInventaire(utilisations, null, EtatCompteur.Normal, OrigineSeuil.Categorie);
+        }
+
+        return resultat;
+    }
+
+    /// <summary>
+    /// Modèles de l'inventaire (même nom d'équipement, hors réformés, catégories à compteur) pour « Ajouter un seuil spécifique » :
+    /// catégorie la plus fréquente, nombre d'équipements, seuil qui s'applique aujourd'hui. Filtrés par la recherche.
+    /// </summary>
+    public async Task<IReadOnlyList<ModeleCandidat>> ListerModelesAsync(string? recherche = null, CancellationToken ct = default)
+    {
+        var texte = (recherche ?? "").Trim();
+        return (await equipements.ListerInventaireAsync(null, null, ct))
+            .Where(e => e.Etat != EtatEquipement.Reforme && e.Libelle.Trim().Length > 0 && AUnCompteur(e.Categorie))
+            .GroupBy(e => e.Libelle.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(g =>
+            {
+                var categorie = g.GroupBy(e => e.Categorie).OrderByDescending(c => c.Count()).First().Key;
+                var nom = g.First().Libelle.Trim();
+                return new ModeleCandidat(nom, categorie, g.Count(), Seuil(reglages, "", nom, categorie));
+            })
+            .Where(m => texte.Length == 0 || Contient(m.Nom, texte) || Contient(m.Categorie, texte))
+            .OrderBy(m => m.Nom, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Équipements de l'inventaire (hors réformés) pour « Ajouter un seuil spécifique », avec leurs utilisations et
+    /// leur seuil actuel. La recherche accepte un code, une médaille scannée, un nom, une marque ou un modèle.
+    /// </summary>
+    public async Task<IReadOnlyList<EquipementCandidat>> ListerEquipementsAsync(string? recherche = null, CancellationToken ct = default)
+    {
+        var inventaire = (await equipements.ListerInventaireAsync(null, null, ct)).Where(e => e.Etat != EtatEquipement.Reforme && AUnCompteur(e.Categorie)).ToList();
+        var usages = await ListerUtilisationsAsync(inventaire, ct);
+        var texte = (recherche ?? "").Trim();
+        var code = CodeScanne.Nettoyer(texte, reglages.PrefixeEtiquette);
+        return inventaire
+            .Where(e => texte.Length == 0 || e.Code.Contains(code, StringComparison.OrdinalIgnoreCase)
+                || Contient(e.Libelle, texte) || Contient(e.Marque, texte) || Contient(e.Modele, texte))
+            .Select(e => new EquipementCandidat(e.Code, e.Libelle.Trim(),
+                string.Join(" ", new[] { e.Marque, e.Modele }.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim())),
+                usages[e.EquipementId]))
+            .OrderBy(e => e.Code, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>Catégories réglables dans « Compteur d'utilisation » (les autres n'ont jamais de compteur).</summary>
+    private static bool AUnCompteur(string categorie) =>
+        Reglages.CategoriesCompteur.Contains(categorie.Trim(), StringComparer.OrdinalIgnoreCase);
+
+    private static bool Contient(string valeur, string texte) =>
+        System.Globalization.CultureInfo.CurrentCulture.CompareInfo.IndexOf(valeur, texte,
+            System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+
     // ---------------------------------------------------------------- Réglages
 
     private ResultatOperation Autorisation() => gestion?.Exiger(ActionProtegee.Parametres) ?? ResultatOperation.Ok("");
@@ -104,10 +176,11 @@ public sealed class ServiceCompteur(
     }
 
     /// <summary>
-    /// Ajoute un seuil spécifique (100 sorties pour commencer). Équipement : code scanné ou tapé, qui doit exister.
+    /// Ajoute un seuil spécifique (100 utilisations par défaut, borné entre 10 et 1000). Équipement : code ou médaille
+    /// scannée, qui doit exister.
     /// Modèle : nom exact d'au moins un équipement de l'inventaire. Pas deux fois le même.
     /// </summary>
-    public async Task<ResultatOperation> AjouterSeuilSpecifiqueAsync(PorteeSeuil portee, string saisie, CancellationToken ct = default)
+    public async Task<ResultatOperation> AjouterSeuilSpecifiqueAsync(PorteeSeuil portee, string saisie, int sorties = SeuilParDefaut, CancellationToken ct = default)
     {
         if (Autorisation() is { Reussi: false } refus)
         {
@@ -151,9 +224,10 @@ public sealed class ServiceCompteur(
             return ResultatOperation.Echec($"« {cle} » a déjà son seuil.");
         }
 
-        reglages.SeuilsSpecifiques.Add(new SeuilSpecifique { Portee = portee, Cle = cle, Sorties = SeuilParDefaut });
+        var valeur = Math.Clamp(sorties, SeuilSpecifiqueMin, SeuilSpecifiqueMax);
+        reglages.SeuilsSpecifiques.Add(new SeuilSpecifique { Portee = portee, Cle = cle, Sorties = valeur });
         stockage.Enregistrer(reglages);
-        return ResultatOperation.Ok($"Seuil ajouté pour {cle}.");
+        return ResultatOperation.Ok($"Seuil de {valeur} utilisations ajouté pour {cle}.");
     }
 
     /// <summary>Change un seuil spécifique, borné entre 10 et 1000. Retourne la valeur retenue.</summary>

@@ -43,11 +43,11 @@ public class HistoriqueDepotsTests : IAsyncLifetime
 
         var id = (await serviceSortie.CreerAsync(new NouvelleSortie(new DateOnly(2026, 11, 6), TypeSortie.Piscine, "Cours en piscine", pascal.Id))).Id!.Value;
         await scan.ScannerDepartAsync(id, "BLOC-031");
-        await scan.ScannerDepartAsync(id, "GIL-001");
+        await scan.ScannerDepartAsync(id, "S01");
         await serviceSortie.ValiderDepartAsync(id);
         await scan.ScannerRetourAsync(id, "BLOC-031");
         await serviceSortie.CloturerAsync(id);
-        await serviceRevisions.EnvoyerEnAtelierAsync("DET-001", "Aqua Service", "Fuite", null);
+        await serviceRevisions.EnvoyerEnAtelierAsync("A01", "Aqua Service", "Fuite", null);
 
         // Stockage brut : identifiants en entiers, sortie seule pour la création.
         await using (var cx = await _base.Fabrique.OuvrirAsync())
@@ -64,16 +64,16 @@ public class HistoriqueDepotsTests : IAsyncLifetime
         Assert.Equal((new DateOnly(2026, 11, 6), TypeSortie.Piscine, "Pascal Durand"), (depart.SortieDate, depart.SortieType, depart.MoniteurNom));
         Assert.Equal((2, 1), (depart.SortieNbEquipements, depart.SortieNbManquants));
         Assert.Equal(horloge.MaintenantUtc, depart.Horodatage);
-        Assert.Contains(lignes, l => l.Action == ActionsJournal.EnvoiAtelier && l.Code == "DET-001" && l.SortieId == null);
+        Assert.Contains(lignes, l => l.Action == ActionsJournal.EnvoiAtelier && l.Code == "A01" && l.SortieId == null);
         Assert.Empty(await journal.ListerAsync(DateTime.UtcNow.AddMinutes(1), 100)); // La démo est datée de l'heure réelle.
         Assert.Equal(3, (await journal.ListerAsync(null, 3)).Count);
 
         // Vie d'un équipement sur SQLite : passages en sortie et en atelier.
-        var gilet = await historique.ObtenirVieAsync("GIL-001");
+        var gilet = await historique.ObtenirVieAsync("S01");
         Assert.Equal(StatutInventaire.Manquant, gilet!.Statut);
         Assert.Contains(gilet.Etapes, e => e.Titre == "Noté manquant");
         Assert.Equal(1, gilet.SortiesSaison);
-        var detendeur = await historique.ObtenirVieAsync("DET-001");
+        var detendeur = await historique.ObtenirVieAsync("A01");
         Assert.Equal("Atelier", detendeur!.LibelleStatut);
         Assert.Contains(detendeur.Etapes, e => e.Titre == "Envoyé en atelier" && e.Detail == "Aqua Service · Fuite");
     }

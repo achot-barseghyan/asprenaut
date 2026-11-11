@@ -33,6 +33,19 @@ public class ScanDepartTests
         Assert.Equal(NiveauResultat.Succes, r.Niveau);
     }
 
+    // Médaille réelle : le pistolet tape toute la phrase, l'équipement A24 part quand même.
+    [Fact]
+    public async Task La_medaille_du_club_fait_partir_son_equipement()
+    {
+        _ctx.Equipement("A24", categorie: "Détendeurs");
+        var sortie = await _ctx.SortieAsync();
+
+        var r = await _ctx.Scan.ScannerDepartAsync(sortie, "(Detendeur) A24 Asprenaut Chalon 14 71-0025\r\n");
+
+        Assert.Equal(NiveauResultat.Succes, r.Niveau);
+        Assert.Equal("A24", r.Equipement?.Code);
+    }
+
     // Règle : un équipement ne peut être "Dehors" que dans une seule sortie à la fois.
     [Fact]
     public async Task Equipement_deja_dehors_ailleurs_est_refuse_avec_nom_de_la_sortie()

@@ -131,7 +131,7 @@ public sealed class EcranDepart : EcranScanBase
         // Code inconnu : on propose de créer l'équipement (code pré-rempli), puis il part directement avec la sortie.
         if (resultat.Action == ActionProposee.CreerEquipement && Dialogues.Confirmer(FindForm(), resultat.Message)
             && _garde.Exiger(FindForm(), ActionProtegee.Materiel, "Ajouter un équipement")
-            && await FormulaireEquipement.OuvrirAsync(FindForm(), _inventaire, resultat.Code) is { } cree && !IsDisposed)
+            && await FormulaireEquipement.OuvrirAsync(FindForm(), _inventaire, resultat.Code, type: TypeLu) is { } cree && !IsDisposed)
         {
             ZoneScan.AfficherResultat(await _scan.ScannerDepartAsync(SortieId, cree));
         }

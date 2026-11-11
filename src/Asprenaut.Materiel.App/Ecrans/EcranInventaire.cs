@@ -13,6 +13,8 @@ public sealed class EcranInventaire : EcranBase
 {
     private readonly ServiceInventaire _inventaire;
     private readonly ServiceReglages _reglages;
+    private readonly ServiceCompteur _compteur;
+    private IReadOnlyDictionary<long, UtilisationInventaire> _utilisations = new Dictionary<long, UtilisationInventaire>();
     private readonly BarreRecherche _recherche = new("Rechercher un code, un équipement, une sortie…", "ou scannez");
     private readonly GrilleAdaptative _categories = new() { LargeurMin = 176, HauteurElement = 76, Ecart = 12, Margin = new Padding(0, 0, 0, 20) };
     private readonly List<Tuile> _tuiles = [];
@@ -22,10 +24,11 @@ public sealed class EcranInventaire : EcranBase
 
     private readonly GardeGestion _garde;
 
-    public EcranInventaire(ServiceInventaire inventaire, ServiceReglages reglages, GardeGestion garde)
+    public EcranInventaire(ServiceInventaire inventaire, ServiceReglages reglages, ServiceCompteur compteur, GardeGestion garde)
     {
         _garde = garde;
         _inventaire = inventaire;
+        _compteur = compteur;
         _reglages = reglages;
 
         var ajouter = new BoutonArrondi("Ajouter un équipement", StyleBouton.Principal, Icones.Plus);
@@ -91,7 +94,15 @@ public sealed class EcranInventaire : EcranBase
                 Executer(() => ModifierEquipementAsync(l));
             }
         };
-        _grille.CellMouseEnter += (_, e) => _grille.Cursor = e.RowIndex >= 0 && Colonne(e.ColumnIndex) == "action" ? Cursors.Hand : Cursors.Default;
+        _grille.CellMouseClick += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Left && SurLeNom(e.RowIndex, e.ColumnIndex, e.Location) && _grille.Rows[e.RowIndex].Tag is LigneInventaire l)
+            {
+                Executer(() => ModifierEquipementAsync(l));
+            }
+        };
+        _grille.CellMouseMove += (_, e) =>
+            _grille.Cursor = e.RowIndex >= 0 && (Colonne(e.ColumnIndex) == "action" || SurLeNom(e.RowIndex, e.ColumnIndex, e.Location)) ? Cursors.Hand : Cursors.Default;
 
         var carteGrille = new Carte { Padding = new Padding(8, 6, 8, 8), Rayon = 22 };
         _grille.Dock = DockStyle.Fill;
@@ -112,6 +123,7 @@ public sealed class EcranInventaire : EcranBase
     {
         var categories = await _inventaire.ListerCategoriesAsync();
         var tout = await _inventaire.ListerAsync(null, null);
+        _utilisations = await _compteur.ListerUtilisationsAsync(tout);
         if (IsDisposed)
         {
             return;
@@ -200,6 +212,7 @@ public sealed class EcranInventaire : EcranBase
     private async Task RechargerAsync()
     {
         var lignes = await _inventaire.ListerAsync(_recherche.Champ.Text, _categorie);
+        _utilisations = await _compteur.ListerUtilisationsAsync(lignes);
         if (!IsDisposed)
         {
             Afficher(lignes);
@@ -256,16 +269,22 @@ public sealed class EcranInventaire : EcranBase
 
     private static readonly ColonneInventaire Statut = new("statut", "Statut", 110, l => Libelles.De(l.Statut));
 
+    /// <summary>Compteur d'utilisation (maquette) : « 64 / 80 utilisations », barre et origine du seuil dessinées.</summary>
+    private ColonneInventaire Utilisation => new("utilisation", "Utilisation", 175, TexteUtilisation);
+
+    private string TexteUtilisation(LigneInventaire l) => _utilisations.TryGetValue(l.EquipementId, out var u) ? u.Texte : "—";
+
     /// <summary>« Tout » et les catégories sans fiche particulière.</summary>
-    private static readonly ColonneInventaire[] ColonnesGenerales =
+    private ColonneInventaire[] ColonnesGenerales =>
     [
         new("equipement", "Équipement", 190, l => l.Libelle),
         new("code", "Code", 90, l => l.Code),
         new("marque", "Marque", 90, l => Ou(l.Marque)),
         new("taille", "Taille", 60, l => Ou(l.Taille)),
         Statut,
+        Utilisation,
         new("sortie", "Sortie en cours", 130, l => Ou(l.SortieEnCoursIntitule)),
-        new("revision", "Prochaine révision", 110, l => Date(ProchaineEcheance(l))),
+        new("revision", "Prochaine révision", 130, l => Date(ProchaineEcheance(l))),
         Action,
     ];
 
@@ -278,6 +297,7 @@ public sealed class EcranInventaire : EcranBase
         new("taille", "Taille", 55, l => Ou(l.Taille)),
         new("serie", "N° série", 100, l => Ou(l.NumeroSerie)),
         Statut,
+        Utilisation,
         new("identification", "Identification", 230, l => _inventaire.Identification(l.Categorie, l.Code, l.Taille)),
         Action,
     ];
@@ -298,6 +318,7 @@ public sealed class EcranInventaire : EcranBase
         new("octopus", "Octopus", 90, l => string.IsNullOrWhiteSpace(l.Octopus) ? "Non" : l.Octopus),
         new("serieOctopus", "N° octopus", 120, l => Ou(l.NumeroOctopus)),
         new("statut", "Statut", 120, l => Libelles.De(l.Statut)),
+        new("utilisation", "Utilisation", 230, l => TexteUtilisation(l)),
         new("derniere", "Dernière révision", 120, l => Date(l.DerniereRevision)),
         new("revision", "À réviser avant", 150, l => Date(l.DateProchaineRevision)),
         new("identification", "Identification", 300, l => _inventaire.Identification(l.Categorie, l.Code, l.Taille)),
@@ -357,9 +378,40 @@ public sealed class EcranInventaire : EcranBase
         {
             var i = _grille.Rows.Add(_colonnes.Select(c => (object)c.Valeur(l)).ToArray());
             _grille.Rows[i].Tag = l;
+            if (_grille.Columns.Contains("utilisation") && _utilisations.TryGetValue(l.EquipementId, out var u) && u.Seuil is not null)
+            {
+                _grille.Rows[i].Cells["utilisation"].ToolTipText = u.Origine switch
+                {
+                    OrigineSeuil.Modele => "Seuil propre à ce modèle (Paramètres › Compteur d'utilisation)",
+                    OrigineSeuil.Equipement => "Seuil propre à cet équipement (Paramètres › Compteur d'utilisation)",
+                    _ => $"Seuil des {l.Categorie.ToLower(Libelles.Culture)}",
+                };
+            }
         }
 
         _grille.ResumeLayout();
+    }
+
+    /// <summary>Ligne sous le nom : « Scubapro MK25 · Détendeurs » (catégorie seule si la fiche est vide).</summary>
+    private static string SousTitre(LigneInventaire l)
+    {
+        var fiche = string.Join(" ", new[] { l.Marque, l.Modele }.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim()));
+        return fiche.Length > 0 ? $"{fiche} · {l.Categorie}" : l.Categorie;
+    }
+
+    /// <summary>Le nom souligné ouvre la fiche, comme le bouton « Modifier ».</summary>
+    private bool SurLeNom(int ligne, int colonne, Point position)
+    {
+        if (Colonne(colonne) != "equipement" || ligne < 0 || _grille.Rows[ligne].Tag is not LigneInventaire l)
+        {
+            return false;
+        }
+
+        var cellule = _grille.GetCellDisplayRectangle(colonne, ligne, false);
+        using var g = _grille.CreateGraphics();
+        var zone = Tableaux.ZoneTitre(g, cellule, _grille.Columns[colonne].DefaultCellStyle.Padding, l.Libelle);
+        zone.Inflate(0, 3);
+        return zone.Contains(cellule.Left + position.X, cellule.Top + position.Y);
     }
 
     /// <summary>Révision (ou TIV) ou requalification : la plus proche.</summary>
@@ -404,7 +456,23 @@ public sealed class EcranInventaire : EcranBase
         var colonne = Colonne(e.ColumnIndex);
         if (colonne == "equipement")
         {
-            Tableaux.PeindreIconeTexte(e, Icones.PourCategorie(l.Categorie), l.Libelle);
+            Tableaux.PeindreIconeDeuxLignes(e, Icones.PourCategorie(l.Categorie), l.Libelle, SousTitre(l), barre: l.Etat == EtatEquipement.Reforme);
+        }
+        else if (colonne == "utilisation" && _utilisations.TryGetValue(l.EquipementId, out var u))
+        {
+            var (couleur, texte) = u.Etat switch
+            {
+                EtatCompteur.Atteint => (Theme.Erreur, Theme.Erreur),
+                EtatCompteur.Proche => (Theme.Avertissement, Theme.Avertissement),
+                _ => (Theme.Accent, u.Seuil is null ? Theme.TexteSecondaire : Theme.Texte),
+            };
+            var badge = u.Seuil is null ? null : u.Origine switch
+            {
+                OrigineSeuil.Modele => "SEUIL MODÈLE",
+                OrigineSeuil.Equipement => "SEUIL ÉQUIPEMENT",
+                _ => null,
+            };
+            Tableaux.PeindreUtilisation(e, u.Texte, u.Part, couleur, texte, badge, barreVisible: u.Seuil is not null);
         }
         else if (colonne == "action")
         {

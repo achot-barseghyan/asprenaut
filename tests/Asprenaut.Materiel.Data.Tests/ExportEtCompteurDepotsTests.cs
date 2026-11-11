@@ -56,7 +56,7 @@ public class ExportEtCompteurDepotsTests : IAsyncLifetime
     public async Task L_export_lit_toutes_les_tables_avec_des_noms_lisibles()
     {
         Assert.True(await DonneesDemo.ChargerSiVideAsync(_base.Fabrique, Horloge.AujourdHui));
-        await AllerRetourAsync("GIL-001");
+        await AllerRetourAsync("S01");
 
         var fichiers = await new ServiceExport(new ExportRepository(_base.Fabrique), Horloge).ExporterAsync();
 
@@ -69,10 +69,10 @@ public class ExportEtCompteurDepotsTests : IAsyncLifetime
         Assert.Contains("Moniteur;Pascal;Durand;;MF1;06 12 34 56 78;Oui;Oui", fichiers[1].Contenu, StringComparison.Ordinal);
         Assert.Contains("Classe;;Niveau 2;N2;;;Non;Oui", fichiers[1].Contenu, StringComparison.Ordinal);
         Assert.Contains($";06/11/2026;Piscine;Piscine;Pascal Durand;;En cours;1;0;", fichiers[2].Contenu, StringComparison.Ordinal);
-        Assert.Contains(";Piscine;GIL-001;Gilet Aqualung;Rendu;", fichiers[3].Contenu, StringComparison.Ordinal);
+        Assert.Contains(";Piscine;S01;Gilet Aqualung;Rendu;", fichiers[3].Contenu, StringComparison.Ordinal);
         Assert.Contains(";BLOC-031;Bloc 12 L acier;TIV;Conforme;Pascal Durand;", fichiers[4].Contenu, StringComparison.Ordinal);
         Assert.Equal(1, fichiers[6].Lignes);
-        Assert.Contains(fichiers[7].Contenu.Split(Environment.NewLine), l => l.Contains(";ScanRetour;", StringComparison.Ordinal) && l.EndsWith(";GIL-001;Piscine", StringComparison.Ordinal));
+        Assert.Contains(fichiers[7].Contenu.Split(Environment.NewLine), l => l.Contains(";ScanRetour;", StringComparison.Ordinal) && l.EndsWith(";S01;Piscine", StringComparison.Ordinal));
     }
 
     // Règle : le compteur compte les retours scannés après le jour du dernier contrôle de l'équipement.
@@ -81,10 +81,10 @@ public class ExportEtCompteurDepotsTests : IAsyncLifetime
     {
         Assert.True(await DonneesDemo.ChargerSiVideAsync(_base.Fabrique, Horloge.AujourdHui));
         var depot = new EquipementRepository(_base.Fabrique);
-        var det = (await depot.ObtenirParCodeAsync("DET-001"))!;
-        await AllerRetourAsync("DET-001");
+        var det = (await depot.ObtenirParCodeAsync("A01"))!;
+        await AllerRetourAsync("A01");
         Horloge.MaintenantUtc = Horloge.MaintenantUtc.AddDays(1);
-        await AllerRetourAsync("DET-001");
+        await AllerRetourAsync("A01");
 
         Assert.Equal(2, (await depot.ListerCompteursAsync(det.Id)).Single().Utilisations);
 
@@ -113,15 +113,15 @@ public class ExportEtCompteurDepotsTests : IAsyncLifetime
         var depot = new EquipementRepository(_base.Fabrique);
         var inventaire = new ServiceInventaire(depot, new CategorieRepository(_base.Fabrique), new JournalRepository(_base.Fabrique), Horloge, Reglages,
             null, new SortieRepository(_base.Fabrique), new RevisionRepository(_base.Fabrique));
-        var gilet = (await depot.ObtenirParCodeAsync("GIL-003"))!;
-        gilet.Code = "GIL-030";
+        var gilet = (await depot.ObtenirParCodeAsync("S03"))!;
+        gilet.Code = "S30";
         gilet.Taille = "XS";
         gilet.Etat = EtatEquipement.Reforme;
 
         Assert.True((await inventaire.ModifierAsync(gilet)).Reussi);
 
         var relu = (await depot.ObtenirAsync(gilet.Id))!;
-        Assert.Equal(("GIL-030", "XS", EtatEquipement.Reforme), (relu.Code, relu.Taille, relu.Etat));
+        Assert.Equal(("S30", "XS", EtatEquipement.Reforme), (relu.Code, relu.Taille, relu.Etat));
         await using var cx = await _base.Fabrique.OuvrirAsync();
         Assert.Equal("Reforme", await cx.ExecuteScalarAsync<string>("SELECT etat FROM equipement WHERE id = @id;", new { id = gilet.Id }));
         Assert.Equal(gilet.Id, await cx.ExecuteScalarAsync<long>("SELECT equipement_id FROM journal WHERE action = 'EquipementModifie';"));

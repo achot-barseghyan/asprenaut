@@ -115,13 +115,13 @@ public class DepotsTests : IAsyncLifetime
         var creation = await serviceSortie.CreerAsync(new NouvelleSortie(new DateOnly(2026, 11, 6), TypeSortie.Piscine, "Cours en piscine", pascal.Id));
         var id = creation.Id!.Value;
         Assert.Equal(NiveauResultat.Succes, (await scan.ScannerDepartAsync(id, "BLOC-031")).Niveau);
-        Assert.Equal(NiveauResultat.Succes, (await scan.ScannerDepartAsync(id, "ASP:gil-001")).Niveau);
+        Assert.Equal(NiveauResultat.Succes, (await scan.ScannerDepartAsync(id, "ASP:s01")).Niveau);
         Assert.Equal(NiveauResultat.Avertissement, (await scan.ScannerDepartAsync(id, "BLOC-033")).Niveau); // révision dépassée
         Assert.Equal(NiveauResultat.Erreur, (await scan.ScannerDepartAsync(id, "BLOC-034")).Niveau);       // hors service
         Assert.True((await serviceSortie.ValiderDepartAsync(id)).Reussi);
 
         Assert.Equal(NiveauResultat.Succes, (await scan.ScannerRetourAsync(id, "BLOC-031")).Niveau);
-        Assert.Equal(NiveauResultat.Succes, (await scan.ScannerRetourAsync(id, "GIL-001")).Niveau);
+        Assert.Equal(NiveauResultat.Succes, (await scan.ScannerRetourAsync(id, "S01")).Niveau);
 
         var resume = await serviceSortie.ObtenirResumeAsync(id);
         Assert.NotNull(resume);

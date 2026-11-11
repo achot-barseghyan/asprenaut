@@ -56,6 +56,30 @@ public sealed class ChampSaisie : Panel
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public string? Icone { get; set; }
 
+    private Control? _aDroite;
+
+    /// <summary>Petit contrôle placé à droite dans le champ mono-ligne (ex. pastille « Prêt à scanner »), ou null.</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Control? ADroite
+    {
+        get => _aDroite;
+        set
+        {
+            if (_aDroite is not null)
+            {
+                Controls.Remove(_aDroite);
+            }
+
+            _aDroite = value;
+            if (value is not null)
+            {
+                Controls.Add(value);
+            }
+
+            PerformLayout();
+        }
+    }
+
     protected override void OnLayout(LayoutEventArgs levent)
     {
         base.OnLayout(levent);
@@ -63,7 +87,15 @@ public sealed class ChampSaisie : Panel
         {
             // Centre verticalement la zone de texte mono-ligne.
             var icone = Icone is null ? 0 : (int)Dessin.Echelle(this, 30);
-            Champ.SetBounds(Padding.Left + icone, (Height - Champ.Height) / 2, Width - Padding.Horizontal - icone, Champ.Height);
+            var droite = 0;
+            if (_aDroite is { Visible: true } accessoire)
+            {
+                var taille = accessoire.GetPreferredSize(Size.Empty);
+                droite = taille.Width + (int)Dessin.Echelle(this, 8);
+                accessoire.SetBounds(Width - (int)Dessin.Echelle(this, 10) - taille.Width, (Height - taille.Height) / 2, taille.Width, taille.Height);
+            }
+
+            Champ.SetBounds(Padding.Left + icone, (Height - Champ.Height) / 2, Width - Padding.Horizontal - icone - droite, Champ.Height);
         }
     }
 

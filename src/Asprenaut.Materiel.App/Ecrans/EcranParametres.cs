@@ -65,6 +65,7 @@ public sealed class EcranParametres : EcranBase
             _garde.Lier(carte, ActionProtegee.Parametres);
         }
 
+        grille.SuspendLayout(); // Une seule mise en page pour les 9 cartes (sinon la grille se recalcule à chaque ajout).
         for (var i = 0; i < cartes.Length; i++)
         {
             if (i % 2 == 0)
@@ -77,6 +78,8 @@ public sealed class EcranParametres : EcranBase
             cartes[i].Margin = new Padding(i % 2 == 0 ? 0 : 10, 0, i % 2 == 0 ? 10 : 0, 20);
             grille.Controls.Add(cartes[i], i % 2, i / 2);
         }
+
+        grille.ResumeLayout(true);
 
         // Cadre défilant vertical (la page est plus haute que l'écran).
         var cadre = _cadre;
@@ -348,7 +351,7 @@ public sealed class EcranParametres : EcranBase
             _dernierCode.ForeColor = code.Length == 0 ? Theme.Erreur : Theme.RetourClair;
             essai.Valeur = "";
         };
-        _dernierCode.Text = "Le code lu s'affichera ici.";
+        _dernierCode.Text = $"Ex. : {Saisie.CodeScanne.ExempleMedaille} → A24";
         _dernierCode.ForeColor = Theme.TexteSecondaire;
         _dernierCode.Margin = Padding.Empty;
 
@@ -362,32 +365,17 @@ public sealed class EcranParametres : EcranBase
         carte.Ajouter(Interrupteur("Garder le champ de scan actif", "Le curseur revient seul dans la zone de scan", r.GarderFocusScan, v => _reglages.Modifier(x => x.GarderFocusScan = v)));
         carte.Ajouter(Interrupteur("Ignorer les doubles lectures", "Même code lu deux fois en moins d'une seconde", r.IgnorerDoublesLectures, v => _reglages.Modifier(x => x.IgnorerDoublesLectures = v)));
 
-        var prefixe = new ChampSaisie { Size = new Size(110, Theme.HauteurCliquable), Valeur = r.PrefixeEtiquette };
-        prefixe.Champ.Font = Theme.PoliceCode(11.25f);
-        prefixe.Champ.TextAlign = HorizontalAlignment.Center;
-        prefixe.Champ.CharacterCasing = CharacterCasing.Upper;
-        prefixe.Champ.MaxLength = ServiceReglages.LongueurMaxPrefixe;
-        prefixe.Champ.AccessibleName = "Préfixe des étiquettes";
-        prefixe.Champ.Leave += (_, _) =>
-        {
-            if (Saisie.CodeScanne.NormaliserPrefixe(prefixe.Valeur) == _reglages.Actuels.PrefixeEtiquette)
-            {
-                prefixe.Valeur = _reglages.Actuels.PrefixeEtiquette;
-                return;
-            }
-
-            // Différé : pas de fenêtre (code gestionnaire, erreur) pendant que le focus quitte le champ.
-            BeginInvoke(() =>
-            {
-                var resultat = Autoriser() ? _reglages.ChangerPrefixe(prefixe.Valeur) : null;
-                prefixe.Valeur = _reglages.Actuels.PrefixeEtiquette;
-                if (resultat is { Reussi: false })
-                {
-                    Dialogues.Information(FindForm(), resultat.Message);
-                }
-            });
-        };
-        carte.Ajouter(new LigneReglage("Préfixe des étiquettes", "Retiré automatiquement à la lecture", prefixe));
+        // Médailles du club : « (Detendeur) A24 Asprenaut Chalon 14 71-0025 » → A24 (voir CodeScanne.Lire).
+        var medaille = new ChampSaisie { Size = new Size(160, Theme.HauteurCliquable), Valeur = "(Type) CODE …" };
+        medaille.Champ.Font = Theme.PoliceCode(11.25f);
+        medaille.Champ.TextAlign = HorizontalAlignment.Center;
+        medaille.Champ.ReadOnly = true;
+        medaille.Champ.TabStop = false;
+        medaille.Champ.AccessibleName = "Lecture des médailles";
+        carte.Ajouter(new LigneReglage(
+            "Lecture des médailles",
+            "Le code est le mot qui suit le type entre parenthèses. Sa lettre donne la catégorie : A = détendeur adulte, E = détendeur enfant, S = gilet stab.",
+            medaille));
         return carte;
     }
 
@@ -472,6 +460,7 @@ public sealed class EcranParametres : EcranBase
                     if (_compteur.ChangerSeuilCategorie(categorie, voulu) is { Reussi: true, Id: { } retenu })
                     {
                         seuil.Nombre = (int)retenu;
+                        Executer(AfficherCandidatsAsync);
                     }
                 }
             };
@@ -493,49 +482,239 @@ public sealed class EcranParametres : EcranBase
         _seuilsSpecifiques.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         carte.Ajouter(_seuilsSpecifiques);
 
-        var portee = new ListeDeroulante { Width = 150, AccessibleName = "Appliquer à" };
-        portee.Items.Add(new Choix<PorteeSeuil>(PorteeSeuil.Modele, "Modèle"));
-        portee.Items.Add(new Choix<PorteeSeuil>(PorteeSeuil.Equipement, "Équipement"));
-        portee.SelectedIndex = 0;
-        var saisie = new ChampSaisie { TexteIndicatif = "Nom du modèle, ex. Détendeur Mares", Margin = new Padding(8, 0, 8, 0) };
-        saisie.Champ.AccessibleName = "Code ou modèle";
-        portee.SelectedIndexChanged += (_, _) => saisie.TexteIndicatif = portee.SelectedItem is Choix<PorteeSeuil> { Valeur: PorteeSeuil.Equipement }
-            ? "Scannez l'équipement (ex. DET-011)"
-            : "Nom du modèle, ex. Détendeur Mares";
-        var ajouter = new BoutonArrondi("+ Ajouter", StyleBouton.Principal) { Height = Theme.HauteurChamp, Margin = Padding.Empty };
-        async Task AjouterAsync()
+        carte.Ajouter(PanneauAjoutSeuil());
+        return carte;
+    }
+
+    // --- Ajouter un seuil spécifique : Modèle | Équipement, recherche ou scan, liste de l'inventaire, valeur, « + Ajouter ».
+    private readonly Bascule _porteeAjout = new("Modèle", "Équipement") { Compact = true };
+    private readonly ChampSaisie _rechercheAjout = new() { Icone = Icones.Recherche };
+    private readonly Label _titreListeAjout = Ui.Libelle("", Theme.PoliceTitre(8.25f), Theme.TexteSecondaire);
+    private readonly ListeChoix _listeAjout = new() { AccessibleName = "Choix du modèle ou de l'équipement" };
+    private readonly Label _aideAjout = Ui.Libelle("", Theme.Police(9.75f), Theme.TexteSecondaire);
+    private readonly SelecteurNombre _valeurAjout = new("Seuil à ajouter", n => $"{n} utilis.") { Width = 210, Nombre = ServiceCompteur.SeuilParDefaut };
+    private readonly BoutonArrondi _boutonAjout = new("+ Ajouter", StyleBouton.Principal) { AfficherPastille = false };
+    private readonly System.Windows.Forms.Timer _attenteAjout = new() { Interval = 250 };
+
+    private PorteeSeuil PorteeAjout => _porteeAjout.SelectedIndex == 1 ? PorteeSeuil.Equipement : PorteeSeuil.Modele;
+
+    private Control PanneauAjoutSeuil()
+    {
+        var cadre = new CadrePointille { Margin = new Padding(0, 14, 0, 0) };
+
+        var titre = Ui.Libelle("Ajouter un seuil spécifique", Theme.PoliceTitre(10.5f));
+        titre.Anchor = AnchorStyles.Left;
+        titre.Margin = Padding.Empty;
+        _porteeAjout.Anchor = AnchorStyles.Right;
+        _porteeAjout.AccessibleName = "Appliquer à";
+        var entete = RangeeDeux(titre, _porteeAjout);
+        entete.Margin = new Padding(0, 0, 0, 12);
+        cadre.Ajouter(entete);
+
+        // Champ : recherche d'un modèle, ou scan d'un équipement (médaille, code) avec la pastille « Prêt à scanner ».
+        var pret = new Pastille("Prêt à scanner", Theme.Teinte(Theme.Retour, 0.16f), Theme.RetourClair, Theme.Retour, Theme.PoliceTitre(8.25f), hauteur: 28);
+        _rechercheAjout.Champ.AccessibleName = "Rechercher ou scanner";
+        _rechercheAjout.Margin = new Padding(0, 0, 0, 14);
+        _rechercheAjout.ADroite = pret;
+        cadre.Ajouter(_rechercheAjout);
+
+        _titreListeAjout.Margin = new Padding(2, 0, 0, 8);
+        cadre.Ajouter(_titreListeAjout);
+        _listeAjout.Margin = new Padding(0, 0, 0, 12);
+        cadre.Ajouter(_listeAjout);
+
+        _aideAjout.Anchor = AnchorStyles.Left;
+        _aideAjout.Margin = Padding.Empty;
+        _valeurAjout.Anchor = AnchorStyles.Right;
+        _valeurAjout.Margin = new Padding(12, 0, 0, 0);
+        var pied = RangeeDeux(_aideAjout, _valeurAjout);
+        pied.Margin = new Padding(0, 0, 0, 12);
+        cadre.Ajouter(pied);
+        _boutonAjout.Margin = Padding.Empty;
+        cadre.Ajouter(_boutonAjout, pleineLargeur: false);
+
+        void Mode()
         {
-            if (!Autoriser() || portee.SelectedItem is not Choix<PorteeSeuil> choix)
-            {
-                return;
-            }
-
-            var resultat = await _compteur.AjouterSeuilSpecifiqueAsync(choix.Valeur, saisie.Valeur);
-            if (!resultat.Reussi)
-            {
-                Dialogues.Erreur(FindForm(), resultat.Message);
-                return;
-            }
-
-            saisie.Valeur = "";
-            await AfficherSeuilsAsync();
-            saisie.Champ.Focus();
+            var equipement = PorteeAjout == PorteeSeuil.Equipement;
+            _rechercheAjout.Icone = equipement ? Icones.Scanner : Icones.Recherche;
+            _rechercheAjout.TexteIndicatif = equipement ? "Scannez l'équipement : médaille ou code (ex. A24)" : "Chercher un modèle de l'inventaire";
+            pret.Visible = equipement;
+            _rechercheAjout.PerformLayout();
+            _rechercheAjout.Invalidate();
+            _titreListeAjout.Text = equipement ? "ÉQUIPEMENTS DE L'INVENTAIRE" : "MODÈLES DE L'INVENTAIRE";
         }
 
-        ajouter.Click += (_, _) => Executer(AjouterAsync);
-        saisie.Champ.KeyDown += (_, e) =>
+        Mode();
+        MettreAJourAideAjout();
+        _porteeAjout.Changement += (_, _) =>
         {
-            if (e.KeyCode == Keys.Enter) // Le pistolet tape le code puis Entrée.
+            Mode();
+            _rechercheAjout.Valeur = "";
+            _listeAjout.EffacerChoix();
+            Executer(AfficherCandidatsAsync);
+        };
+        _rechercheAjout.Champ.TextChanged += (_, _) =>
+        {
+            _attenteAjout.Stop();
+            _attenteAjout.Start();
+        };
+        _attenteAjout.Tick += (_, _) =>
+        {
+            _attenteAjout.Stop();
+            Executer(AfficherCandidatsAsync);
+        };
+        Disposed += (_, _) => _attenteAjout.Dispose();
+
+        // Le pistolet tape la médaille puis Entrée : l'équipement est choisi dans la liste.
+        _rechercheAjout.Champ.KeyDown += (_, e) =>
+        {
+            if (e.KeyCode == Keys.Enter)
             {
                 e.SuppressKeyPress = true;
-                Executer(AjouterAsync);
+                _attenteAjout.Stop();
+                Executer(ChoisirDepuisLaSaisieAsync);
             }
         };
-        var ligneAjout = Ui.Colonnes((portee, SizeType.Absolute, 150), (saisie, SizeType.Percent, 100), (ajouter, SizeType.AutoSize, 0));
-        ligneAjout.Height = Theme.HauteurChamp;
-        ligneAjout.Margin = new Padding(0, 8, 0, 0);
-        carte.Ajouter(ligneAjout);
-        return carte;
+        _listeAjout.ChoixChange += (_, _) => MettreAJourAideAjout();
+        _valeurAjout.Demande += (_, n) =>
+        {
+            var pas = Math.Sign(n - _valeurAjout.Nombre) * ServiceCompteur.Pas;
+            _valeurAjout.Nombre = Math.Clamp(_valeurAjout.Nombre + pas, ServiceCompteur.SeuilSpecifiqueMin, ServiceCompteur.SeuilSpecifiqueMax);
+        };
+        _boutonAjout.Click += (_, _) => Executer(AjouterSeuilAsync);
+        return cadre;
+    }
+
+    /// <summary>Rangée « texte à gauche, contrôle à droite » à la hauteur de son contenu (sans étirer le contrôle).</summary>
+    private static TableLayoutPanel RangeeDeux(Control gauche, Control droite)
+    {
+        var rangee = new TableLayoutPanel
+        {
+            ColumnCount = 2,
+            RowCount = 1,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Color.Transparent,
+            Margin = Padding.Empty,
+        };
+        rangee.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        rangee.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        rangee.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        gauche.Anchor = AnchorStyles.Left;
+        droite.Anchor = AnchorStyles.Right;
+        rangee.Controls.Add(gauche, 0, 0);
+        rangee.Controls.Add(droite, 1, 0);
+        return rangee;
+    }
+
+    /// <summary>« Choisissez dans la liste ou scannez une médaille », puis le choix (« A07 · Détendeur adulte »).</summary>
+    private void MettreAJourAideAjout()
+    {
+        var choix = _listeAjout.Choix;
+        _aideAjout.Text = choix is null
+            ? "Choisissez dans la liste ou scannez une médaille"
+            : PorteeAjout == PorteeSeuil.Equipement ? $"Choisi : {choix.Cle} · {choix.Titre}" : $"Choisi : {choix.Titre}";
+        _aideAjout.ForeColor = choix is null ? Theme.TexteSecondaire : Theme.Texte;
+        _boutonAjout.Enabled = choix is not null;
+    }
+
+    /// <summary>Modèles ou équipements de l'inventaire, filtrés par la saisie, avec leur seuil actuel.</summary>
+    private async Task AfficherCandidatsAsync()
+    {
+        var saisie = _rechercheAjout.Valeur;
+        IReadOnlyList<ElementChoix> elements;
+        string vide;
+        if (PorteeAjout == PorteeSeuil.Equipement)
+        {
+            var equipements = await _compteur.ListerEquipementsAsync(saisie);
+            elements = equipements.Select(e => new ElementChoix(
+                e.Code, e.Code, true,
+                e.Fiche.Length > 0 ? $"{e.Libelle} · {e.Fiche}" : e.Libelle,
+                DetailEquipement(e.Usage))).ToList();
+            vide = "Aucun équipement ne correspond.";
+        }
+        else
+        {
+            var modeles = await _compteur.ListerModelesAsync(saisie);
+            elements = modeles.Select(m => new ElementChoix(
+                m.Nom, "M", false, m.Nom,
+                $"{m.Categorie} · {Libelles.Pluriel(m.NbEquipements, "équipement")} · {(m.SeuilActuel is { } s ? $"seuil actuel {s}" : "sans compteur")}")).ToList();
+            vide = "Aucun modèle ne correspond.";
+        }
+
+        if (!IsDisposed && saisie == _rechercheAjout.Valeur)
+        {
+            _listeAjout.Afficher(elements, vide);
+        }
+    }
+
+    /// <summary>« Seuil du modèle : 100 · 23 utilisations ».</summary>
+    private static string DetailEquipement(UtilisationInventaire u)
+    {
+        var utilisations = Libelles.Pluriel(u.Utilisations, "utilisation");
+        if (u.Seuil is not { } seuil)
+        {
+            return $"Sans compteur · {utilisations}";
+        }
+
+        var origine = u.Origine switch
+        {
+            OrigineSeuil.Equipement => "Seuil spécifique",
+            OrigineSeuil.Modele => "Seuil du modèle",
+            _ => "Seuil de la catégorie",
+        };
+        return $"{origine} : {seuil} · {utilisations}";
+    }
+
+    /// <summary>Entrée dans le champ : la médaille scannée (ou le seul résultat) devient le choix.</summary>
+    private async Task ChoisirDepuisLaSaisieAsync()
+    {
+        await AfficherCandidatsAsync();
+        var saisie = _rechercheAjout.Valeur.Trim();
+        if (saisie.Length == 0)
+        {
+            return;
+        }
+
+        var cle = PorteeAjout == PorteeSeuil.Equipement ? Saisie.CodeScanne.Nettoyer(saisie, _reglages.Actuels.PrefixeEtiquette) : saisie;
+        if (_listeAjout.Choisir(cle))
+        {
+            if (PorteeAjout == PorteeSeuil.Equipement)
+            {
+                _rechercheAjout.Valeur = cle; // « (Detendeur) A24 Asprenaut… » → A24.
+                _rechercheAjout.Champ.SelectAll();
+            }
+
+            return;
+        }
+
+        if (PorteeAjout == PorteeSeuil.Equipement)
+        {
+            Dialogues.Information(FindForm(), $"Code inconnu : {cle}.");
+            _rechercheAjout.Champ.SelectAll();
+        }
+    }
+
+    private async Task AjouterSeuilAsync()
+    {
+        if (!Autoriser() || _listeAjout.Choix is not { } choix)
+        {
+            return;
+        }
+
+        var resultat = await _compteur.AjouterSeuilSpecifiqueAsync(PorteeAjout, choix.Cle, _valeurAjout.Nombre);
+        if (!resultat.Reussi)
+        {
+            Dialogues.Erreur(FindForm(), resultat.Message);
+            return;
+        }
+
+        _rechercheAjout.Valeur = "";
+        _attenteAjout.Stop();
+        _listeAjout.EffacerChoix();
+        _valeurAjout.Nombre = ServiceCompteur.SeuilParDefaut;
+        await AfficherSeuilsAsync(); // Recharge aussi la liste (seuils actuels).
+        _rechercheAjout.Champ.Focus();
     }
 
     /// <summary>Liste des seuils spécifiques, reconstruite après chaque ajout ou retrait.</summary>
@@ -569,6 +748,7 @@ public sealed class EcranParametres : EcranBase
         }
 
         _seuilsSpecifiques.ResumeLayout(true);
+        await AfficherCandidatsAsync(); // « seuil actuel » des modèles et équipements proposés.
     }
 
     private void AjouterSeuil(Control ligne)
@@ -605,6 +785,7 @@ public sealed class EcranParametres : EcranBase
                 if (_compteur.ChangerSeuilSpecifique(s.Portee, s.Cle, voulu) is { Reussi: true, Id: { } retenu })
                 {
                     seuil.Nombre = (int)retenu;
+                    Executer(AfficherCandidatsAsync);
                 }
             }
         };
@@ -1326,10 +1507,14 @@ public sealed class EcranParametres : EcranBase
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         }
 
-        public void Ajouter(Control c)
+        public void Ajouter(Control c, bool pleineLargeur = true)
         {
             RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            c.Dock = DockStyle.Fill;
+            if (pleineLargeur)
+            {
+                c.Dock = DockStyle.Fill;
+            }
+
             Controls.Add(c, 0, RowStyles.Count - 1);
         }
 

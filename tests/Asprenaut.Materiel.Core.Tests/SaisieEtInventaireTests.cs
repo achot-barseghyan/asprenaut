@@ -17,6 +17,22 @@ public class CodeScanneTests
     [InlineData(null, "")]
     public void Nettoyer_normalise_le_code(string? brut, string attendu) =>
         Assert.Equal(attendu, CodeScanne.Nettoyer(brut));
+
+    // Médailles du club : « (Type) CODE Asprenaut Chalon 14 71-0025 » → le code est le mot qui suit le type.
+    [Theory]
+    [InlineData("(Detendeur) A24 Asprenaut Chalon 14 71-0025", "A24", "Detendeur")]
+    [InlineData("(Detendeur) A24 Asprenaut Chalon 14 71-0025\r\n", "A24", "Detendeur")]
+    [InlineData("  (Stab) s12 Asprenaut Chalon 14 71-0025", "S12", "Stab")]
+    [InlineData("(Detendeur)E03 Asprenaut", "E03", "Detendeur")]
+    [InlineData("a24", "A24", null)]                            // Tapé à la main.
+    [InlineData("ASP:BLOC-031", "BLOC-031", null)]
+    [InlineData("(Detendeur) Asprenaut 71-0025", "(DETENDEUR)ASPRENAUT71-0025", null)] // Pas de code après le type : texte entier.
+    public void Lire_une_medaille(string brut, string code, string? type) =>
+        Assert.Equal(new LectureEtiquette(code, type), CodeScanne.Lire(brut));
+
+    [Fact]
+    public void Nettoyer_rend_le_code_de_la_medaille() =>
+        Assert.Equal("A24", CodeScanne.Nettoyer(CodeScanne.ExempleMedaille));
 }
 
 public class AntiRebondTests
@@ -107,7 +123,33 @@ public class InventaireTests
         _ctx.Equipement("BLOC-034");
         _ctx.Equipement("STOCK-A");
         Assert.Equal("BLOC-035", await _ctx.Inventaire.ProposerCodeAsync(blocs));
-        Assert.Equal("DET-001", await _ctx.Inventaire.ProposerCodeAsync(detendeurs));
+        Assert.Equal("A01", await _ctx.Inventaire.ProposerCodeAsync(detendeurs)); // Étiquettes du club : A01, S01.
+    }
+
+    // Étiquettes du club : A = détendeur adulte, E = détendeur enfant, S = gilet stab, sans tiret (A24, E03, S12).
+    [Fact]
+    public async Task Codes_du_club_sans_tiret()
+    {
+        var detendeurs = _ctx.Db.Categories.Single(c => c.Nom == "Détendeurs").Id;
+        _ctx.Db.Categories.Add(new Categorie { Id = _ctx.Db.ProchainId(), Nom = "Gilets" });
+        var gilets = _ctx.Db.Categories.Last().Id;
+
+        Assert.Equal(detendeurs, await _ctx.Inventaire.DevinerCategorieAsync("A24"));
+        Assert.Equal(detendeurs, await _ctx.Inventaire.DevinerCategorieAsync("e03"));
+        Assert.Equal(gilets, await _ctx.Inventaire.DevinerCategorieAsync("S12"));
+        Assert.Equal(gilets, await _ctx.Inventaire.DevinerCategorieAsync("(Stab) X99 Asprenaut Chalon 14 71-0025")); // Le type l'emporte sur la lettre.
+        Assert.Equal(detendeurs, await _ctx.Inventaire.DevinerCategorieAsync(CodeScanne.ExempleMedaille));
+        Assert.Equal("S01", await _ctx.Inventaire.ProposerCodeAsync(gilets));
+
+        _ctx.Equipement("A09", categorie: "Détendeurs");
+        _ctx.Equipement("A24", categorie: "Détendeurs");
+        _ctx.Equipement("E03", categorie: "Détendeurs");
+        Assert.Equal("A25", await _ctx.Inventaire.ProposerCodeAsync(detendeurs)); // Même forme : pas de tiret, 2 chiffres.
+
+        Assert.Equal("Détendeur adulte", ServiceInventaire.NomPropose("A24"));
+        Assert.Equal("Détendeur enfant", ServiceInventaire.NomPropose("E03"));
+        Assert.Equal("Gilet stabilisateur", ServiceInventaire.NomPropose("S12"));
+        Assert.Equal("", ServiceInventaire.NomPropose("BLOC-031"));
     }
 
     [Fact]
@@ -127,8 +169,8 @@ public class InventaireTests
 
     [Theory]
     [InlineData("Blocs", "BLOC")]
-    [InlineData("Détendeurs", "DET")]
-    [InlineData("Gilets", "GIL")]
+    [InlineData("Détendeurs", "A")]
+    [InlineData("Gilets", "S")]
     [InlineData("Lampes", "LAMP")]
     [InlineData("Écrans", "ECRA")]
     public void Prefixe_par_defaut_d_une_categorie(string nom, string prefixe) =>

@@ -46,7 +46,11 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   `ServiceBilan` (bilan de saison pour l'AG), `ServiceManuels` (notices des fabricants). Toutes les règles métier sont ici.
 - **Core/Resultats** : `ResultatScan` (Niveau Succes/Avertissement/Erreur, Message, Equipement, `ActionProposee`, Code, AutreSortieId),
   `ResultatOperation`, `ApercuCloture`. Les cas métier ne lèvent pas d'exception : ils retournent un résultat.
-- **Core/Saisie** : `CodeScanne.Nettoyer` (espaces, préfixe `ASP:`, majuscules) et `AntiRebond` — logique pure, testée.
+- **Core/Saisie** : `CodeScanne.Lire` / `Nettoyer` et `AntiRebond` — logique pure, testée. Médailles QR du club :
+  « (Detendeur) A24 Asprenaut Chalon 14 71-0025 » → code A24, type Detendeur (`LectureEtiquette`) ; sinon texte entier nettoyé
+  (espaces, préfixe `ASP:`, majuscules) pour taper A24 à la main. Le type de la médaille choisit la catégorie d'un code inconnu
+  (`ScanInput` → `CodeScanneEventArgs.Type` → `EcranScanBase.TypeLu` → `DevinerCategorieAsync(code, type)`).
+  Paramètres › Pistolet : ligne « Lecture des médailles » (le préfixe n'est plus modifiable à l'écran).
 - **Core/Abstractions** : interfaces des dépôts, `IHorloge` (heure injectable pour les tests), `IServiceSauvegarde`.
 - **Data/Migrations** : `NNN_nom.sql` embarqués (LogicalName `Migrations.NNN_nom.sql`), appliqués au démarrage par
   `GestionnaireMigrations` selon `schema_version`, chacun dans sa transaction. Active le mode WAL.
@@ -54,18 +58,19 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
 - **Data/Connexion** : `FabriqueConnexion` (une connexion par appel, `Foreign Keys=True`), `ConfigurationDapper`, `FormatIso`.
 - **App** : `Program.cs` → `Demarrage` (DI, sauvegarde, migrations, démo en DEBUG) → `MainForm` (menu latéral + zone de contenu).
   `INavigation.AllerA<TEcran>(parametre)` crée l'écran via `ActivatorUtilities` (non retenu par le conteneur), le met à l'échelle
-  de l'écran et dispose le précédent. Écrans dans `Ecrans/` (héritent d'`EcranBase` ; Départ/Retour héritent d'`EcranScanBase`
+  de l'écran et dispose le précédent (masqué puis disposé, jamais `Controls.Remove` : le retrait déplace tout l'arbre de
+  fenêtres vers la « parking window » de WinForms, 1,4 s pour Paramètres). Écrans dans `Ecrans/` (héritent d'`EcranBase` ; Départ/Retour héritent d'`EcranScanBase`
   qui sérialise les scans et fournit fil d'Ariane + carte d'en-tête via `Composer(corps)`).
 - **Maquette** : https://claude.ai/artifact/8op5sAWFbf4mRQCxzd37aa (Sorties, Nouvelle sortie, Départ, Retour, Inventaire, Manuels,
   Moniteurs, Historique, Bilan de saison, Révisions, Paramètres, Déverrouillage). Polices Sora/Manrope remplacées par Segoe UI Variable ; pas de fond dégradé ni de bulles animées.
 - **Briques d'interface** (`Controles/`) : `Carte`, `ControleDessine` (base des contrôles peints), `AnneauProgression`,
   `IndicateurEtapes`, `PastilleDate`, `Pastille`, `Picto`, `GrilleAdaptative` (colonnes auto, ajuste sa ligne de TableLayoutPanel),
-  `Tuile`, `FilAriane`, `BarreRecherche`, `ChampSaisie` (`Icone` optionnelle), `ChampDate` (remplace le DateTimePicker, blanc et en anglais),
+  `Tuile`, `FilAriane`, `BarreRecherche`, `ChampSaisie` (`Icone` et `ADroite` optionnels), `ChampDate` (remplace le DateTimePicker, blanc et en anglais),
   `ListeDeroulante` (cadre et bouton repeints par-dessus Windows dans `WndProc`), `ListeMateriel` (styles Depart / ARendre / Rendu),
   `ScanInput` + `BandeauMessage`, `BandeauAccueil`, `Logo`, `CarteScanner`, `Tableaux` (pastilles et pictogrammes dans les DataGridView),
   `FiltreCategories` (puces « Tout 12 / Blocs 3 », `CouleurPoint` et `Unite` optionnels), `FenetreFormulaire` (fenêtre modale sombre ;
   la validation passe par un service et ne ferme qu'en cas de succès), `Interrupteur`, `SelecteurNombre`, `Bascule` (options côte à côte, nombres), `ChoixResponsable`, `CarteSection`, `LigneReglage`,
-  `JournalHistorique` (journal par jour dessiné dans un seul contrôle défilant : seule la partie visible est peinte, le clic sur un
+  `ListeChoix` (liste de choix dessinée, badge + titre + détail, clic ou flèches), `JournalHistorique` (journal par jour dessiné dans un seul contrôle défilant : seule la partie visible est peinte, le clic sur un
   code est retrouvé par calcul — à préférer à un contrôle par ligne dès qu'une liste peut compter des milliers d'éléments).
   `EcranBilan` : cartes entièrement dessinées (classes imbriquées), placées par `PageBilan` selon la largeur (4/2 chiffres,
   3/2/1 cartes du bas) ; la page est focusable pour que la molette la fasse défiler, et sa largeur est posée à la main
@@ -81,7 +86,10 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   (`CarteEquipement`, vrais `BoutonArrondi` liés à `ActionProtegee.Revisions`), filtre par famille, champ de scan qui ouvre
   le panneau « Ajouter une intervention » en haut de page ; « Fiche › » mène à Historique (vie de l'équipement).
   `PageRevisions.OnLayout` recommence le placement si la hauteur posée a fait apparaître la barre (mise en page imbriquée ignorée).
-- **Inventaire** : bouton « Modifier » dessiné dans la grille (`Tableaux.PeindreBouton`), double-clic ou Entrée →
+- **Inventaire** : colonne « Utilisation » (`ServiceCompteur.ListerUtilisationsAsync` : « 64 / 80 utilisations », barre jaune à 90 %,
+  rouge au seuil, pastille « SEUIL MODÈLE / ÉQUIPEMENT » selon `OrigineSeuil`, `Tableaux.PeindreUtilisation`) dans les trois jeux
+  de colonnes ; nom souligné en pointillé + ligne « marque modèle · catégorie » (`Tableaux.PeindreIconeDeuxLignes`), le clic
+  sur le nom ouvre la fiche. Bouton « Modifier » dessiné dans la grille (`Tableaux.PeindreBouton`), double-clic ou Entrée →
   `FormulaireEquipement.ModifierAsync` → `ServiceInventaire.ModifierAsync`.
 - **Pictogrammes** : `Apparence/Icones.cs`, chemins SVG 24 × 24 de la maquette lus par `CheminSvg` et tracés en GDI+.
 - **Icône de l'application** : `Ressources/Asprenaut.ico` (16 à 256 px ; tailles ≤ 96 en bitmap, 128 et 256 en PNG), fabriquée
@@ -98,7 +106,10 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
 4. Code inconnu au départ → `ActionProposee.CreerEquipement` : l'écran ouvre `FormulaireEquipement` (code pré-rempli, catégorie
    devinée par `ServiceInventaire.DevinerCategorieAsync`), puis rescanne le code dans la sortie.
    Création (`ServiceInventaire.CreerAsync`) : code nettoyé et unique, nom et catégorie obligatoires, pas de date de contrôle passée,
-   requalification réservée aux blocs, toujours EnService. Code proposé : `ProposerCodeAsync` (BLOC-034 → BLOC-035).
+   requalification réservée aux blocs, toujours EnService. Code proposé : `ProposerCodeAsync` dans la forme déjà utilisée
+   (BLOC-034 → BLOC-035, A24 → A25). Étiquettes QR du club, sans tiret : A = détendeur adulte, E = détendeur enfant,
+   S = gilet stab (A24, E03, S12) ; catégorie vide → A01 / S01 ; `DevinerCategorieAsync` reconnaît A/E → Détendeurs,
+   S → Gilets (DET, GIL encore acceptés) ; `NomPropose` pré-remplit le nom (« Détendeur enfant »). Données de démo : A01, S01, E01.
 5. Retour d'un équipement absent de la sortie → avertir sans rien modifier ; s'il est dehors ailleurs →
    `ActionProposee.RentrerDansAutreSortie` (l'écran rescanne alors dans `AutreSortieId`).
 6. Retrait possible seulement en préparation (`StatutSortie.EnPreparation`).
@@ -164,6 +175,9 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     modèle (nom exact de l'équipement), sinon à la catégorie (0 = désactivé ; Détendeurs et Gilets 100 par défaut).
     À 90 % (`PrevenirAvantSeuil`) → « à planifier » dans Révisions (ligne `LigneEcheance.Usage` « 92/100 utilisations ») ;
     au seuil → en retard, départ avec avertissement, ou refusé si `BloquerAuSeuil` (coupé par défaut). Un bloc repart à zéro à sa TIV.
+   Ajouter un seuil spécifique (maquette) : Modèle | Équipement, recherche ou scan d'une médaille, liste de l'inventaire limitée aux
+   catégories à compteur (`ListerModelesAsync` : seuil actuel ; `ListerEquipementsAsync` : seuil, origine, utilisations), valeur
+   choisie (`AjouterSeuilSpecifiqueAsync(portee, saisie, sorties)`, 10 à 1000).
 20. Registre des contrôles (`ServiceRevisions.RegistreAsync`) : tous les blocs (même sans contrôle), puis le matériel avec un
     contrôle ou une révision prévue ; réformés seulement s'ils ont un historique.
 21. Types de sortie (`ServiceTypesSortie`, Paramètres › Types de sortie, action protégée Parametres) : des données
@@ -243,12 +257,13 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   depuis 007 : seance_equipement (blocs planifiés à une séance TIV, ON DELETE CASCADE), controle.nature et controle.intervenant ;
   depuis 008 : moniteur.genre (CHECK Moniteur/Classe) et moniteur.abrege, classes Niveau 1 à 4 ;
   depuis 009 : manuel (fichier, nb_pages, sommaire et entretien en texte, une ligne par entrée ; PDF dans `Manuels\` à côté
-  de la base, non copiés par les sauvegardes de la base).
+  de la base, non copiés par les sauvegardes de la base) ; 010 : codes des médailles (DET-007 → A07, GIL-012 → S12, journal
+  corrigé ; un code déjà pris reste inchangé).
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/010_xxx.sql`, sans jamais modifier un script déjà livré
+- Nouvelle migration : ajouter `Migrations/011_xxx.sql`, sans jamais modifier un script déjà livré
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.

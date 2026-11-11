@@ -17,15 +17,20 @@ public static class FormulaireEquipement
     /// Ouvre la fenêtre d'ajout. <paramref name="code"/> pré-remplit le code (étiquette scannée) ; sinon un code est proposé
     /// selon la catégorie. Retourne le code créé, ou null si l'utilisateur a annulé.
     /// </summary>
-    public static async Task<string?> OuvrirAsync(IWin32Window? proprietaire, ServiceInventaire inventaire, string? code = null, long? categorieId = null)
+    public static async Task<string?> OuvrirAsync(IWin32Window? proprietaire, ServiceInventaire inventaire, string? code = null, long? categorieId = null, string? type = null)
     {
         if (categorieId is null && !string.IsNullOrWhiteSpace(code))
         {
-            categorieId = await inventaire.DevinerCategorieAsync(code); // GIL-010 → Gilets.
+            // Type de la médaille s'il est connu (« (Stab) S10 » → Gilets), sinon d'après le code (A24 → Détendeurs).
+            categorieId = await inventaire.DevinerCategorieAsync(code, type);
         }
 
         var champs = await Champs.CreerAsync(inventaire, categorieId, proposerCode: true);
         champs.Code.Valeur = code ?? champs.Code.Valeur;
+        if (code is not null && champs.Nom.Valeur.Trim().Length == 0)
+        {
+            champs.Nom.Valeur = ServiceInventaire.NomPropose(Core.Saisie.CodeScanne.Nettoyer(code, null)); // E03 → Détendeur enfant.
+        }
 
         string? cree = null;
         using var fenetre = new FenetreFormulaire("Ajouter un équipement", "Ajouter", async () =>

@@ -122,7 +122,9 @@ public sealed class ServiceNavigation(IServiceProvider services) : INavigation
             hote.SuspendLayout();
             if (ancien is not null)
             {
-                hote.Controls.Remove(ancien);
+                // Masqué, pas retiré : Controls.Remove déplace tout l'arbre de fenêtres vers la « parking window » de
+                // WinForms, très lent pour un écran chargé (1,4 s pour Paramètres). Dispose le détruit ensuite d'un coup.
+                ancien.Visible = false;
             }
 
             ecran.Dock = DockStyle.Fill;
@@ -135,7 +137,7 @@ public sealed class ServiceNavigation(IServiceProvider services) : INavigation
 
         if (ancien is not null)
         {
-            hote.BeginInvoke(ancien.Dispose); // Libéré après l'affichage du nouvel écran.
+            hote.BeginInvoke(ancien.Dispose); // Libéré après l'affichage du nouvel écran (il se retire alors de l'hôte).
         }
     }
 

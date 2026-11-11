@@ -14,7 +14,7 @@ public enum PorteeSeuil
     Equipement,
 }
 
-/// <summary>Seuil propre à un modèle (nom de l'équipement, ex. « Détendeur Mares ») ou à un code (ex. DET-007).</summary>
+/// <summary>Seuil propre à un modèle (nom de l'équipement, ex. « Détendeur Mares ») ou à un code (ex. A07).</summary>
 public sealed class SeuilSpecifique
 {
     public PorteeSeuil Portee { get; set; }
@@ -53,3 +53,29 @@ public sealed record UsageEquipement(int Utilisations, int Seuil, EtatCompteur E
 
 /// <summary>Seuil spécifique avec ce qu'il concerne, pour l'écran Paramètres (« 4 équipements », « Détendeur complet »).</summary>
 public sealed record SeuilSpecifiqueDecrit(PorteeSeuil Portee, string Cle, int Sorties, string Precision);
+
+/// <summary>D'où vient le seuil d'un équipement : sa catégorie, son modèle ou son code (Paramètres › Compteur d'utilisation).</summary>
+public enum OrigineSeuil
+{
+    Categorie,
+    Modele,
+    Equipement,
+}
+
+/// <summary>
+/// Colonne « Utilisation » de l'inventaire : utilisations depuis le dernier contrôle, avec le seuil s'il y en a un
+/// (null = pas de compteur pour cet équipement) et son origine.
+/// </summary>
+public sealed record UtilisationInventaire(int Utilisations, int? Seuil, EtatCompteur Etat, OrigineSeuil Origine)
+{
+    /// <summary>Part du seuil, de 0 à 1 (0 sans seuil).</summary>
+    public double Part => Seuil is > 0 and var s ? Math.Min(1, Utilisations / (double)s) : 0;
+
+    public string Texte => Seuil is { } s ? $"{Utilisations} / {s} utilisations" : Libelles.Pluriel(Utilisations, "utilisation");
+}
+
+/// <summary>Modèle proposé pour un seuil spécifique : « Détendeur Scubapro MK2 · Détendeurs · 3 équipements · seuil actuel 100 ».</summary>
+public sealed record ModeleCandidat(string Nom, string Categorie, int NbEquipements, int? SeuilActuel);
+
+/// <summary>Équipement proposé pour un seuil spécifique, avec son seuil actuel, son origine et ses utilisations.</summary>
+public sealed record EquipementCandidat(string Code, string Libelle, string Fiche, UtilisationInventaire Usage);
