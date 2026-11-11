@@ -83,6 +83,14 @@ public sealed class ExportRepository(FabriqueConnexion fabrique) : IExportReposi
             ORDER BY j.horodatage, j.id
             """,
             [new("Date", GenreColonne.Horodatage), new("Action"), new("Détail"), new("Code"), new("Sortie")]),
+        ("manuels.csv",
+            """
+            SELECT m.marque, m.titre, c.nom, m.modeles, m.edition, m.fichier, m.nb_pages, m.mois_revision, m.page_entretien
+            FROM manuel m LEFT JOIN categorie c ON c.id = m.categorie_id
+            ORDER BY m.marque, m.titre
+            """,
+            [new("Marque"), new("Titre"), new("Catégorie"), new("Modèles"), new("Édition"), new("Fichier"), new("Pages"),
+             new("Révision fabricant (mois)"), new("Page de l'entretien")]),
     ];
 
     public async Task<IReadOnlyList<TableExport>> ListerTablesAsync(CancellationToken ct = default)

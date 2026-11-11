@@ -10,7 +10,8 @@ public sealed record ElementMateriel(
     string? Categorie = null,
     string? Detail = null,
     string? Alerte = null,
-    Color? CouleurAlerte = null);
+    Color? CouleurAlerte = null,
+    long? ManuelId = null);
 
 public enum StyleListe
 {
@@ -51,8 +52,11 @@ public sealed class ListeMateriel : FlowLayoutPanel
     /// <summary>Nombre de lignes affichées.</summary>
     public int Nombre => Controls.Count - 1;
 
-    /// <summary>Remplace le contenu. <paramref name="action"/> null = pas de bouton.</summary>
-    public void Afficher(IEnumerable<ElementMateriel> elements, string? libelleAction = null, string? iconeAction = null, Action<ElementMateriel>? action = null)
+    /// <summary>
+    /// Remplace le contenu. <paramref name="action"/> null = pas de bouton. <paramref name="ouvrirManuel"/> : bouton « Manuel »
+    /// sur les lignes dont l'équipement a un manuel (<see cref="ElementMateriel.ManuelId"/>).
+    /// </summary>
+    public void Afficher(IEnumerable<ElementMateriel> elements, string? libelleAction = null, string? iconeAction = null, Action<ElementMateriel>? action = null, Action<ElementMateriel>? ouvrirManuel = null)
     {
         SuspendLayout();
         while (Controls.Count > 1)
@@ -64,7 +68,7 @@ public sealed class ListeMateriel : FlowLayoutPanel
 
         foreach (var element in elements)
         {
-            var ligne = new LigneMateriel(_style, element, libelleAction, iconeAction, action);
+            var ligne = new LigneMateriel(_style, element, libelleAction, iconeAction, action, ouvrirManuel);
             Controls.Add(ligne);
             ligne.Width = LargeurLigne(); // Après l'ajout, qui met la ligne à l'échelle de l'écran.
         }
@@ -136,8 +140,9 @@ public sealed class ListeMateriel : FlowLayoutPanel
         private readonly StyleListe _style;
         private readonly ElementMateriel _element;
         private readonly BoutonArrondi? _bouton;
+        private readonly BoutonArrondi? _manuel;
 
-        public LigneMateriel(StyleListe style, ElementMateriel element, string? libelleAction, string? iconeAction, Action<ElementMateriel>? action)
+        public LigneMateriel(StyleListe style, ElementMateriel element, string? libelleAction, string? iconeAction, Action<ElementMateriel>? action, Action<ElementMateriel>? ouvrirManuel)
         {
             _style = style;
             _element = element;
@@ -159,15 +164,36 @@ public sealed class ListeMateriel : FlowLayoutPanel
                 _bouton.Click += (_, _) => action(element);
                 Controls.Add(_bouton);
             }
+
+            // Manuel de l'équipement (même catégorie, même marque) : à gauche du bouton d'action.
+            if (element.ManuelId is not null && ouvrirManuel is not null)
+            {
+                _manuel = new BoutonArrondi($"Manuel de {element.Code}", StyleBouton.Icone, Icones.Manuels)
+                {
+                    Margin = Padding.Empty,
+                    CouleurIcone = Theme.AccentClair,
+                    AccessibleDescription = "Ouvre le manuel du fabricant",
+                };
+                _manuel.Click += (_, _) => ouvrirManuel(element);
+                Controls.Add(_manuel);
+            }
         }
+
+        /// <summary>Bord gauche du premier bouton de la ligne (le texte s'arrête avant).</summary>
+        private int DebutBoutons => _manuel?.Left ?? _bouton?.Left ?? Width;
 
         protected override void OnLayout(LayoutEventArgs levent)
         {
             base.OnLayout(levent);
-            if (_bouton is not null)
+            var marge = (int)E(4);
+            var droite = Width - marge;
+            foreach (var bouton in new[] { _bouton, _manuel })
             {
-                var marge = (int)E(4);
-                _bouton.Location = new Point(Width - _bouton.Width - marge, (Height - _bouton.Height) / 2);
+                if (bouton is not null)
+                {
+                    bouton.Location = new Point(droite - bouton.Width, (Height - bouton.Height) / 2);
+                    droite = bouton.Left - marge;
+                }
             }
         }
 
@@ -231,7 +257,7 @@ public sealed class ListeMateriel : FlowLayoutPanel
                     }
             }
 
-            var droite = _bouton is null ? Width - (int)E(12) : _bouton.Left - (int)E(6);
+            var droite = _bouton is null && _manuel is null ? Width - (int)E(12) : DebutBoutons - (int)E(6);
             var pastille = _style != StyleListe.Depart && _element.Alerte is { } alerteADroite ? alerteADroite : null;
             if (pastille is not null)
             {

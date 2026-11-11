@@ -33,6 +33,7 @@ public static class Icones
     // --- Navigation ---
     public const string Sorties = "M3 10c2 0 2-2 4.5-2S10 10 12 10s2-2 4.5-2S19 10 21 10M3 16c2 0 2-2 4.5-2S10 16 12 16s2-2 4.5-2S19 16 21 16";
     public const string Inventaire = "M4 4h16v16H4zM4 10h16M10 10v10";
+    public const string Manuels = "M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM19 19v2H6M8 7h7M8 11h5";
     public const string Moniteurs = "M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 20c0-3 3-5 6-5s6 2 6 5M16 5a3 3 0 0 1 0 6M18 15c2 .6 3 2.4 3 5";
     public const string Historique = "M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 8v4l3 2";
     public const string Bilan = "M4 20V11M10 20V5M16 20v-7M21 20H3";
@@ -68,6 +69,8 @@ public static class Icones
     public const string Bouclier = "M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6zM9 12l2 2 4-4";
     public const string Base = "M4 5a8 3 0 1 0 16 0 8 3 0 1 0-16 0zM4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6";
     public const string Imprimante = "M7 9V3h10v6M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v7H7z";
+    public const string PleinEcran = "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5";
+    public const string Livre = "M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM19 19v2H6M8 7h7M8 11h5";
     public const string Moins = "M5 12h14";
     public const string Telephone = "M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2";
     public const string Document = "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5";

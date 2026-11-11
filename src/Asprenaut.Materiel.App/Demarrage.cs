@@ -5,6 +5,7 @@ using Asprenaut.Materiel.Core.Abstractions;
 using Asprenaut.Materiel.Core.Services;
 using Asprenaut.Materiel.Data.Connexion;
 using Asprenaut.Materiel.Data.Depots;
+using Asprenaut.Materiel.Data.Manuels;
 using Asprenaut.Materiel.Data.Migrations;
 using Asprenaut.Materiel.Data.Sauvegardes;
 using Microsoft.Extensions.DependencyInjection;
@@ -50,6 +51,8 @@ internal static class Demarrage
         services.AddSingleton<IRevisionRepository, RevisionRepository>();
         services.AddSingleton<IExportRepository, ExportRepository>();
         services.AddSingleton<ITypeSortieRepository, TypeSortieRepository>();
+        services.AddSingleton<IManuelRepository, ManuelRepository>();
+        services.AddSingleton<IStockageManuels>(_ => new StockageManuels(StockageManuels.DossierParDefaut(parametres.CheminBase)));
 
         // Services métier (Core)
         services.AddSingleton<ServiceScan>();
@@ -64,6 +67,7 @@ internal static class Demarrage
         services.AddSingleton<ServiceGestion>();
         services.AddSingleton<ServiceReglages>();
         services.AddSingleton<ServiceRevisions>();
+        services.AddSingleton<ServiceManuels>();
 
         // Interface. Les écrans ne sont pas enregistrés : ServiceNavigation les crée à la demande.
         services.AddSingleton<ServiceNavigation>();
@@ -94,5 +98,15 @@ internal static class Demarrage
             services.GetRequiredService<FabriqueConnexion>(),
             services.GetRequiredService<IHorloge>().AujourdHui);
 #endif
+
+        // Notices des fabricants livrées avec l'appli : installées une seule fois. Un échec ne bloque pas le démarrage.
+        try
+        {
+            await ManuelsFournis.InstallerAsync(services.GetRequiredService<ServiceManuels>());
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
+        {
+            Erreurs.Journaliser(ex);
+        }
     }
 }

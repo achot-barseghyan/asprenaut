@@ -59,8 +59,11 @@ public sealed class Interrupteur : CheckBox
     }
 }
 
-/// <summary>Sélecteur numérique « − 3 j + » dans un cadre arrondi.</summary>
-public sealed class SelecteurNombre : Panel, IVerrouillable
+/// <summary>
+/// Sélecteur numérique « − 3 j + » dans un cadre arrondi. <see cref="IFondDessine"/> : les boutons − et + recopient
+/// son fond, pastille « verrouillé » comprise.
+/// </summary>
+public sealed class SelecteurNombre : Panel, IVerrouillable, IFondDessine
 {
     private readonly BoutonArrondi _moins;
     private readonly BoutonArrondi _plus;
@@ -82,16 +85,16 @@ public sealed class SelecteurNombre : Panel, IVerrouillable
         _valeur.TextAlign = ContentAlignment.MiddleCenter;
         _moins.Click += (_, _) => Demande?.Invoke(this, _nombre - 1);
         _plus.Click += (_, _) => Demande?.Invoke(this, _nombre + 1);
-        _valeur.Paint += (_, e) => PeindreCadenas(e.Graphics);
         Controls.AddRange([_moins, _valeur, _plus]);
         Size = new Size(44 + 72 + 44 + 10, 52);
     }
 
     private bool _verrouille;
+    private PastilleVerrou? _pastille;
 
     /// <summary>
-    /// Changer la valeur demande le code gestionnaire : cadenas après la valeur (voir GardeGestion.Lier).
-    /// Les clics lèvent toujours <see cref="Demande"/> : l'écran demande le code avant d'accepter.
+    /// Changer la valeur demande le code gestionnaire : bordure dorée et pastille au cadenas sur le coin
+    /// (voir GardeGestion.Lier). Les clics lèvent toujours <see cref="Demande"/> : l'écran demande le code avant d'accepter.
     /// </summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool Verrouille
@@ -105,25 +108,15 @@ public sealed class SelecteurNombre : Panel, IVerrouillable
             }
 
             _verrouille = value;
-            _moins.AccessibleDescription = _plus.AccessibleDescription = value ? "Code gestionnaire requis" : null;
-            _valeur.Invalidate();
-            _moins.Invalidate();
-            _plus.Invalidate();
-        }
-    }
+            _moins.AccessibleDescription = _plus.AccessibleDescription = value ? PastilleVerrou.TexteBulle : null;
+            if (value || _pastille is not null)
+            {
+                _pastille ??= new PastilleVerrou(this);
+                _pastille.Visible = value;
+            }
 
-    private void PeindreCadenas(Graphics g)
-    {
-        if (!_verrouille)
-        {
-            return;
+            Invalidate(true);
         }
-
-        Dessin.Qualite(g);
-        var largeurTexte = TextRenderer.MeasureText(g, _valeur.Text, _valeur.Font).Width;
-        var t = Dessin.Echelle(this, 14);
-        var x = Math.Min(_valeur.Width - t - 2, ((_valeur.Width + largeurTexte) / 2f) + Dessin.Echelle(this, 2));
-        Icones.Dessiner(g, Icones.Cadenas, new RectangleF(x, (_valeur.Height - t) / 2, t, t), Theme.Avertissement, 2.2f);
     }
 
     /// <summary>L'utilisateur demande une nouvelle valeur ; l'écran la fait valider puis appelle <see cref="Nombre"/>.</summary>
@@ -157,7 +150,14 @@ public sealed class SelecteurNombre : Panel, IVerrouillable
     }
 
     protected override void OnPaintBackground(PaintEventArgs e) =>
-        Dessin.PeindreFondArrondi(this, e.Graphics, BackColor, Theme.BordureForte, Theme.RayonBouton, 1.2f);
+        Dessin.PeindreFondArrondi(this, e.Graphics, BackColor,
+            _verrouille ? Theme.Sur(BackColor, Theme.Avertissement, 0.6f) : Theme.BordureForte, Theme.RayonBouton, _verrouille ? 1.5f : 1.2f);
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        _pastille?.PeindreInterieur(e.Graphics);
+    }
 }
 
 /// <summary>

@@ -145,6 +145,45 @@ public interface ITypeSortieRepository
     Task<bool> SupprimerAsync(long id, CancellationToken ct = default);
 }
 
+/// <summary>Manuels des fabricants (table manuel, migration 009).</summary>
+public interface IManuelRepository
+{
+    /// <summary>Tous les manuels, avec le nom de leur catégorie et leur nombre d'équipements liés, triés par marque puis titre.</summary>
+    Task<IReadOnlyList<Manuel>> ListerAsync(CancellationToken ct = default);
+
+    Task<Manuel?> ObtenirAsync(long id, CancellationToken ct = default);
+
+    Task<long> AjouterAsync(Manuel manuel, CancellationToken ct = default);
+
+    Task MettreAJourAsync(Manuel manuel, CancellationToken ct = default);
+
+    Task SupprimerAsync(long id, CancellationToken ct = default);
+
+    /// <summary>Codes des équipements liés : même catégorie, même marque (sans tenir compte des majuscules), hors réformés.</summary>
+    Task<IReadOnlyList<string>> ListerCodesEquipementsAsync(long manuelId, CancellationToken ct = default);
+
+    /// <summary>Manuel de chaque équipement qui en a un (même catégorie, même marque) : id de l'équipement → id du manuel (le plus ancien).</summary>
+    Task<IReadOnlyDictionary<long, long>> ListerManuelsDesEquipementsAsync(CancellationToken ct = default);
+}
+
+/// <summary>
+/// Fichiers PDF des manuels, copiés dans un dossier à côté de la base : lisibles sans internet,
+/// même si la clé USB d'origine n'est plus là.
+/// </summary>
+public interface IStockageManuels
+{
+    /// <summary>Copie le fichier et retourne le nom sous lequel il est rangé (un nom déjà pris reçoit un suffixe).</summary>
+    string Importer(string cheminSource);
+
+    /// <summary>Chemin complet d'un fichier rangé.</summary>
+    string Chemin(string fichier);
+
+    bool Existe(string fichier);
+
+    /// <summary>Supprime un fichier rangé (sans erreur s'il n'existe plus).</summary>
+    void Supprimer(string fichier);
+}
+
 /// <summary>Lecture de toutes les tables pour l'export CSV complet.</summary>
 public interface IExportRepository
 {

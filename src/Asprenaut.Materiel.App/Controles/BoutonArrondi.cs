@@ -29,6 +29,9 @@ public enum StyleBouton
 
     /// <summary>Petit bouton avec seulement un pictogramme (retirer une ligne...).</summary>
     Icone,
+
+    /// <summary>Bouton jaune « Déverrouiller » du bandeau Mode consultation.</summary>
+    Verrou,
 }
 
 /// <summary>Bouton dessiné à coins arrondis, au moins 44 px de haut. Garde le clavier et l'accessibilité de Button.</summary>
@@ -117,10 +120,11 @@ public class BoutonArrondi : Button, IVerrouillable
     }
 
     private bool _verrouille;
+    private PastilleVerrou? _pastille;
 
     /// <summary>
-    /// Action protégée en mode consultation : cadenas après le texte. Un bouton AutoSize s'élargit de la place du cadenas
-    /// et reprend sa largeur au déverrouillage. Mise à jour par <see cref="GardeGestion.Lier{T}"/>.
+    /// Action protégée en mode consultation : pastille jaune au cadenas accrochée au coin haut droit et info-bulle
+    /// « Code gestionnaire requis » (<see cref="PastilleVerrou"/>). Mise à jour par <see cref="GardeGestion.Lier{T}"/>.
     /// </summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool Verrouille
@@ -135,16 +139,22 @@ public class BoutonArrondi : Button, IVerrouillable
 
             _verrouille = value;
             AccessibleDescription = value ? "Demande le code gestionnaire" : null;
-            if (AutoSize)
+            if (AfficherPastille && (value || _pastille is not null))
             {
-                // En GrowOnly, la mise en page ne rétrécit jamais : la largeur est posée explicitement.
-                Width = GetPreferredSize(Size.Empty).Width;
-                Parent?.PerformLayout(this, nameof(Width));
+                _pastille ??= new PastilleVerrou(this);
+                _pastille.Visible = value;
             }
 
             Invalidate();
         }
     }
+
+    /// <summary>
+    /// Faux sur une page qui a le bandeau « Mode consultation » (Révisions, Paramètres) : le bandeau suffit,
+    /// le bouton garde seulement sa description accessible.
+    /// </summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool AfficherPastille { get; set; } = true;
 
     /// <summary>Entrée de menu sélectionnée (écran courant).</summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -169,11 +179,6 @@ public class BoutonArrondi : Button, IVerrouillable
         if (_icone is not null && Text.Length > 0)
         {
             largeur += (int)Dessin.Echelle(this, 28);
-        }
-
-        if (_verrouille && Text.Length > 0)
-        {
-            largeur += (int)Dessin.Echelle(this, 24); // Cadenas (16) + écart (8).
         }
 
         return new Size(largeur, Height);
@@ -254,6 +259,7 @@ public class BoutonArrondi : Button, IVerrouillable
         }
 
         PeindreContenu(g, texte);
+        _pastille?.PeindreInterieur(g);
     }
 
     private void PeindreContenu(Graphics g, Color texte)
@@ -272,9 +278,7 @@ public class BoutonArrondi : Button, IVerrouillable
         var drapeaux = TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix;
         var mesure = TextRenderer.MeasureText(g, Text, Font, Size.Empty, drapeaux);
         var ecart = _icone is null ? 0 : Dessin.Echelle(this, 10);
-        var tailleCadenas = Dessin.Echelle(this, 16);
-        var ecartCadenas = Dessin.Echelle(this, 8);
-        var largeur = mesure.Width + (_icone is null ? 0 : tailleIcone + ecart) + (_verrouille ? tailleCadenas + ecartCadenas : 0);
+        var largeur = mesure.Width + (_icone is null ? 0 : tailleIcone + ecart);
         var x = _style == StyleBouton.Lien ? Padding.Left : Math.Max(Padding.Left / 2f, (Width - largeur) / 2);
         var yIcone = (Height - tailleIcone) / 2;
         if (_icone is not null && !_iconeApres)
@@ -283,20 +287,12 @@ public class BoutonArrondi : Button, IVerrouillable
             x += tailleIcone + ecart;
         }
 
-        var reserve = _verrouille ? (int)(tailleCadenas + ecartCadenas) : 0;
-        var zoneTexte = Rectangle.FromLTRB((int)x, 0, Width - (int)(Padding.Right / 2f) - reserve, Height);
+        var zoneTexte = Rectangle.FromLTRB((int)x, 0, Width - (int)(Padding.Right / 2f), Height);
         TextRenderer.DrawText(g, Text, Font, zoneTexte, texte, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
         var fin = Math.Min(x + mesure.Width, zoneTexte.Right);
         if (_icone is not null && _iconeApres)
         {
             Icones.Dessiner(g, _icone, new RectangleF(fin + ecart, yIcone, tailleIcone, tailleIcone), texte, 2.2f);
-            fin += ecart + tailleIcone;
-        }
-
-        // Action protégée en mode consultation : cadenas après le texte, de la couleur du texte.
-        if (_verrouille)
-        {
-            Icones.Dessiner(g, Icones.Cadenas, new RectangleF(fin + ecartCadenas, (Height - tailleCadenas) / 2, tailleCadenas, tailleCadenas), texte, 2.2f);
         }
     }
 
@@ -367,6 +363,7 @@ public class BoutonArrondi : Button, IVerrouillable
         {
             StyleBouton.Principal => (Etat(Theme.Accent), null, Theme.TexteSurAccent, null),
             StyleBouton.Depart => (Etat(Theme.DepartClair), Etat(Theme.Depart), Theme.TexteSurDepart, null),
+            StyleBouton.Verrou => (Etat(Theme.Avertissement), null, Theme.TexteSurAvertissement, null),
             StyleBouton.Retour => (Etat(Theme.Sur(Theme.Retour, Color.White, 0.2f)), Etat(Theme.Retour), Theme.TexteSurRetour, null),
             StyleBouton.Secondaire => (_survol ? Theme.SurfaceActive : Theme.Sur(parent, Theme.Fond, 0.45f), null, Theme.Texte, Theme.BordureForte),
             StyleBouton.Verre => (Theme.Sur(Theme.BandeauMilieu, Theme.Fond, _survol ? 0.15f : 0.35f), null, Theme.Texte, Theme.Sur(Theme.BandeauMilieu, Theme.Lumiere, 0.25f)),

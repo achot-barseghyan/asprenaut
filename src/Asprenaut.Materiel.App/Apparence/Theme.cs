@@ -36,6 +36,7 @@ public sealed class Palette
     public required Color RetourClair { get; init; }
     public required Color TexteSurRetour { get; init; }
     public required Color Avertissement { get; init; }
+    public required Color TexteSurAvertissement { get; init; }
     public required Color Erreur { get; init; }
     public required Color Materiel { get; init; }
 
@@ -129,6 +130,9 @@ public static class Theme
 
     // --- Avertissement (révision), erreur, matériel (historique) ---
     public static Color Avertissement => _p.Avertissement;
+
+    /// <summary>Texte et cadenas posés sur un aplat <see cref="Avertissement"/> (pastille « verrouillé », bouton « Déverrouiller »).</summary>
+    public static Color TexteSurAvertissement => _p.TexteSurAvertissement;
     public static Color Erreur => _p.Erreur;
     public static Color Materiel => _p.Materiel;
 
@@ -159,6 +163,9 @@ public static class Theme
 
     /// <summary>Tuile blanche du logo du club (bandeau d'accueil) : fond d'origine de l'image.</summary>
     public static readonly Color FondLogoClub = Hex("#FFFFFF");
+
+    /// <summary>Papier d'une page de manuel (PDF rendu sur fond blanc) : le même dans les deux thèmes.</summary>
+    public static readonly Color PapierPdf = Hex("#FFFFFF");
     public static readonly Color HaloLogoClub = Color.FromArgb(36, 0xD9, 0xFB, 0xFF);
 
     // --- Pastilles des moniteurs (dégradés de la maquette, du clair au foncé), initiales foncées dans les deux thèmes ---
@@ -204,6 +211,7 @@ public static class Theme
             RetourClair = Hex("#9FD9C2"),
             TexteSurRetour = Hex("#062A1C"),
             Avertissement = avertissement,
+            TexteSurAvertissement = Hex("#2A1F04"),
             Erreur = erreur,
             Materiel = Hex("#B7C8FF"),
             Bordure = Melanger(surface, accentClair, 0.14f),
@@ -253,6 +261,7 @@ public static class Theme
             RetourClair = Hex("#05593F"),
             TexteSurRetour = Color.White,
             Avertissement = avertissement,
+            TexteSurAvertissement = Color.White,
             Erreur = erreur,
             Materiel = Hex("#4338CA"),
             Bordure = Hex("#D5E1EA"),

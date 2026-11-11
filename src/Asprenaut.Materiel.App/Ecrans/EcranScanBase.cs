@@ -13,14 +13,17 @@ namespace Asprenaut.Materiel.App.Ecrans;
 public abstract class EcranScanBase : EcranBase
 {
     private readonly SemaphoreSlim _unParUn = new(1, 1);
+    private readonly ServiceManuels _manuels;
+    private IReadOnlyDictionary<long, long> _manuelsParEquipement = new Dictionary<long, long>();
     private readonly FilAriane _fil;
     private readonly PastilleDate _date = new();
     private readonly Label _titreSortie = Ui.Libelle("", Theme.PoliceGrasse(21f));
     private readonly Label _infosSortie = Ui.Libelle("", Theme.Police(10.5f), Theme.TexteSecondaireClair);
 
-    protected EcranScanBase(INavigation navigation, ServiceReglages reglages, ModeScan mode)
+    protected EcranScanBase(INavigation navigation, ServiceReglages reglages, ServiceManuels manuels, ModeScan mode)
     {
         Navigation = navigation;
+        _manuels = manuels;
         _fil = new FilAriane("Sorties", () => Navigation.AllerA<EcranSorties>());
         Etapes = new IndicateurEtapes { EtapeActive = mode == ModeScan.Depart ? 1 : 2 };
         ZoneScan = new ScanInput { Mode = mode };
@@ -31,6 +34,21 @@ public abstract class EcranScanBase : EcranBase
     public override EntreeMenu Menu => EntreeMenu.Sorties;
 
     protected INavigation Navigation { get; }
+
+    /// <summary>Relit le manuel de chaque équipement (bouton « Manuel » des lignes) ; à appeler avec le rechargement des lignes.</summary>
+    protected async Task ChargerManuelsAsync() => _manuelsParEquipement = await _manuels.ManuelsDesEquipementsAsync();
+
+    /// <summary>Id du manuel de cet équipement (même catégorie, même marque), ou null.</summary>
+    protected long? ManuelDe(long equipementId) => _manuelsParEquipement.TryGetValue(equipementId, out var id) ? id : null;
+
+    /// <summary>Ouvre l'écran Manuels sur le manuel de la ligne.</summary>
+    protected void OuvrirManuel(ElementMateriel element)
+    {
+        if (element.ManuelId is { } id)
+        {
+            Navigation.AllerA<EcranManuels>(id);
+        }
+    }
 
     protected long SortieId { get; private set; }
 

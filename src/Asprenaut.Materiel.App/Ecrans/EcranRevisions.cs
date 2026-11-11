@@ -69,6 +69,7 @@ public sealed class EcranRevisions : EcranBase
             await RechargerAsync();
         });
         _panneau.FicheDemandee += (_, code) => _navigation.AllerA<EcranHistorique>(code);
+        _panneau.Valider.AfficherPastille = false;
         _garde.Lier(_panneau.Valider, ActionProtegee.Revisions);
 
         _colonnes =
@@ -104,8 +105,12 @@ public sealed class EcranRevisions : EcranBase
         defilement.ClientSizeChanged += (_, _) => Ajuster();
         _page.SizeChanged += (_, _) => Ajuster();
 
+        var consultation = new BandeauConsultation(_garde, "Consultez librement. Planifier, envoyer en atelier ou enregistrer une intervention demande le code gestionnaire.");
+        _garde.Lier(consultation, ActionProtegee.Revisions);
+
         Controls.Add(Ui.Colonne(
             (Ui.Entete(Ui.Pile(Ui.Titre(Titre), Ui.SousTitre("Chaque équipement avance de gauche à droite, jusqu'à son retour en service.")), registre), SizeType.AutoSize, 0),
+            (consultation, SizeType.AutoSize, 0),
             (barre, SizeType.Absolute, Theme.HauteurChamp + 18),
             (defilement, SizeType.Percent, 100)));
         barre.Margin = new Padding(0, 0, 0, 18);
@@ -168,6 +173,7 @@ public sealed class EcranRevisions : EcranBase
         BoutonArrondi Action(string texte, StyleBouton style, Func<Task> action)
         {
             var bouton = carte.AjouterAction(texte, style);
+            bouton.AfficherPastille = false; // Le bandeau « Mode consultation » de la page suffit.
             _garde.Lier(bouton, ActionProtegee.Revisions);
             bouton.Click += (_, _) => Executer(action);
             return bouton;
@@ -301,7 +307,7 @@ public sealed class EcranRevisions : EcranBase
     {
         if (prochaine is null)
         {
-            var planifier = new BoutonArrondi("Planifier une séance TIV", StyleBouton.Secondaire, Icones.Calendrier) { AutoSize = false };
+            var planifier = new BoutonArrondi("Planifier une séance TIV", StyleBouton.Secondaire, Icones.Calendrier) { AutoSize = false, AfficherPastille = false };
             _garde.Lier(planifier, ActionProtegee.Revisions);
             planifier.Click += (_, _) => Executer(PlanifierAsync);
             return planifier;
@@ -653,7 +659,7 @@ public sealed class EcranRevisions : EcranBase
                 var ecart = (int)E(6);
                 var interieur = largeur - (2 * p);
                 var part = (interieur - ((_actions.Count - 1) * ecart)) / _actions.Count;
-                var cote = _actions.All(b => TextRenderer.MeasureText(b.Text, b.Font).Width + (int)E(b.Verrouille ? 40 : 20) <= part);
+                var cote = _actions.All(b => TextRenderer.MeasureText(b.Text, b.Font).Width + (int)E(20) <= part);
                 for (var i = 0; i < _actions.Count; i++)
                 {
                     _actions[i].Bounds = cote

@@ -24,7 +24,7 @@ public sealed class Reglages
     /// <summary>Préfixe imprimé dans les QR codes, retiré à la lecture.</summary>
     public string PrefixeEtiquette { get; set; } = Saisie.CodeScanne.Prefixe;
 
-    // --- Règles de prêt ---
+    // --- Règles des sorties ---
 
     /// <summary>Une sortie en cours dont du matériel est encore dehors après ce nombre de jours est signalée.</summary>
     public int JoursAvantAlerteRetour { get; set; } = 1;
@@ -124,4 +124,12 @@ public sealed class Reglages
 
     /// <summary>Numéro d'affiliation FFESSM (ex. « 14 71-0025 »), repris dans l'identification marquée sur le matériel.</summary>
     public string NumeroClub { get; set; } = "";
+
+    // --- Manuels ---
+
+    /// <summary>
+    /// Notices fournies avec l'appli déjà installées (nom de leur fichier) : chacune une seule fois, un manuel retiré ne revient
+    /// pas, une notice ajoutée dans une nouvelle version de l'appli s'installe au lancement suivant.
+    /// </summary>
+    public List<string> ManuelsFournis { get; set; } = [];
 }

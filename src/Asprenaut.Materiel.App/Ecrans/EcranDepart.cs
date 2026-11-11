@@ -30,8 +30,8 @@ public sealed class EcranDepart : EcranScanBase
 
     private readonly GardeGestion _garde;
 
-    public EcranDepart(ServiceSortie sorties, ServiceScan scan, ServiceInventaire inventaire, ServiceMoniteurs moniteurs, IHorloge horloge, ServiceReglages reglages, INavigation navigation, GardeGestion garde, ServiceTypesSortie typesSortie)
-        : base(navigation, reglages, ModeScan.Depart)
+    public EcranDepart(ServiceSortie sorties, ServiceScan scan, ServiceInventaire inventaire, ServiceMoniteurs moniteurs, IHorloge horloge, ServiceReglages reglages, INavigation navigation, GardeGestion garde, ServiceTypesSortie typesSortie, ServiceManuels manuels)
+        : base(navigation, reglages, manuels, ModeScan.Depart)
     {
         _garde = garde;
         _garde.Lier(_supprimer, ActionProtegee.SupprimerSortie);
@@ -86,6 +86,7 @@ public sealed class EcranDepart : EcranScanBase
         _valider.Style = enPreparation ? StyleBouton.Depart : StyleBouton.Retour;
         _valider.Visible = _statut != StatutSortie.Cloturee;
 
+        await ChargerManuelsAsync();
         _lignes = lignes;
         _filtre.Afficher(lignes.Count, Categories(lignes, l => true));
         AfficherListe();
@@ -114,10 +115,12 @@ public sealed class EcranDepart : EcranScanBase
                     string.IsNullOrWhiteSpace(l.Taille) ? l.Libelle : $"{l.Libelle} · {l.Taille}",
                     l.Categorie,
                     Alerte: l.RevisionDepassee(aujourdHui) ? $"Révision dépassée ({Libelles.Date(l.EcheanceDepassee(aujourdHui)!.Value)})" : null,
-                    CouleurAlerte: Theme.Avertissement)),
+                    CouleurAlerte: Theme.Avertissement,
+                    ManuelId: ManuelDe(l.EquipementId))),
             enPreparation ? "Retirer" : null,
             Icones.Croix,
-            element => Executer(() => RetirerAsync(element)));
+            element => Executer(() => RetirerAsync(element)),
+            OuvrirManuel);
     }
 
     protected override async Task TraiterCodeAsync(string code)

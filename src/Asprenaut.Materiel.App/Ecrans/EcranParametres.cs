@@ -11,7 +11,7 @@ using Saisie = Asprenaut.Materiel.Core.Saisie;
 namespace Asprenaut.Materiel.App.Ecrans;
 
 /// <summary>
-/// Paramètres : pistolet, règles de prêt, données et sauvegardes, club, à propos.
+/// Paramètres : pistolet, règles des sorties, données et sauvegardes, club, à propos.
 /// Chaque changement est enregistré tout de suite (pas de bouton « Enregistrer »).
 /// </summary>
 public sealed class EcranParametres : EcranBase
@@ -87,8 +87,12 @@ public sealed class EcranParametres : EcranBase
         Natif.ScrollbarsDuTheme(cadre);
         cadre.Controls.Add(grille);
 
+        var consultation = new BandeauConsultation(_garde, "Consultez librement. Toute modification des paramètres demande le code gestionnaire.");
+        _garde.Lier(consultation, ActionProtegee.Parametres);
+
         Controls.Add(Ui.Colonne(
-            (Ui.Entete(Ui.Pile(Ui.Titre(Titre), Ui.SousTitre("Pistolet, règles de prêt et sauvegardes."))), SizeType.AutoSize, 0),
+            (Ui.Entete(Ui.Pile(Ui.Titre(Titre), Ui.SousTitre("Pistolet, règles des sorties et sauvegardes."))), SizeType.AutoSize, 0),
+            (consultation, SizeType.AutoSize, 0),
             (cadre, SizeType.Percent, 100)));
     }
 
@@ -392,7 +396,7 @@ public sealed class EcranParametres : EcranBase
     private CarteSection CarteRegles()
     {
         var r = _reglages.Actuels;
-        var carte = new CarteSection("Règles de prêt", Icones.Bouclier, Theme.DepartClair);
+        var carte = new CarteSection("Règles des sorties", Icones.Bouclier, Theme.DepartClair);
 
         var jours = new SelecteurNombre("Jours avant alerte", n => $"{n} j") { Nombre = r.JoursAvantAlerteRetour };
         jours.Demande += (_, n) =>
@@ -649,7 +653,7 @@ public sealed class EcranParametres : EcranBase
         _dossier.Champ.Font = Theme.PoliceCode(10f);
         _dossier.Champ.AccessibleName = "Dossier des sauvegardes";
         _dossier.Margin = Padding.Empty;
-        var parcourir = new BoutonArrondi("Parcourir", StyleBouton.Secondaire) { Margin = new Padding(8, 0, 0, 0) };
+        var parcourir = new BoutonArrondi("Parcourir", StyleBouton.Secondaire) { Margin = new Padding(8, 0, 0, 0), AfficherPastille = false };
         _garde.Lier(parcourir, ActionProtegee.Parametres);
         parcourir.Click += (_, _) => ChoisirDossier();
         var ligneDossier = Ui.Colonnes((_dossier, SizeType.Percent, 100), (parcourir, SizeType.AutoSize, 0));
@@ -662,7 +666,7 @@ public sealed class EcranParametres : EcranBase
 
         var sauvegarder = new BoutonArrondi("Sauvegarder", StyleBouton.Retour) { AutoSize = false, Margin = new Padding(0, 0, 6, 0) };
         sauvegarder.Click += (_, _) => Executer(SauvegarderAsync);
-        var restaurer = new BoutonArrondi("Restaurer…", StyleBouton.Secondaire) { AutoSize = false, Margin = new Padding(4, 0, 4, 0) };
+        var restaurer = new BoutonArrondi("Restaurer…", StyleBouton.Secondaire) { AutoSize = false, Margin = new Padding(4, 0, 4, 0), AfficherPastille = false };
         _garde.Lier(restaurer, ActionProtegee.RestaurerSauvegarde);
         restaurer.Click += (_, _) => Executer(RestaurerAsync);
         var exporter = new BoutonArrondi("Exporter CSV", StyleBouton.Secondaire) { AutoSize = false, Margin = new Padding(6, 0, 0, 0) };

@@ -26,6 +26,8 @@ Le SDK est épinglé par `global.json` (10.0.x) : un SDK 11 préversion est auss
 .NET 10 · WinForms · SQLite via Microsoft.Data.Sqlite + Dapper (pas d'EF) · Microsoft.Extensions.DependencyInjection · xUnit.
 QRCoder est prévu pour les étiquettes, à ajouter seulement à cette étape.
 Versions NuGet centralisées dans `Directory.Packages.props`. `Directory.Build.props` : Nullable, ImplicitUsings, **TreatWarningsAsErrors**.
+L'App cible `net10.0-windows10.0.19041.0` (Windows 10 1809 minimum) : c'est ce qui donne `Windows.Data.Pdf` (pages des manuels
+rendues en images par Windows, `Infrastructure/LecteurPdf`), sans aucun paquet.
 
 ## Architecture
 
@@ -41,7 +43,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   `ServiceInventaire`, `ServiceMoniteurs` (moniteurs et classes : cartes, fiche, ajout/modification, saison au 1er septembre), `ServiceRevisions`
   (échéancier, contrôles, atelier, séances TIV), `ServiceReglages`, `ServiceHistorique` (journal lisible, période, regroupement,
   export CSV, vie d'un équipement), `ServiceGestion` (mode consultation / mode gestion, code gestionnaire),
-  `ServiceBilan` (bilan de saison pour l'AG). Toutes les règles métier sont ici.
+  `ServiceBilan` (bilan de saison pour l'AG), `ServiceManuels` (notices des fabricants). Toutes les règles métier sont ici.
 - **Core/Resultats** : `ResultatScan` (Niveau Succes/Avertissement/Erreur, Message, Equipement, `ActionProposee`, Code, AutreSortieId),
   `ResultatOperation`, `ApercuCloture`. Les cas métier ne lèvent pas d'exception : ils retournent un résultat.
 - **Core/Saisie** : `CodeScanne.Nettoyer` (espaces, préfixe `ASP:`, majuscules) et `AntiRebond` — logique pure, testée.
@@ -54,7 +56,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   `INavigation.AllerA<TEcran>(parametre)` crée l'écran via `ActivatorUtilities` (non retenu par le conteneur), le met à l'échelle
   de l'écran et dispose le précédent. Écrans dans `Ecrans/` (héritent d'`EcranBase` ; Départ/Retour héritent d'`EcranScanBase`
   qui sérialise les scans et fournit fil d'Ariane + carte d'en-tête via `Composer(corps)`).
-- **Maquette** : https://claude.ai/artifact/8op5sAWFbf4mRQCxzd37aa (Sorties, Nouvelle sortie, Départ, Retour, Inventaire,
+- **Maquette** : https://claude.ai/artifact/8op5sAWFbf4mRQCxzd37aa (Sorties, Nouvelle sortie, Départ, Retour, Inventaire, Manuels,
   Moniteurs, Historique, Bilan de saison, Révisions, Paramètres, Déverrouillage). Polices Sora/Manrope remplacées par Segoe UI Variable ; pas de fond dégradé ni de bulles animées.
 - **Briques d'interface** (`Controles/`) : `Carte`, `ControleDessine` (base des contrôles peints), `AnneauProgression`,
   `IndicateurEtapes`, `PastilleDate`, `Pastille`, `Picto`, `GrilleAdaptative` (colonnes auto, ajuste sa ligne de TableLayoutPanel),
@@ -140,8 +142,11 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     pour les tests qui n'en ont pas besoin). App : `GardeGestion.Exiger(...)` avant chaque action protégée (pavé
     `DialogueDeverrouillage`, chiffres lus d'après le caractère tapé : AZERTY), `CarteModeGestion` dans le menu, `FiltreActivite`.
     Visuel « verrouillé » : `GardeGestion.Lier(controle, action)` met `Verrouille` à jour à chaque changement de mode —
-    cadenas après le texte d'un `BoutonArrondi` ou la valeur d'un `SelecteurNombre` (compteur de Nouvelle sortie et de Modifier la
-    sortie : le clic demande le code), badge « Code requis » d'une `CarteSection`. Tout nouveau bouton d'action protégée doit être lié.
+    `PastilleVerrou` (rond jaune au cadenas foncé accroché au coin haut droit, débord de 9 px peint par les parents opaques,
+    info-bulle « Code gestionnaire requis ») sur un `BoutonArrondi` ou un `SelecteurNombre` (qui prend aussi une bordure dorée ;
+    compteur de Nouvelle sortie et de Modifier la sortie : le clic demande le code), badge « Code requis » d'une `CarteSection`,
+    `BandeauConsultation` (bandeau doré + bouton « Déverrouiller ») sous le titre des pages presque entièrement protégées
+    (Révisions, Paramètres) : leurs boutons ont `AfficherPastille = false`. Tout nouveau bouton d'action protégée doit être lié.
     Code oublié : supprimer la ligne `CodeGestionnaire` de `parametres.json` (application fermée).
 17. Bilan de saison (`ServiceBilan`, consultation libre) : saison précédente ou en cours (1er septembre → 31 août), seules les
     sorties parties comptent (en cours ou clôturées, datées dans la saison). Mois de septembre à juin, juillet/août seulement s'il
@@ -200,6 +205,19 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     pas à la modification. Journal `ClasseCreee` / `ClasseModifiee`. Afficher `SortieResume.LibelleResponsable`
     (« Moniteur : … » / « Classe : … »). App : onglets `Bascule` dans `EcranMoniteurs`, `ChoixResponsable` (Moniteur | Classe
     puis la liste) dans Nouvelle sortie et Modifier la sortie. Données de démo : chargées si aucun moniteur (genre Moniteur).
+25. Manuels (`ServiceManuels`, migration 009, écran `EcranManuels`, maquette « Manuels ») : consultation libre ; ajouter, modifier,
+    retirer = action protégée Matériel. Le PDF est copié dans `Manuels\` à côté de la base (`IStockageManuels`, nom déjà pris →
+    « (2) ») ; l'écran lit son nombre de pages (`LecteurPdf.CompterPagesAsync`). Marque et titre obligatoires ; sommaire tapé une
+    section par ligne, page à la fin (« 8.2 Entretien ; 17 », `SectionManuel.Lire`), pages ≤ celles du PDF ; délais du fabricant
+    une ligne « Libellé : délai » ; révision du fabricant 1 à 120 mois ; page de l'entretien dans le PDF. Équipements liés : même
+    catégorie et même marque (majuscules, espaces, tirets et points ignorés : « Aqualung » = « Aqua Lung »), hors réformés. `Conformite` compare la révision du fabricant à
+    `ServiceRevisions.MoisRevision` de la catégorie (pas pour les blocs) ; « Régler le club » (`AlignerRevision`, action Paramètres)
+    écrit le délai du fabricant dans `MoisEntreRevisionsParCategorie`. Le PDF est lu en mémoire (fichier jamais verrouillé) ;
+    impression par `PrintDocument` (pages rendues à 200 dpi). Départ et Retour : bouton « Manuel » sur les lignes dont l'équipement
+    a un manuel (`ManuelsDesEquipementsAsync`, `ElementMateriel.ManuelId`) → `AllerA<EcranManuels>(idManuel)`.
+    Notices fournies : 5 PDF dans `App/Ressources/Manuels` (ressources « Manuels.<fichier> »), avec sommaire et délais dans
+    `Infrastructure/ManuelsFournis` ; installées au démarrage par `InstallerFournisAsync`, chacune une seule fois (réglage
+    `ManuelsFournis` : noms des fichiers déjà installés ; une notice ajoutée dans une version suivante s'installe au lancement suivant), sans code, sans doublon (même marque et titre) : un manuel retiré ne revient pas.
 
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
@@ -223,12 +241,14 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   numero_serie, montage CHECK Etrier/Din, marque/modele/numero_deuxieme_etage, direct_system 0/1, manometre, octopus, numero_octopus) ;
   depuis 006 : type_sortie.utilisations et sortie.utilisations (1 à 10, sorties existantes reprises de leur type) ;
   depuis 007 : seance_equipement (blocs planifiés à une séance TIV, ON DELETE CASCADE), controle.nature et controle.intervenant ;
-  depuis 008 : moniteur.genre (CHECK Moniteur/Classe) et moniteur.abrege, classes Niveau 1 à 4.
+  depuis 008 : moniteur.genre (CHECK Moniteur/Classe) et moniteur.abrege, classes Niveau 1 à 4 ;
+  depuis 009 : manuel (fichier, nb_pages, sommaire et entretien en texte, une ligne par entrée ; PDF dans `Manuels\` à côté
+  de la base, non copiés par les sauvegardes de la base).
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/009_xxx.sql`, sans jamais modifier un script déjà livré
+- Nouvelle migration : ajouter `Migrations/010_xxx.sql`, sans jamais modifier un script déjà livré
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.

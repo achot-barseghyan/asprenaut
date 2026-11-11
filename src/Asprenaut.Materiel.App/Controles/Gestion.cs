@@ -74,6 +74,323 @@ public interface IVerrouillable
     bool Verrouille { get; set; }
 }
 
+/// <summary>
+/// Pastille « verrouillé » de la maquette : rond jaune de 24 px avec un cadenas foncé, accroché au coin haut droit
+/// d'un contrôle et débordant de 9 px, détaché du fond par un liseré de 3 px ; info-bulle « Code gestionnaire requis ».
+/// Un contrôle ne peint pas hors de ses bords : la partie qui déborde est peinte par chacun de ses parents opaques
+/// (événement Paint ; chacun recouvre ce que peint le suivant, les parents transparents la recopient avec leur fond),
+/// la partie intérieure par le contrôle lui-même (<see cref="PeindreInterieur"/>, à la fin de son OnPaint), avec la
+/// même géométrie. Rien ne change de taille : la mise en page ne bouge pas au verrouillage.
+/// </summary>
+public sealed class PastilleVerrou : IDisposable
+{
+    public const string TexteBulle = "Code gestionnaire requis";
+    private const float Diametre = 24, Debord = 9, Lisere = 3, Halo = 8;
+    private readonly Control _controle;
+    private readonly ToolTip _bulle = new() { InitialDelay = 300 };
+    private readonly List<Control> _hotes = [];
+    private readonly Dictionary<Control, Rectangle> _zones = [];
+    private bool _visible;
+
+    public PastilleVerrou(Control controle)
+    {
+        _controle = controle;
+        controle.ParentChanged += (_, _) => Rafraichir();
+        controle.LocationChanged += (_, _) => Rafraichir();
+        controle.SizeChanged += (_, _) => Rafraichir();
+        controle.VisibleChanged += (_, _) => Rafraichir();
+        controle.Disposed += (_, _) => Dispose();
+    }
+
+    public bool Visible
+    {
+        get => _visible;
+        set
+        {
+            if (_visible == value)
+            {
+                return;
+            }
+
+            _visible = value;
+            Bulle(_controle, value ? TexteBulle : null);
+            Rafraichir();
+            _controle.Invalidate(true);
+        }
+    }
+
+    /// <summary>Partie de la pastille posée sur le contrôle ; à appeler à la fin de son OnPaint.</summary>
+    public void PeindreInterieur(Graphics g)
+    {
+        if (!_visible)
+        {
+            return;
+        }
+
+        // Les parents peuvent avoir changé depuis (rangée ajoutée à la page après le bouton).
+        if (!Hotes().SequenceEqual(_hotes))
+        {
+            Rafraichir();
+        }
+
+        Dessiner(g, _controle, new RectangleF(0, 0, _controle.Width, _controle.Height));
+    }
+
+    public void Dispose()
+    {
+        Accrocher([]);
+        _bulle.Dispose();
+    }
+
+    /// <summary>Info-bulle sur le contrôle et ses enfants (ils reçoivent la souris à sa place).</summary>
+    private void Bulle(Control c, string? texte)
+    {
+        _bulle.SetToolTip(c, texte);
+        foreach (Control enfant in c.Controls)
+        {
+            Bulle(enfant, texte);
+        }
+    }
+
+    /// <summary>Parents qui peignent leur fond (même règle que Dessin.EffacerAvecParent), du plus proche à la fenêtre.</summary>
+    private List<Control> Hotes()
+    {
+        var hotes = new List<Control>();
+        for (var p = _controle.Parent; p is not null; p = p.Parent)
+        {
+            if (p is IFondDessine || p.BackColor.A == 255)
+            {
+                hotes.Add(p);
+            }
+        }
+
+        return hotes;
+    }
+
+    private void Accrocher(List<Control> hotes)
+    {
+        if (hotes.SequenceEqual(_hotes))
+        {
+            return;
+        }
+
+        foreach (var ancien in _hotes)
+        {
+            ancien.Paint -= PeindreSurHote;
+            if (_zones.Remove(ancien, out var zone) && !ancien.IsDisposed)
+            {
+                ancien.Invalidate(zone, true);
+            }
+        }
+
+        _hotes.Clear();
+        _hotes.AddRange(hotes);
+        foreach (var hote in hotes)
+        {
+            hote.Paint += PeindreSurHote;
+        }
+    }
+
+    /// <summary>Repeint l'ancienne et la nouvelle place de la pastille chez chaque parent opaque.</summary>
+    private void Rafraichir()
+    {
+        if (_controle.IsDisposed)
+        {
+            return;
+        }
+
+        Accrocher(_visible ? Hotes() : []);
+        foreach (var hote in _hotes)
+        {
+            if (_zones.TryGetValue(hote, out var ancienne))
+            {
+                hote.Invalidate(ancienne, true);
+            }
+
+            var zone = Zone(hote);
+            _zones[hote] = zone;
+            hote.Invalidate(zone, true);
+        }
+    }
+
+    /// <summary>Bornes du contrôle dans le repère d'un parent (null s'il n'en descend plus).</summary>
+    private Rectangle? BornesSur(Control hote)
+    {
+        var position = Point.Empty;
+        for (var c = _controle; c != hote; c = c.Parent)
+        {
+            position.Offset(c.Location);
+            if (c.Parent is null)
+            {
+                return null;
+            }
+        }
+
+        return new Rectangle(position, _controle.Size);
+    }
+
+    private Rectangle Zone(Control hote)
+    {
+        if (BornesSur(hote) is not { } b)
+        {
+            return Rectangle.Empty;
+        }
+
+        var e = Dessin.Echelle(_controle, 1);
+        var (cx, cy) = Centre(b, e);
+        var rayon = (int)Math.Ceiling(((Diametre / 2) + Lisere + Halo) * e) + 2;
+        return Rectangle.FromLTRB((int)cx - rayon, (int)cy - rayon, (int)cx + rayon, (int)cy + rayon + (int)(4 * e));
+    }
+
+    private static (float X, float Y) Centre(RectangleF bornes, float e) =>
+        (bornes.Right + ((Debord - (Diametre / 2)) * e), bornes.Top - ((Debord - (Diametre / 2)) * e));
+
+    private void PeindreSurHote(object? sender, PaintEventArgs e)
+    {
+        if (_visible && sender is Control hote && _controle.Visible && !_controle.IsDisposed && BornesSur(hote) is { } b)
+        {
+            Dessiner(e.Graphics, _controle, b);
+        }
+    }
+
+    /// <summary>Halo doré, liseré de la couleur du fond, rond jaune et cadenas foncé, centrés sur le coin haut droit.</summary>
+    private static void Dessiner(Graphics g, Control controle, RectangleF bornes)
+    {
+        var e = Dessin.Echelle(controle, 1);
+        var (cx, cy) = Centre(bornes, e);
+        var r = Diametre / 2 * e;
+        RectangleF Rond(float rayon, float decalageY = 0) => new(cx - rayon, cy - rayon + decalageY, 2 * rayon, 2 * rayon);
+        var qualite = g.SmoothingMode;
+        Dessin.Qualite(g);
+
+        for (var i = 3; i >= 1; i--)
+        {
+            using var halo = new SolidBrush(Theme.Alpha(Theme.Avertissement, 0.10f));
+            g.FillEllipse(halo, Rond(r + (Lisere * e) + (i * Halo / 3 * e), 4 * e));
+        }
+
+        using (var lisere = new SolidBrush(Dessin.CouleurParent(controle)))
+        {
+            g.FillEllipse(lisere, Rond(r + (Lisere * e)));
+        }
+
+        using (var fond = new SolidBrush(Theme.Avertissement))
+        {
+            g.FillEllipse(fond, Rond(r));
+        }
+
+        var t = 13 * e;
+        Icones.Dessiner(g, Icones.Cadenas, new RectangleF(cx - (t / 2), cy - (t / 2), t, t), Theme.TexteSurAvertissement, 2.6f);
+        g.SmoothingMode = qualite;
+    }
+}
+
+/// <summary>
+/// Bandeau doré « Mode consultation » sous le titre d'une page où presque tout est protégé (Révisions, Paramètres) :
+/// grand cadenas, texte de la page et bouton jaune « Déverrouiller ». Visible tant que l'action est protégée
+/// (<see cref="GardeGestion.Lier{T}"/>) ; masqué sans code gestionnaire ou en mode gestion.
+/// </summary>
+public sealed class BandeauConsultation : TableLayoutPanel, IVerrouillable, IFondDessine
+{
+    private readonly Label _texte;
+    private readonly BoutonArrondi _bouton;
+    private readonly PastilleRonde _cadenas = new() { Margin = new Padding(0, 0, 14, 0), Anchor = AnchorStyles.Left };
+
+    public BandeauConsultation(GardeGestion garde, string texte)
+    {
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        ColumnCount = 3;
+        RowCount = 1;
+        AutoSize = true;
+        AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        Dock = DockStyle.Fill;
+        BackColor = Color.Transparent;
+        Padding = new Padding(18, 14, 18, 14);
+        Margin = new Padding(0, 0, 0, 18);
+        ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        AccessibleRole = AccessibleRole.Alert;
+        AccessibleName = $"Mode consultation. {texte}";
+
+        var titre = Ui.Libelle("Mode consultation", Theme.PoliceGrasse(11.25f), Theme.Avertissement);
+        titre.Margin = new Padding(0, 0, 0, 2);
+        _texte = Ui.Libelle(texte, Theme.Police(9.75f), Theme.Texte);
+        _texte.Margin = Padding.Empty;
+        var textes = Ui.Pile(titre, _texte);
+        textes.Anchor = AnchorStyles.Left;
+        textes.Margin = new Padding(0, 0, 14, 0);
+        _bouton = new BoutonArrondi("Déverrouiller", StyleBouton.Verrou, Icones.CadenasOuvert) { Margin = Padding.Empty, Anchor = AnchorStyles.Right };
+        _bouton.Height = 46;
+        _bouton.Click += (_, _) => garde.Deverrouiller(FindForm());
+        Controls.Add(_cadenas, 0, 0);
+        Controls.Add(textes, 1, 0);
+        Controls.Add(_bouton, 2, 0);
+        Visible = false;
+    }
+
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public bool Verrouille
+    {
+        get => Visible;
+        set => Visible = value;
+    }
+
+    /// <summary>Le texte revient à la ligne dans la place laissée par le cadenas et le bouton.</summary>
+    protected override void OnLayout(LayoutEventArgs levent)
+    {
+        if (_texte is not null && Width > 0)
+        {
+            var place = Width - Padding.Horizontal - _cadenas.Width - _cadenas.Margin.Horizontal - _bouton.Width - (int)Dessin.Echelle(this, 14);
+            var maximum = new Size(Math.Max((int)Dessin.Echelle(this, 160), place), 0);
+            if (_texte.MaximumSize != maximum)
+            {
+                _texte.MaximumSize = maximum;
+            }
+        }
+
+        base.OnLayout(levent);
+    }
+
+    protected override void OnPaintBackground(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        Dessin.EffacerAvecParent(this, g);
+        Dessin.Qualite(g);
+        var parent = Dessin.CouleurParent(this);
+        var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
+        using var forme = Dessin.Arrondi(r, Dessin.Echelle(this, 18));
+        using var degrade = new LinearGradientBrush(new PointF(0, 0), new PointF(Math.Max(1, Width), 0),
+            Theme.Sur(parent, Theme.Avertissement, 0.16f), Theme.Sur(parent, Theme.Avertissement, 0.04f));
+        using var bord = new Pen(Theme.Sur(parent, Theme.Avertissement, 0.45f), Dessin.Echelle(this, 1));
+        g.FillPath(degrade, forme);
+        g.DrawPath(bord, forme);
+    }
+
+    /// <summary>Rond jaune de 42 px avec un cadenas foncé.</summary>
+    private sealed class PastilleRonde : ControleDessine
+    {
+        public PastilleRonde()
+        {
+            Size = new Size(42, 42);
+            AccessibleRole = AccessibleRole.Graphic;
+            AccessibleName = "Cadenas";
+        }
+
+        protected override void Peindre(Graphics g)
+        {
+            using (var fond = new SolidBrush(Theme.Avertissement))
+            {
+                g.FillEllipse(fond, new RectangleF(0, 0, Width - 1, Height - 1));
+            }
+
+            var t = E(20);
+            Icones.Dessiner(g, Icones.Cadenas, new RectangleF((Width - t) / 2, (Height - t) / 2, t, t), Theme.TexteSurAvertissement, 2.4f);
+        }
+    }
+}
+
 /// <summary>Badge « Code requis » (cadenas + texte) posé à côté du titre d'une carte de réglages.</summary>
 public sealed class PastilleCodeRequis : ControleDessine
 {

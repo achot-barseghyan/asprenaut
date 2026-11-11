@@ -8,6 +8,7 @@ public enum EntreeMenu
 {
     Sorties,
     Inventaire,
+    Manuels,
     Moniteurs,
     Historique,
     Bilan,

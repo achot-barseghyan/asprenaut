@@ -28,8 +28,8 @@ public sealed class EcranRetour : EcranScanBase
 
     private readonly GardeGestion _garde;
 
-    public EcranRetour(ServiceSortie sorties, ServiceScan scan, ServiceReglages reglages, INavigation navigation, GardeGestion garde)
-        : base(navigation, reglages, ModeScan.Retour)
+    public EcranRetour(ServiceSortie sorties, ServiceScan scan, ServiceReglages reglages, INavigation navigation, GardeGestion garde, ServiceManuels manuels)
+        : base(navigation, reglages, manuels, ModeScan.Retour)
     {
         _garde = garde;
         _actualiserCloture = _garde.Lier(_cloturer, ActionProtegee.CloturerAvecManquants, () => _nbDehors > 0);
@@ -130,6 +130,7 @@ public sealed class EcranRetour : EcranScanBase
                 : $"{Libelles.Pluriel(resume.NbDehors, "équipement")} {(resume.NbDehors > 1 ? "seront notés manquants" : "sera noté manquant")} si vous clôturez maintenant.";
 
         // Puces « Type » : toutes les catégories de la sortie, comptées sur le matériel encore à rendre.
+        await ChargerManuelsAsync();
         _lignes = lignes;
         _filtre.Afficher(aRendre.Count, EcranDepart.Categories(lignes, l => l.Statut != StatutSortieEquipement.Rendu));
         AfficherListes();
@@ -160,13 +161,15 @@ public sealed class EcranRetour : EcranScanBase
             l.Libelle,
             l.Categorie,
             Alerte: l.Statut == StatutSortieEquipement.Manquant ? "Manquant" : null,
-            CouleurAlerte: Theme.Erreur)));
+            CouleurAlerte: Theme.Erreur,
+            ManuelId: ManuelDe(l.EquipementId))), ouvrirManuel: OuvrirManuel);
         _rendu.Afficher(rendus.Select(l => new ElementMateriel(
             l.EquipementId,
             l.Code,
             l.Libelle,
             l.Categorie,
-            l.ScanneRetourLe is { } r ? Heure(r) : null)));
+            l.ScanneRetourLe is { } r ? Heure(r) : null,
+            ManuelId: ManuelDe(l.EquipementId))), ouvrirManuel: OuvrirManuel);
     }
 
     protected override async Task TraiterCodeAsync(string code)
