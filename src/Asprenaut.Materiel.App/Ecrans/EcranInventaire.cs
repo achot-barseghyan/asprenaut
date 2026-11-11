@@ -129,6 +129,12 @@ public sealed class EcranInventaire : EcranBase
             return;
         }
 
+        // Catégorie supprimée depuis la fiche d'un équipement : revenir à « Tout ».
+        if (_categorie is { } filtre && categories.All(c => c.Id != filtre))
+        {
+            _categorie = null;
+        }
+
         _categories.SuspendLayout();
         foreach (var tuile in _tuiles)
         {
@@ -250,6 +256,8 @@ public sealed class EcranInventaire : EcranBase
 
         if (await FormulaireEquipement.ModifierAsync(FindForm(), _inventaire, equipement, ligne.DerniereRevision) && !IsDisposed)
         {
+            // La fiche permet d'ajouter ou de supprimer une catégorie : les tuiles sont relues, puis la liste filtrée.
+            await ChargerAsync(null);
             await RechargerAsync();
         }
     }

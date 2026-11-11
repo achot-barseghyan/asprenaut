@@ -1,5 +1,6 @@
 using Asprenaut.Materiel.App.Apparence;
 using Asprenaut.Materiel.App.Controles;
+using Asprenaut.Materiel.App.Infrastructure;
 using Asprenaut.Materiel.Core.Modeles;
 using Asprenaut.Materiel.Core.Resultats;
 using Asprenaut.Materiel.Core.Services;
@@ -83,6 +84,19 @@ public static class FormulaireEquipement
 
         public ListeDeroulante Categorie { get; } = new() { AccessibleName = "Catégorie" };
         public ChampSaisie Code { get; } = new() { TexteIndicatif = "BLOC-035" };
+
+        // Gestion des catégories, à côté de la liste : + ajouter, corbeille supprimer.
+        private ServiceInventaire? _inventaire;
+
+        private readonly BoutonArrondi _ajouterCategorie =
+            new("Ajouter une catégorie", StyleBouton.Icone, Icones.Plus) { Margin = new Padding(6, 0, 0, 0), Anchor = AnchorStyles.None };
+
+        private readonly BoutonArrondi _supprimerCategorie =
+            new("Supprimer la catégorie", StyleBouton.Icone, Icones.Corbeille)
+            {
+                Margin = new Padding(6, 0, 0, 0), Anchor = AnchorStyles.None, CouleurIcone = Theme.Erreur,
+            };
+
         public ChampSaisie Nom { get; } = new() { TexteIndicatif = "Ex. : Bloc 12 L acier" };
         public ListeDeroulante Etat { get; } = new() { AccessibleName = "État" };
         public ChampSaisie Marque { get; } = new() { TexteIndicatif = "Ex. : Aqualung" };
@@ -119,11 +133,34 @@ public static class FormulaireEquipement
 
         public static async Task<Champs> CreerAsync(ServiceInventaire inventaire, long? categorieId, bool proposerCode)
         {
-            var c = new Champs();
+            var c = new Champs { _inventaire = inventaire };
             foreach (var categorie in (await inventaire.ListerCategoriesAsync()).OrderBy(x => x.Id))
             {
                 c.Categorie.Items.Add(new Choix<long>(categorie.Id, categorie.Nom));
             }
+
+            c._ajouterCategorie.Click += async (_, _) =>
+            {
+                try
+                {
+                    await c.AjouterCategorieAsync();
+                }
+                catch (Exception ex)
+                {
+                    Erreurs.Signaler(c._ajouterCategorie.FindForm(), ex);
+                }
+            };
+            c._supprimerCategorie.Click += async (_, _) =>
+            {
+                try
+                {
+                    await c.SupprimerCategorieAsync();
+                }
+                catch (Exception ex)
+                {
+                    Erreurs.Signaler(c._supprimerCategorie.FindForm(), ex);
+                }
+            };
 
             foreach (var etat in Enum.GetValues<EtatEquipement>())
             {
@@ -166,6 +203,7 @@ public static class FormulaireEquipement
                 }
 
                 c.Adapter();
+                c.MajBoutonSupprimer();
                 if (proposerCode && (c.Code.Valeur.Trim().Length == 0 || c.Code.Valeur == dernierePropose))
                 {
                     dernierePropose = await inventaire.ProposerCodeAsync(choix.Valeur);
@@ -176,7 +214,87 @@ public static class FormulaireEquipement
             c.Categorie.SelectedIndexChanged += async (_, _) => await CategorieChangeeAsync();
             var initiale = categorieId is { } id ? c.Categorie.Items.OfType<Choix<long>>().FirstOrDefault(x => x.Valeur == id) : null;
             c.Categorie.SelectedItem = initiale ?? c.Categorie.Items.OfType<Choix<long>>().FirstOrDefault();
+            c.MajBoutonSupprimer();
             return c;
+        }
+
+        /// <summary>La corbeille ne supprime pas la dernière catégorie ; son info-bulle nomme la catégorie choisie.</summary>
+        private void MajBoutonSupprimer()
+        {
+            var choix = Categorie.SelectedItem as Choix<long>;
+            _supprimerCategorie.Enabled = Categorie.Items.Count > 1;
+            _supprimerCategorie.AccessibleName = choix is null ? "Supprimer la catégorie" : $"Supprimer la catégorie {choix.Texte}";
+        }
+
+        /// <summary>Ajoute une catégorie et la choisit (le code proposé suit).</summary>
+        private async Task AjouterCategorieAsync()
+        {
+            if (_inventaire is not { } inventaire)
+            {
+                return;
+            }
+
+            var nom = new ChampSaisie { TexteIndicatif = "Ex. : Combinaisons" };
+            nom.Champ.AccessibleName = "Nom de la catégorie";
+            nom.Champ.MaxLength = Asprenaut.Materiel.Core.Modeles.Categorie.LongueurMaxNom;
+
+            long? creee = null;
+            using var fenetre = new FenetreFormulaire("Ajouter une catégorie", "Ajouter", async () =>
+            {
+                var resultat = await inventaire.AjouterCategorieAsync(nom.Valeur);
+                if (resultat.Reussi)
+                {
+                    creee = resultat.Id;
+                }
+
+                return resultat;
+            });
+            fenetre.Champ("Nom de la catégorie", nom);
+            fenetre.Shown += (_, _) => nom.Champ.Focus();
+            if (fenetre.ShowDialog(_ajouterCategorie.FindForm()) == DialogResult.OK && creee is { } id)
+            {
+                await RafraichirCategoriesAsync(inventaire, id);
+            }
+        }
+
+        /// <summary>Supprime la catégorie choisie (refusé si du matériel ou un manuel l'utilise).</summary>
+        private async Task SupprimerCategorieAsync()
+        {
+            if (_inventaire is not { } inventaire || Categorie.SelectedItem is not Choix<long> choix)
+            {
+                return;
+            }
+
+            var proprietaire = _supprimerCategorie.FindForm();
+            if (!Dialogues.Confirmer(proprietaire, $"Supprimer la catégorie « {choix.Texte} » ?\n\nElle ne doit plus contenir de matériel ni de manuel."))
+            {
+                return;
+            }
+
+            var resultat = await inventaire.SupprimerCategorieAsync(choix.Valeur);
+            if (!resultat.Reussi)
+            {
+                Dialogues.Erreur(proprietaire, resultat.Message);
+                return;
+            }
+
+            await RafraichirCategoriesAsync(inventaire, null);
+        }
+
+        /// <summary>Relit les catégories (après un ajout ou une suppression) et choisit celle demandée.</summary>
+        private async Task RafraichirCategoriesAsync(ServiceInventaire inventaire, long? aSelectionner)
+        {
+            var categories = (await inventaire.ListerCategoriesAsync()).OrderBy(x => x.Id).ToList();
+            Categorie.Items.Clear();
+            foreach (var categorie in categories)
+            {
+                Categorie.Items.Add(new Choix<long>(categorie.Id, categorie.Nom));
+            }
+
+            var choix = Categorie.Items.OfType<Choix<long>>().FirstOrDefault(x => x.Valeur == aSelectionner)
+                ?? Categorie.Items.OfType<Choix<long>>().FirstOrDefault();
+            Categorie.SelectedItem = choix;
+            MajBoutonSupprimer();
         }
 
         /// <summary>
@@ -287,9 +405,33 @@ public static class FormulaireEquipement
             return e;
         }
 
+        /// <summary>Liste des catégories pleine largeur, avec les boutons + (ajouter) et corbeille (supprimer).</summary>
+        private Control RangeeCategorie()
+        {
+            var rangee = new TableLayoutPanel
+            {
+                ColumnCount = 3,
+                RowCount = 1,
+                Height = Theme.HauteurChamp,
+                Margin = Padding.Empty,
+                BackColor = Color.Transparent,
+            };
+            rangee.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            rangee.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 50));
+            rangee.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 50));
+            rangee.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            Categorie.Dock = DockStyle.Fill;
+            Categorie.Margin = Padding.Empty;
+            rangee.Controls.Add(Categorie, 0, 0);
+            rangee.Controls.Add(_ajouterCategorie, 1, 0);
+            rangee.Controls.Add(_supprimerCategorie, 2, 0);
+            return rangee;
+        }
+
         public void Placer(FenetreFormulaire fenetre, bool etat)
         {
-            fenetre.DeuxChamps("Catégorie", Categorie, "Code de l'étiquette", Code);
+            fenetre.Champ("Catégorie", RangeeCategorie());
+            fenetre.Champ("Code de l'étiquette", Code);
             if (etat)
             {
                 fenetre.DeuxChamps("Nom", Nom, "État", Etat);

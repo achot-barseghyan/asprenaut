@@ -233,6 +233,11 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     `Infrastructure/ManuelsFournis` ; installées au démarrage par `InstallerFournisAsync`, chacune une seule fois (réglage
     `ManuelsFournis` : noms des fichiers déjà installés ; une notice ajoutée dans une version suivante s'installe au lancement suivant), sans code, sans doublon (même marque et titre) : un manuel retiré ne revient pas.
 
+26. Catégories (`ServiceInventaire.AjouterCategorieAsync` / `SupprimerCategorieAsync`, action protégée Materiel) : depuis la fiche
+    d'un équipement (boutons + et corbeille à côté de la liste), nom obligatoire, unique sans tenir compte des majuscules, 30 caractères
+    au plus. Une catégorie utilisée par un équipement ou un manuel ne se supprime pas (la requête SQL re-vérifie) ; il en reste toujours
+    une. La liste est relue après chaque ajout / suppression (le code proposé suit la catégorie choisie).
+
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
 à côté de la base d'essai : les essais ne touchent jamais les réglages réels. Préfixe des étiquettes : `CodeScanne.Nettoyer(brut, prefixe)`.

@@ -14,6 +14,38 @@ public sealed class CategorieRepository(FabriqueConnexion fabrique) : ICategorie
             "SELECT id, nom FROM categorie ORDER BY id;", cancellationToken: ct));
         return lignes.AsList();
     }
+
+    public async Task<long> AjouterAsync(Categorie categorie, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        categorie.Id = await cx.ExecuteScalarAsync<long>(new CommandDefinition(
+            "INSERT INTO categorie (nom) VALUES (@Nom) RETURNING id;", new { categorie.Nom }, cancellationToken: ct));
+        return categorie.Id;
+    }
+
+    public async Task<int> CompterUtilisationsAsync(long id, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        return await cx.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            SELECT (SELECT COUNT(*) FROM equipement WHERE categorie_id = @id)
+                 + (SELECT COUNT(*) FROM manuel WHERE categorie_id = @id);
+            """, new { id }, cancellationToken: ct));
+    }
+
+    public async Task<bool> SupprimerAsync(long id, CancellationToken ct = default)
+    {
+        // La condition est dans la requête : un équipement ou un manuel créé entre la vérification du service et ici
+        // empêche la suppression (les clés étrangères le refuseraient de toute façon).
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        return await cx.ExecuteAsync(new CommandDefinition(
+            """
+            DELETE FROM categorie
+            WHERE id = @id
+              AND NOT EXISTS (SELECT 1 FROM equipement WHERE categorie_id = @id)
+              AND NOT EXISTS (SELECT 1 FROM manuel WHERE categorie_id = @id);
+            """, new { id }, cancellationToken: ct)) == 1;
+    }
 }
 
 public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipementRepository

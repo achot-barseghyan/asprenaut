@@ -312,6 +312,71 @@ public sealed class ServiceInventaire(
     public Task<IReadOnlyList<Categorie>> ListerCategoriesAsync(CancellationToken ct = default) =>
         categories.ListerAsync(ct);
 
+    /// <summary>
+    /// Ajoute une catégorie (depuis la fiche d'un équipement). Nom obligatoire, unique sans tenir compte des majuscules,
+    /// 30 caractères au plus. Action protégée (Matériel).
+    /// </summary>
+    public async Task<ResultatOperation> AjouterCategorieAsync(string nom, CancellationToken ct = default)
+    {
+        if (gestion?.Exiger(ActionProtegee.Materiel) is { Reussi: false } refus)
+        {
+            return refus;
+        }
+
+        var n = (nom ?? "").Trim();
+        if (n.Length == 0)
+        {
+            return ResultatOperation.Echec("Indiquez le nom de la catégorie.");
+        }
+
+        if (n.Length > Categorie.LongueurMaxNom)
+        {
+            return ResultatOperation.Echec($"Nom trop long ({Categorie.LongueurMaxNom} caractères au plus).");
+        }
+
+        var tous = await categories.ListerAsync(ct);
+        if (tous.Any(c => string.Equals(c.Nom.Trim(), n, StringComparison.CurrentCultureIgnoreCase)))
+        {
+            return ResultatOperation.Echec($"La catégorie « {n} » existe déjà.");
+        }
+
+        var id = await categories.AjouterAsync(new Categorie { Nom = n }, ct);
+        return ResultatOperation.Ok($"Catégorie « {n} » ajoutée.", id);
+    }
+
+    /// <summary>
+    /// Supprime une catégorie que plus aucun équipement ni manuel n'utilise (jamais le matériel existant : on le réaffecte
+    /// d'abord). Il en reste toujours au moins une. Action protégée (Matériel).
+    /// </summary>
+    public async Task<ResultatOperation> SupprimerCategorieAsync(long id, CancellationToken ct = default)
+    {
+        if (gestion?.Exiger(ActionProtegee.Materiel) is { Reussi: false } refus)
+        {
+            return refus;
+        }
+
+        var tous = await categories.ListerAsync(ct);
+        if (tous.FirstOrDefault(c => c.Id == id) is not { } categorie)
+        {
+            return ResultatOperation.Echec("Cette catégorie n'existe plus.");
+        }
+
+        if (tous.Count <= 1)
+        {
+            return ResultatOperation.Echec("Gardez au moins une catégorie pour créer du matériel.");
+        }
+
+        if (await categories.CompterUtilisationsAsync(id, ct) > 0)
+        {
+            return ResultatOperation.Echec($"« {categorie.Nom} » est utilisée par du matériel ou des manuels : elle ne peut pas être supprimée.");
+        }
+
+        // La requête re-vérifie : un équipement créé entre-temps avec cette catégorie empêche la suppression.
+        return await categories.SupprimerAsync(id, ct)
+            ? ResultatOperation.Ok($"Catégorie « {categorie.Nom} » supprimée.")
+            : ResultatOperation.Echec($"« {categorie.Nom} » vient d'être utilisée : elle ne peut pas être supprimée.");
+    }
+
     public Task<IReadOnlyList<LigneInventaire>> ListerAsync(string? recherche, long? categorieId, CancellationToken ct = default) =>
         equipements.ListerInventaireAsync(string.IsNullOrWhiteSpace(recherche) ? null : recherche.Trim(), categorieId, ct);
 

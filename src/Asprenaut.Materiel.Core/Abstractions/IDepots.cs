@@ -8,6 +8,14 @@ namespace Asprenaut.Materiel.Core.Abstractions;
 public interface ICategorieRepository
 {
     Task<IReadOnlyList<Categorie>> ListerAsync(CancellationToken ct = default);
+
+    Task<long> AjouterAsync(Categorie categorie, CancellationToken ct = default);
+
+    /// <summary>Nombre d'équipements et de manuels qui utilisent la catégorie (elle ne se supprime alors pas).</summary>
+    Task<int> CompterUtilisationsAsync(long id, CancellationToken ct = default);
+
+    /// <summary>Supprime la catégorie si aucun équipement ni manuel ne l'utilise ; faux sinon (rien n'est supprimé).</summary>
+    Task<bool> SupprimerAsync(long id, CancellationToken ct = default);
 }
 
 public interface IEquipementRepository

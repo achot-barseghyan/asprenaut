@@ -31,6 +31,19 @@ public sealed class CategorieRepositoryMemoire(BaseMemoire db) : ICategorieRepos
 {
     public Task<IReadOnlyList<Categorie>> ListerAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<Categorie>>(db.Categories.OrderBy(c => c.Nom).ToList());
+
+    public Task<long> AjouterAsync(Categorie categorie, CancellationToken ct = default)
+    {
+        categorie.Id = db.ProchainId();
+        db.Categories.Add(categorie);
+        return Task.FromResult(categorie.Id);
+    }
+
+    public Task<int> CompterUtilisationsAsync(long id, CancellationToken ct = default) =>
+        Task.FromResult(db.Equipements.Count(e => e.CategorieId == id));
+
+    public Task<bool> SupprimerAsync(long id, CancellationToken ct = default) =>
+        Task.FromResult(!db.Equipements.Any(e => e.CategorieId == id) && db.Categories.RemoveAll(c => c.Id == id) == 1);
 }
 
 public sealed class EquipementRepositoryMemoire(BaseMemoire db) : IEquipementRepository

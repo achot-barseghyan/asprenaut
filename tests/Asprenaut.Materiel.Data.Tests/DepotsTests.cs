@@ -168,6 +168,34 @@ public class DepotsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Categorie_ajoutee_puis_supprimee_si_inutilisee()
+    {
+        var categories = new CategorieRepository(_base.Fabrique);
+        var id = await categories.AjouterAsync(new Categorie { Nom = "Test catégorie" });
+
+        Assert.Contains(await categories.ListerAsync(), c => c.Id == id && c.Nom == "Test catégorie");
+        Assert.Equal(0, await categories.CompterUtilisationsAsync(id));
+        Assert.True(await categories.SupprimerAsync(id));
+        Assert.DoesNotContain(await categories.ListerAsync(), c => c.Id == id);
+    }
+
+    [Fact]
+    public async Task Categorie_utilisee_par_un_equipement_ne_se_supprime_pas()
+    {
+        var categories = new CategorieRepository(_base.Fabrique);
+        var blocs = (await categories.ListerAsync()).Single(c => c.Nom == "Blocs");
+        await new EquipementRepository(_base.Fabrique).AjouterAsync(new Equipement
+        {
+            Code = "BLOC-099", Libelle = "Bloc 12 L", CategorieId = blocs.Id,
+            CreeLe = new DateTime(2026, 11, 6, 18, 30, 0, DateTimeKind.Utc),
+        });
+
+        Assert.Equal(1, await categories.CompterUtilisationsAsync(blocs.Id));
+        Assert.False(await categories.SupprimerAsync(blocs.Id));
+        Assert.Contains(await categories.ListerAsync(), c => c.Id == blocs.Id);
+    }
+
+    [Fact]
     public async Task Donnees_demo_ne_sont_chargees_qu_une_fois()
     {
         Assert.True(await DonneesDemo.ChargerSiVideAsync(_base.Fabrique, new DateOnly(2026, 11, 6)));
