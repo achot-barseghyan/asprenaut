@@ -161,6 +161,20 @@ public class HistoriqueTests
     }
 
     [Fact]
+    public async Task La_fiche_de_suivi_se_lit_aussi_par_identifiant()
+    {
+        var bloc = _ctx.Equipement("BLOC-031");
+        _ctx.Equipement("BLOC-033");
+
+        var vie = await _ctx.Historique.ObtenirVieAsync(bloc.Id);
+
+        Assert.NotNull(vie);
+        Assert.Equal(bloc.Id, vie.Equipement.Id);
+        Assert.Equal("BLOC-031", vie.Equipement.Code);
+        Assert.Null(await _ctx.Historique.ObtenirVieAsync(999_999));
+    }
+
+    [Fact]
     public async Task La_vie_indique_ou_est_l_equipement()
     {
         _ctx.Equipement("BLOC-031");

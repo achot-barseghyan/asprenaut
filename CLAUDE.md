@@ -238,6 +238,11 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     au plus. Une catégorie utilisée par un équipement ou un manuel ne se supprime pas (la requête SQL re-vérifie) ; il en reste toujours
     une. La liste est relue après chaque ajout / suppression (le code proposé suit la catégorie choisie).
 
+27. Fiche de suivi (Inventaire) : clic sur le nom souligné, double-clic sur la ligne, Entrée ou bouton « Suivi » (à gauche de
+    « Modifier » dans la colonne d'actions) ouvrent `Ecrans/FicheSuivi` en lecture seule : identité, sorties de la saison, où est
+    l'équipement, prochaine échéance et parcours complet (sorties, contrôles, ateliers). Elle lit `ServiceHistorique.ObtenirVieAsync(id)`
+    et partage l'en-tête, les tuiles et la frise avec l'historique (`Controles/FicheVie`). « Modifier » reste l'édition, protégée par Materiel.
+
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
 à côté de la base d'essai : les essais ne touchent jamais les réglages réels. Préfixe des étiquettes : `CodeScanne.Nettoyer(brut, prefixe)`.

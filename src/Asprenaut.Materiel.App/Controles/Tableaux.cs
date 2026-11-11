@@ -49,10 +49,11 @@ public static class Tableaux
     }
 
     /// <summary>
-    /// Bouton dessiné à droite de la cellule (« Enregistrer », « Modifier »). Le clic est géré par CellClick de la grille ;
-    /// la colonne entière est la cible, assez haute (lignes de 60 px) pour un doigt ou une souris peu précise.
+    /// Boutons dessinés dans la cellule d'actions (« Suivi », « Modifier »), de gauche à droite, alignés à droite.
+    /// Le clic est géré par la grille via <see cref="BoutonSous"/> ; la cellule entière est assez haute
+    /// (lignes de 60 px) pour un doigt ou une souris peu précise.
     /// </summary>
-    public static void PeindreBouton(DataGridViewCellPaintingEventArgs e, string texte)
+    public static void PeindreBoutons(DataGridViewCellPaintingEventArgs e, params string[] textes)
     {
         if (e.Graphics is not { } g)
         {
@@ -61,19 +62,63 @@ public static class Tableaux
 
         e.PaintBackground(e.CellBounds, (e.State & DataGridViewElementStates.Selected) != 0);
         Dessin.Qualite(g);
-        var hb = 40f * g.DpiY / 96f;
-        var lb = Math.Min(e.CellBounds.Width - 10, 104f * g.DpiX / 96f);
-        var r = new RectangleF(e.CellBounds.Right - lb - 6, e.CellBounds.Top + ((e.CellBounds.Height - hb) / 2), lb, hb);
-        using (var chemin = Dessin.Arrondi(r, 12f * g.DpiX / 96f))
-        using (var fond = new SolidBrush(Theme.Teinte(Theme.Accent, 0.12f)))
-        using (var bord = new Pen(Theme.Teinte(Theme.Accent, 0.30f)))
+        var zones = ZonesBoutons(e.CellBounds, g.DpiX / 96f, textes.Length);
+        for (var i = 0; i < textes.Length; i++)
         {
-            g.FillPath(fond, chemin);
-            g.DrawPath(bord, chemin);
+            var r = zones[i];
+            using (var chemin = Dessin.Arrondi(r, 12f * g.DpiX / 96f))
+            using (var fond = new SolidBrush(Theme.Teinte(Theme.Accent, 0.12f)))
+            using (var bord = new Pen(Theme.Teinte(Theme.Accent, 0.30f)))
+            {
+                g.FillPath(fond, chemin);
+                g.DrawPath(bord, chemin);
+            }
+
+            Dessin.Texte(g, textes[i], Theme.PoliceTitre(9f), Rectangle.Round(r), Theme.AccentClair, centre: true);
         }
 
-        Dessin.Texte(g, texte, Theme.PoliceTitre(9f), Rectangle.Round(r), Theme.AccentClair, centre: true);
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// Zones des boutons d'une cellule d'actions, de gauche à droite. Elles se partagent la largeur disponible
+    /// (100 px logiques au plus) : sur une fenêtre étroite, les libellés sont tronqués plutôt que débordants.
+    /// </summary>
+    public static RectangleF[] ZonesBoutons(Rectangle cellule, float echelle, int nombre)
+    {
+        const float hauteur = 40f;
+        const float largeurMax = 100f;
+        const float ecart = 6f;
+        const float marge = 6f;
+        var disponible = cellule.Width - (2 * marge * echelle);
+        var ecartPx = ecart * echelle;
+        var largeur = Math.Min(largeurMax * echelle, (disponible - ((nombre - 1) * ecartPx)) / Math.Max(1, nombre));
+        var total = (nombre * largeur) + ((nombre - 1) * ecartPx);
+        var gauche = cellule.Right - (marge * echelle) - total;
+        var haut = cellule.Top + ((cellule.Height - (hauteur * echelle)) / 2f);
+        var zones = new RectangleF[nombre];
+        for (var i = 0; i < nombre; i++)
+        {
+            zones[i] = new RectangleF(gauche + (i * (largeur + ecartPx)), haut, largeur, hauteur * echelle);
+        }
+
+        return zones;
+    }
+
+    /// <summary>Indice du bouton sous le clic (position relative à la cellule), ou -1.</summary>
+    public static int BoutonSous(Rectangle cellule, float echelle, int nombre, Point position)
+    {
+        var zones = ZonesBoutons(cellule, echelle, nombre);
+        var absolu = new PointF(cellule.Left + position.X, cellule.Top + position.Y);
+        for (var i = 0; i < zones.Length; i++)
+        {
+            if (zones[i].Contains(absolu))
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     /// <summary>

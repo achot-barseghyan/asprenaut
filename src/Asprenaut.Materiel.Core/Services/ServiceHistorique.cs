@@ -247,6 +247,15 @@ public sealed class ServiceHistorique(
             return null;
         }
 
+        return await ConstruireVieAsync(e, ct);
+    }
+
+    /// <summary>Fiche d'un équipement par son identifiant (depuis l'inventaire) ; null s'il n'existe plus.</summary>
+    public async Task<VieEquipement?> ObtenirVieAsync(long equipementId, CancellationToken ct = default) =>
+        await equipements.ObtenirAsync(equipementId, ct) is { } e ? await ConstruireVieAsync(e, ct) : null;
+
+    private async Task<VieEquipement> ConstruireVieAsync(Equipement e, CancellationToken ct)
+    {
         var categorie = (await categories.ListerAsync(ct)).FirstOrDefault(c => c.Id == e.CategorieId)?.Nom ?? "";
         var passages = await sorties.ListerPassagesAsync(e.Id, ct);
         var controles = await revisions.ListerControlesAsync(e.Id, ct);

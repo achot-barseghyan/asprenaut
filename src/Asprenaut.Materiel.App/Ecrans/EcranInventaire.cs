@@ -12,6 +12,7 @@ namespace Asprenaut.Materiel.App.Ecrans;
 public sealed class EcranInventaire : EcranBase
 {
     private readonly ServiceInventaire _inventaire;
+    private readonly ServiceHistorique _historique;
     private readonly ServiceReglages _reglages;
     private readonly ServiceCompteur _compteur;
     private IReadOnlyDictionary<long, UtilisationInventaire> _utilisations = new Dictionary<long, UtilisationInventaire>();
@@ -24,10 +25,11 @@ public sealed class EcranInventaire : EcranBase
 
     private readonly GardeGestion _garde;
 
-    public EcranInventaire(ServiceInventaire inventaire, ServiceReglages reglages, ServiceCompteur compteur, GardeGestion garde)
+    public EcranInventaire(ServiceInventaire inventaire, ServiceHistorique historique, ServiceReglages reglages, ServiceCompteur compteur, GardeGestion garde)
     {
         _garde = garde;
         _inventaire = inventaire;
+        _historique = historique;
         _compteur = compteur;
         _reglages = reglages;
 
@@ -71,19 +73,41 @@ public sealed class EcranInventaire : EcranBase
         _grille.CellFormatting += ColorerCellule;
         _grille.CellPainting += PeindreCellule;
 
-        // Modifier : bouton dessiné dans la dernière colonne, double-clic ou Entrée sur une ligne.
-        _grille.CellClick += (_, e) =>
+        // Clic sur la ligne (nom souligné, double-clic, Entrée) : fiche de suivi. La cellule d'actions a deux boutons :
+        // « Suivi » puis « Modifier ».
+        _grille.CellMouseClick += (_, e) =>
         {
-            if (e.RowIndex >= 0 && Colonne(e.ColumnIndex) == "action" && _grille.Rows[e.RowIndex].Tag is LigneInventaire l)
+            if (e.Button != MouseButtons.Left || e.RowIndex < 0 || _grille.Rows[e.RowIndex].Tag is not LigneInventaire l)
             {
-                Executer(() => ModifierEquipementAsync(l));
+                return;
+            }
+
+            if (Colonne(e.ColumnIndex) == "action")
+            {
+                var cellule = _grille.GetCellDisplayRectangle(e.ColumnIndex, e.RowIndex, false);
+                switch (Tableaux.BoutonSous(cellule, _grille.DeviceDpi / 96f, 2, e.Location))
+                {
+                    case 0:
+                        Executer(() => OuvrirSuiviAsync(l));
+                        break;
+                    case 1:
+                        Executer(() => ModifierEquipementAsync(l));
+                        break;
+                }
+
+                return;
+            }
+
+            if (SurLeNom(e.RowIndex, e.ColumnIndex, e.Location))
+            {
+                Executer(() => OuvrirSuiviAsync(l));
             }
         };
         _grille.CellDoubleClick += (_, e) =>
         {
             if (e.RowIndex >= 0 && Colonne(e.ColumnIndex) != "action" && _grille.Rows[e.RowIndex].Tag is LigneInventaire l)
             {
-                Executer(() => ModifierEquipementAsync(l));
+                Executer(() => OuvrirSuiviAsync(l));
             }
         };
         _grille.KeyDown += (_, e) =>
@@ -91,14 +115,7 @@ public sealed class EcranInventaire : EcranBase
             if (e.KeyCode == Keys.Enter && _grille.CurrentRow?.Tag is LigneInventaire l)
             {
                 e.SuppressKeyPress = true;
-                Executer(() => ModifierEquipementAsync(l));
-            }
-        };
-        _grille.CellMouseClick += (_, e) =>
-        {
-            if (e.Button == MouseButtons.Left && SurLeNom(e.RowIndex, e.ColumnIndex, e.Location) && _grille.Rows[e.RowIndex].Tag is LigneInventaire l)
-            {
-                Executer(() => ModifierEquipementAsync(l));
+                Executer(() => OuvrirSuiviAsync(l));
             }
         };
         _grille.CellMouseMove += (_, e) =>
@@ -240,7 +257,11 @@ public sealed class EcranInventaire : EcranBase
         }
     }
 
-    /// <summary>Fiche de l'équipement (action protégée), puis la liste est rechargée.</summary>
+    /// <summary>Fiche de suivi (lecture seule) : état, échéance et parcours de l'équipement.</summary>
+    private Task OuvrirSuiviAsync(LigneInventaire ligne) =>
+        FicheSuivi.OuvrirAsync(FindForm(), _historique, ligne.EquipementId);
+
+    /// <summary>Modification de l'équipement (action protégée), puis la liste est rechargée.</summary>
     private async Task ModifierEquipementAsync(LigneInventaire ligne)
     {
         if (!_garde.Exiger(FindForm(), ActionProtegee.Materiel, "Modifier un équipement"))
@@ -273,7 +294,7 @@ public sealed class EcranInventaire : EcranBase
 
     private static string Date(DateOnly? d) => d is { } v ? Libelles.Date(v) : "—";
 
-    private static readonly ColonneInventaire Action = new("action", "", 100, _ => "");
+    private static readonly ColonneInventaire Action = new("action", "", 170, _ => "");
 
     private static readonly ColonneInventaire Statut = new("statut", "Statut", 110, l => Libelles.De(l.Statut));
 
@@ -330,7 +351,7 @@ public sealed class EcranInventaire : EcranBase
         new("derniere", "Dernière révision", 120, l => Date(l.DerniereRevision)),
         new("revision", "À réviser avant", 150, l => Date(l.DateProchaineRevision)),
         new("identification", "Identification", 300, l => _inventaire.Identification(l.Categorie, l.Code, l.Taille)),
-        new("action", "", 110, _ => ""),
+        new("action", "", 200, _ => ""),
     ];
 
     private ColonneInventaire[] _colonnes = [];
@@ -407,7 +428,7 @@ public sealed class EcranInventaire : EcranBase
         return fiche.Length > 0 ? $"{fiche} · {l.Categorie}" : l.Categorie;
     }
 
-    /// <summary>Le nom souligné ouvre la fiche, comme le bouton « Modifier ».</summary>
+    /// <summary>Le nom souligné ouvre la fiche de suivi, comme le bouton « Suivi ».</summary>
     private bool SurLeNom(int ligne, int colonne, Point position)
     {
         if (Colonne(colonne) != "equipement" || ligne < 0 || _grille.Rows[ligne].Tag is not LigneInventaire l)
@@ -484,7 +505,7 @@ public sealed class EcranInventaire : EcranBase
         }
         else if (colonne == "action")
         {
-            Tableaux.PeindreBouton(e, "Modifier");
+            Tableaux.PeindreBoutons(e, "Suivi", "Modifier");
         }
         else if (colonne == "statut")
         {
