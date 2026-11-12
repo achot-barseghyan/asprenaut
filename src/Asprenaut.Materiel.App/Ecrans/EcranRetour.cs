@@ -244,7 +244,8 @@ public sealed class EcranRetour : EcranScanBase
             l.Categorie,
             Alerte: l.Statut == StatutSortieEquipement.Manquant ? "Manquant" : null,
             CouleurAlerte: Theme.Erreur,
-            ManuelId: ManuelDe(l.EquipementId))), ouvrirManuel: OuvrirManuel);
+            ManuelId: ManuelDe(l.EquipementId),
+            Adherent: l.AdherentNom)), ouvrirManuel: OuvrirManuel); // Sortie nominative : qui l'a pris.
         // Rendu : drapeau « Signaler » sur chaque ligne ; un problème ouvert se voit en pastille et dans le détail.
         _rendu.Afficher(rendus.Select(l =>
         {

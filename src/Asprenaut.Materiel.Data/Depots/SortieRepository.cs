@@ -8,13 +8,13 @@ namespace Asprenaut.Materiel.Data.Depots;
 public sealed class SortieRepository(FabriqueConnexion fabrique) : ISortieRepository
 {
     private const string ColonnesSortie =
-        "id, date_sortie, type, type_sortie_id AS type_id, utilisations, intitule, moniteur_id, lieu, notes, statut, depart_valide_le, cloturee_le";
+        "id, date_sortie, type, type_sortie_id AS type_id, utilisations, intitule, moniteur_id, lieu, notes, statut, depart_valide_le, cloturee_le, nominatif";
 
     private const string ColonnesAffectation =
-        "id, sortie_id, equipement_id, scanne_depart_le, scanne_retour_le, statut";
+        "id, sortie_id, equipement_id, scanne_depart_le, scanne_retour_le, statut, adherent_id";
 
     private const string SelectResume = """
-        SELECT s.id, s.date_sortie, s.type, s.type_sortie_id AS type_id, s.utilisations, ts.nom AS type_nom, s.intitule, s.lieu, s.statut, s.moniteur_id, s.depart_valide_le, s.cloturee_le,
+        SELECT s.id, s.date_sortie, s.type, s.type_sortie_id AS type_id, s.utilisations, ts.nom AS type_nom, s.intitule, s.lieu, s.statut, s.moniteur_id, s.depart_valide_le, s.cloturee_le, s.nominatif,
                TRIM(m.prenom || ' ' || m.nom) AS moniteur_nom, m.genre AS moniteur_genre,
                COUNT(se.id) AS nb_total,
                COALESCE(SUM(se.statut = 'Rendu'), 0) AS nb_rendus,
@@ -35,8 +35,8 @@ public sealed class SortieRepository(FabriqueConnexion fabrique) : ISortieReposi
     public async Task<long> AjouterAsync(Sortie sortie, CancellationToken ct = default)
     {
         const string sql = """
-            INSERT INTO sortie (date_sortie, type, type_sortie_id, utilisations, intitule, moniteur_id, lieu, notes, statut, depart_valide_le, cloturee_le)
-            VALUES (@DateSortie, @Type, @TypeId, @Utilisations, @Intitule, @MoniteurId, @Lieu, @Notes, @Statut, @DepartValideLe, @ClotureeLe)
+            INSERT INTO sortie (date_sortie, type, type_sortie_id, utilisations, intitule, moniteur_id, lieu, notes, statut, depart_valide_le, cloturee_le, nominatif)
+            VALUES (@DateSortie, @Type, @TypeId, @Utilisations, @Intitule, @MoniteurId, @Lieu, @Notes, @Statut, @DepartValideLe, @ClotureeLe, @Nominatif)
             RETURNING id;
             """;
         await using var cx = await fabrique.OuvrirAsync(ct);
@@ -81,10 +81,12 @@ public sealed class SortieRepository(FabriqueConnexion fabrique) : ISortieReposi
     {
         const string sql = """
             SELECT se.id AS ligne_id, se.sortie_id, se.equipement_id, e.code, e.libelle, c.nom AS categorie,
-                   e.taille, e.date_prochaine_revision, e.date_requalification, se.statut, se.scanne_depart_le, se.scanne_retour_le
+                   e.taille, e.date_prochaine_revision, e.date_requalification, e.nitrox, se.statut, se.scanne_depart_le, se.scanne_retour_le,
+                   se.adherent_id, TRIM(ad.prenom || ' ' || ad.nom) AS adherent_nom
             FROM sortie_equipement se
             JOIN equipement e ON e.id = se.equipement_id
             JOIN categorie c ON c.id = e.categorie_id
+            LEFT JOIN adherent ad ON ad.id = se.adherent_id
             WHERE se.sortie_id = @sortieId
             ORDER BY se.scanne_depart_le DESC, se.id DESC;
             """;
@@ -169,8 +171,8 @@ public sealed class SortieRepository(FabriqueConnexion fabrique) : ISortieReposi
     public async Task<long> AjouterAffectationAsync(SortieEquipement affectation, CancellationToken ct = default)
     {
         const string sql = """
-            INSERT INTO sortie_equipement (sortie_id, equipement_id, scanne_depart_le, scanne_retour_le, statut)
-            VALUES (@SortieId, @EquipementId, @ScanneDepartLe, @ScanneRetourLe, @Statut)
+            INSERT INTO sortie_equipement (sortie_id, equipement_id, scanne_depart_le, scanne_retour_le, statut, adherent_id)
+            VALUES (@SortieId, @EquipementId, @ScanneDepartLe, @ScanneRetourLe, @Statut, @AdherentId)
             RETURNING id;
             """;
         await using var cx = await fabrique.OuvrirAsync(ct);
@@ -191,6 +193,14 @@ public sealed class SortieRepository(FabriqueConnexion fabrique) : ISortieReposi
             "DELETE FROM sortie_equipement WHERE id = @affectationId;", new { affectationId }, cancellationToken: ct));
     }
 
+    public async Task AttribuerAdherentAsync(long affectationId, long? adherentId, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        await cx.ExecuteAsync(new CommandDefinition(
+            "UPDATE sortie_equipement SET adherent_id = @adherentId WHERE id = @affectationId;",
+            new { affectationId, adherentId }, cancellationToken: ct));
+    }
+
     public async Task EnregistrerClotureAsync(Sortie sortie, IReadOnlyList<SortieEquipement> affectationsModifiees, CancellationToken ct = default)
     {
         await using var cx = await fabrique.OuvrirAsync(ct);
@@ -207,13 +217,13 @@ public sealed class SortieRepository(FabriqueConnexion fabrique) : ISortieReposi
     private const string SqlMiseAJourSortie = """
         UPDATE sortie
         SET date_sortie = @DateSortie, type = @Type, type_sortie_id = @TypeId, utilisations = @Utilisations, intitule = @Intitule, moniteur_id = @MoniteurId, lieu = @Lieu,
-            notes = @Notes, statut = @Statut, depart_valide_le = @DepartValideLe, cloturee_le = @ClotureeLe
+            notes = @Notes, statut = @Statut, depart_valide_le = @DepartValideLe, cloturee_le = @ClotureeLe, nominatif = @Nominatif
         WHERE id = @Id;
         """;
 
     private const string SqlMiseAJourAffectation = """
         UPDATE sortie_equipement
-        SET scanne_depart_le = @ScanneDepartLe, scanne_retour_le = @ScanneRetourLe, statut = @Statut
+        SET scanne_depart_le = @ScanneDepartLe, scanne_retour_le = @ScanneRetourLe, statut = @Statut, adherent_id = @AdherentId
         WHERE id = @Id;
         """;
 
@@ -231,6 +241,7 @@ public sealed class SortieRepository(FabriqueConnexion fabrique) : ISortieReposi
         Statut = s.Statut.ToString(),
         DepartValideLe = FormatIso.Ecrire(s.DepartValideLe),
         ClotureeLe = FormatIso.Ecrire(s.ClotureeLe),
+        Nominatif = s.Nominatif ? 1 : 0,
     };
 
     private static object Parametres(SortieEquipement a) => new
@@ -241,5 +252,6 @@ public sealed class SortieRepository(FabriqueConnexion fabrique) : ISortieReposi
         ScanneDepartLe = FormatIso.Ecrire(a.ScanneDepartLe),
         ScanneRetourLe = FormatIso.Ecrire(a.ScanneRetourLe),
         Statut = a.Statut.ToString(),
+        a.AdherentId,
     };
 }

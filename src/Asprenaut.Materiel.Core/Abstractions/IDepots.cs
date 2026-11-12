@@ -97,6 +97,9 @@ public interface ISortieRepository
 
     Task SupprimerAffectationAsync(long affectationId, CancellationToken ct = default);
 
+    /// <summary>Attribue (ou retire, null) l'adhérent d'une ligne de sortie.</summary>
+    Task AttribuerAdherentAsync(long affectationId, long? adherentId, CancellationToken ct = default);
+
     /// <summary>Enregistre la clôture (sortie + affectations modifiées) en une seule transaction.</summary>
     Task EnregistrerClotureAsync(Sortie sortie, IReadOnlyList<SortieEquipement> affectationsModifiees, CancellationToken ct = default);
 }
@@ -144,6 +147,24 @@ public interface IRevisionRepository
 }
 
 /// <summary>Problèmes signalés (table signalement, migration 013) : au plus un ouvert par équipement.</summary>
+/// <summary>Adhérents du club (table adherent, migration 014).</summary>
+public interface IAdherentRepository
+{
+    Task<IReadOnlyList<Adherent>> ListerAsync(bool actifsSeulement, CancellationToken ct = default);
+
+    Task<Adherent?> ObtenirAsync(long id, CancellationToken ct = default);
+
+    Task<long> AjouterAsync(Adherent adherent, CancellationToken ct = default);
+
+    Task MettreAJourAsync(Adherent adherent, CancellationToken ct = default);
+
+    /// <summary>Matériel encore dehors et manquant de chaque adhérent qui en a.</summary>
+    Task<IReadOnlyList<SituationAdherent>> ListerSituationsAsync(CancellationToken ct = default);
+
+    /// <summary>Tout le matériel pris par cet adhérent, de la sortie la plus récente à la plus ancienne.</summary>
+    Task<IReadOnlyList<PassageAdherent>> ListerPassagesAsync(long adherentId, CancellationToken ct = default);
+}
+
 public interface ISignalementRepository
 {
     Task<long> AjouterAsync(Signalement signalement, CancellationToken ct = default);

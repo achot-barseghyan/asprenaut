@@ -1189,26 +1189,81 @@ public sealed class EcranParametres : EcranBase
         action.Margin = Padding.Empty;
         action.Click += (_, _) => Executer(() => utilise ? BasculerTypeAsync(t) : SupprimerTypeAsync(t));
 
-        var ligne = new TableLayoutPanel
+        // Sortie nominative (maquette) : le nom de l'adhérent est demandé à chaque scan au départ.
+        var nominatif = new CaseOption("Nom de l'adhérent à chaque scan",
+            "Au départ, chaque équipement doit être attribué à un adhérent. Pratique pour savoir qui a perdu quoi.")
+        {
+            Checked = t.Nominatif,
+            AutoCheck = false, // Le clic passe par le mode gestion et le service.
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 10, 0, 0),
+            AccessibleName = $"{t.Nom} : nom de l'adhérent à chaque scan",
+        };
+        nominatif.Click += (_, _) =>
+        {
+            if (!Autoriser())
+            {
+                return;
+            }
+
+            Executer(async () =>
+            {
+                var resultat = await _typesSortie.ChangerNominatifAsync(t.Id, !nominatif.Checked);
+                if (!resultat.Reussi)
+                {
+                    Dialogues.Erreur(FindForm(), resultat.Message);
+                    return;
+                }
+
+                t.Nominatif = !nominatif.Checked;
+                nominatif.Checked = t.Nominatif;
+            });
+        };
+
+        var ligne = new CarteType
         {
             ColumnCount = 4,
-            RowCount = 1,
+            RowCount = 2,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            BackColor = Color.Transparent,
-            Margin = Padding.Empty,
-            Padding = new Padding(0, 6, 0, 6),
+            Margin = new Padding(0, 0, 0, 10),
+            Padding = new Padding(14, 12, 12, 12),
         };
         ligne.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         ligne.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         ligne.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         ligne.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         ligne.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        ligne.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         ligne.Controls.Add(textes, 0, 0);
         ligne.Controls.Add(utilisations, 1, 0);
         ligne.Controls.Add(modifier, 2, 0);
         ligne.Controls.Add(action, 3, 0);
+        ligne.Controls.Add(nominatif, 0, 1);
+        ligne.SetColumnSpan(nominatif, 4);
         return ligne;
+    }
+
+    /// <summary>Carte d'un type de sortie (fond arrondi un peu plus sombre que la section).</summary>
+    private sealed class CarteType : TableLayoutPanel
+    {
+        public CarteType()
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            BackColor = Theme.Sur(Theme.Surface, Theme.Fond, 0.35f);
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            Dessin.EffacerAvecParent(this, g);
+            Dessin.Qualite(g);
+            using var chemin = Dessin.Arrondi(new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f), Dessin.Echelle(this, 16));
+            using var fond = new SolidBrush(BackColor);
+            using var bord = new Pen(Theme.Bordure, Dessin.Echelle(this, 1));
+            g.FillPath(fond, chemin);
+            g.DrawPath(bord, chemin);
+        }
     }
 
     /// <summary>Bouton œil : masque un type utilisé (plus proposé, historique gardé) ou le réaffiche.</summary>

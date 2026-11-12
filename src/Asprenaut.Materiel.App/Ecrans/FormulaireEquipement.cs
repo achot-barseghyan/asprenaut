@@ -108,6 +108,13 @@ public static class FormulaireEquipement
         public ChampDate Requalification { get; } = new() { AccessibleName = "Prochaine requalification" };
         public ChampSaisie Notes { get; } = new() { TexteIndicatif = "Remarques…" };
 
+        /// <summary>Bloc ou détendeur nitrox (sortie nominative : adhérent certifié nitrox seulement).</summary>
+        public CaseOption Nitrox { get; } = new("Nitrox",
+            "Bloc ou détendeur pour le nitrox : lors d'une sortie avec le nom des adhérents, seul un adhérent certifié nitrox peut le prendre.")
+        {
+            Margin = new Padding(0, 4, 0, 12),
+        };
+
         // --- Détendeurs ---
         public ListeDeroulante Montage { get; } = new() { AccessibleName = "Étrier ou DIN" };
         public ListeDeroulante DirectSystem { get; } = new() { AccessibleName = "D.S" };
@@ -126,6 +133,7 @@ public static class FormulaireEquipement
         private TableLayoutPanel? _rangeeTaille;
         private TableLayoutPanel? _rangeeDates;
         private TableLayoutPanel? _rangeeRequalif;
+        private bool _nitroxPossible;
 
         public bool DatesValides => Revision.Valide && Requalification.Valide && DerniereRevision.Valide;
 
@@ -318,6 +326,13 @@ public static class FormulaireEquipement
                 DerniereRevision.Date = null;
             }
 
+            _nitroxPossible = ServiceInventaire.PeutEtreNitrox(categorie);
+            Nitrox.Visible = _nitroxPossible;
+            if (!_nitroxPossible)
+            {
+                Nitrox.Checked = false;
+            }
+
             foreach (var r in _rangeesDetendeur)
             {
                 r.Visible = detendeur;
@@ -379,6 +394,7 @@ public static class FormulaireEquipement
             Manometre.Valeur = e.Manometre;
             Octopus.Valeur = e.Octopus;
             NumeroOctopus.Valeur = e.NumeroOctopus;
+            Nitrox.Checked = e.Nitrox;
         }
 
         public Equipement Lire(Equipement e)
@@ -402,6 +418,7 @@ public static class FormulaireEquipement
             e.Manometre = Manometre.Valeur;
             e.Octopus = Octopus.Valeur;
             e.NumeroOctopus = NumeroOctopus.Valeur;
+            e.Nitrox = _nitroxPossible && Nitrox.Checked;
             return e;
         }
 
@@ -449,6 +466,7 @@ public static class FormulaireEquipement
             _rangeesDetendeur.Add(fenetre.DeuxChamps("Octopus", Octopus, "N° octopus", NumeroOctopus));
             _rangeeDates = fenetre.DeuxChamps("Date de la dernière révision", DerniereRevision, "Prochaine révision", Revision);
             _rangeeRequalif = fenetre.DeuxChamps("Prochaine requalification", Requalification, "Notes (facultatif)", Notes);
+            fenetre.Ajouter(Nitrox);
             fenetre.Ajouter(Aide);
             Adapter();
         }

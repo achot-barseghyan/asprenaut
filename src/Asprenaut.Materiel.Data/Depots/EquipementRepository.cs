@@ -73,7 +73,7 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
             SELECT e.id AS equipement_id, e.code, e.libelle, e.categorie_id, c.nom AS categorie,
                    e.taille, e.etat, e.date_prochaine_revision, e.date_requalification,
                    e.marque, e.modele, e.numero_serie, e.montage, e.marque_deuxieme_etage, e.modele_deuxieme_etage,
-                   e.numero_deuxieme_etage, e.direct_system, e.manometre, e.octopus, e.numero_octopus,
+                   e.numero_deuxieme_etage, e.direct_system, e.manometre, e.octopus, e.numero_octopus, e.nitrox,
                    (SELECT MAX(ct.date_controle) FROM controle ct WHERE ct.equipement_id = e.id AND ct.type = 'Revision' AND ct.composant = '') AS derniere_revision,
                    s.id AS sortie_en_cours_id, s.intitule AS sortie_en_cours_intitule,
                    EXISTS (SELECT 1 FROM sortie_equipement m
@@ -115,7 +115,7 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
                 marque = @Marque, modele = @Modele, numero_serie = @NumeroSerie, montage = @Montage,
                 marque_deuxieme_etage = @MarqueDeuxiemeEtage, modele_deuxieme_etage = @ModeleDeuxiemeEtage,
                 numero_deuxieme_etage = @NumeroDeuxiemeEtage, direct_system = @DirectSystem, manometre = @Manometre,
-                octopus = @Octopus, numero_octopus = @NumeroOctopus
+                octopus = @Octopus, numero_octopus = @NumeroOctopus, nitrox = @Nitrox
             WHERE id = @Id;
             """;
         await using var cx = await fabrique.OuvrirAsync(ct);
@@ -194,14 +194,15 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
         e.Manometre,
         e.Octopus,
         e.NumeroOctopus,
+        Nitrox = e.Nitrox ? 1 : 0,
     };
 
     /// <summary>Colonnes de la fiche matériel (migration 005), dans l'ordre des paramètres d'écriture.</summary>
     private const string ColonnesFiche =
-        "marque, modele, numero_serie, montage, marque_deuxieme_etage, modele_deuxieme_etage, numero_deuxieme_etage, direct_system, manometre, octopus, numero_octopus";
+        "marque, modele, numero_serie, montage, marque_deuxieme_etage, modele_deuxieme_etage, numero_deuxieme_etage, direct_system, manometre, octopus, numero_octopus, nitrox";
 
     private const string ValeursFiche =
-        "@Marque, @Modele, @NumeroSerie, @Montage, @MarqueDeuxiemeEtage, @ModeleDeuxiemeEtage, @NumeroDeuxiemeEtage, @DirectSystem, @Manometre, @Octopus, @NumeroOctopus";
+        "@Marque, @Modele, @NumeroSerie, @Montage, @MarqueDeuxiemeEtage, @ModeleDeuxiemeEtage, @NumeroDeuxiemeEtage, @DirectSystem, @Manometre, @Octopus, @NumeroOctopus, @Nitrox";
 }
 
 public sealed class MoniteurRepository(FabriqueConnexion fabrique) : IMoniteurRepository
@@ -271,11 +272,11 @@ public sealed class JournalRepository(FabriqueConnexion fabrique) : IJournalRepo
         await using var cx = await fabrique.OuvrirAsync(ct);
         entree.Id = await cx.ExecuteScalarAsync<long>(new CommandDefinition(
             """
-            INSERT INTO journal (horodatage, action, details, equipement_id, sortie_id)
-            VALUES (@Horodatage, @Action, @Details, @EquipementId, @SortieId)
+            INSERT INTO journal (horodatage, action, details, equipement_id, sortie_id, adherent_id)
+            VALUES (@Horodatage, @Action, @Details, @EquipementId, @SortieId, @AdherentId)
             RETURNING id;
             """,
-            new { Horodatage = FormatIso.Ecrire(entree.Horodatage), entree.Action, entree.Details, entree.EquipementId, entree.SortieId },
+            new { Horodatage = FormatIso.Ecrire(entree.Horodatage), entree.Action, entree.Details, entree.EquipementId, entree.SortieId, entree.AdherentId },
             cancellationToken: ct));
     }
 
@@ -294,7 +295,7 @@ public sealed class JournalRepository(FabriqueConnexion fabrique) : IJournalRepo
             SELECT j.id, j.horodatage, j.action, j.details, j.equipement_id, j.sortie_id,
                    e.code, e.libelle, c.nom AS categorie,
                    s.intitule AS sortie_intitule, s.date_sortie AS sortie_date, s.type AS sortie_type, ts.nom AS sortie_type_nom, s.lieu AS sortie_lieu,
-                   TRIM(m.prenom || ' ' || m.nom) AS moniteur_nom,
+                   TRIM(m.prenom || ' ' || m.nom) AS moniteur_nom, TRIM(ad.prenom || ' ' || ad.nom) AS adherent_nom,
                    (SELECT COUNT(*) FROM sortie_equipement se WHERE se.sortie_id = j.sortie_id) AS sortie_nb_equipements,
                    (SELECT COUNT(*) FROM sortie_equipement se WHERE se.sortie_id = j.sortie_id AND se.statut = 'Manquant') AS sortie_nb_manquants
             FROM journal j
@@ -303,6 +304,7 @@ public sealed class JournalRepository(FabriqueConnexion fabrique) : IJournalRepo
             LEFT JOIN sortie s ON s.id = j.sortie_id
             LEFT JOIN moniteur m ON m.id = s.moniteur_id
             LEFT JOIN type_sortie ts ON ts.id = s.type_sortie_id
+            LEFT JOIN adherent ad ON ad.id = j.adherent_id
             WHERE @depuis IS NULL OR j.horodatage >= @depuis
             ORDER BY j.horodatage DESC, j.id DESC
             LIMIT @nombreMax;

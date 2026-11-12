@@ -49,4 +49,17 @@ public static class Libelles
     /// <summary>"1 équipement", "3 équipements".</summary>
     public static string Pluriel(int nombre, string singulier, string? pluriel = null) =>
         $"{nombre} {(nombre > 1 ? pluriel ?? singulier + "s" : singulier)}";
+
+    /// <summary>« Julie Martin » → « JM » ; un seul mot → ses deux premières lettres.</summary>
+    public static string Initiales(string nom)
+    {
+        var mots = nom.Split(' ', '-', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var initiales = mots.Length switch
+        {
+            0 => "?",
+            1 => mots[0][..Math.Min(2, mots[0].Length)],
+            _ => $"{mots[0][0]}{mots[^1][0]}",
+        };
+        return initiales.ToUpper(Culture);
+    }
 }

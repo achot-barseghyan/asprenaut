@@ -19,4 +19,10 @@ public sealed class Sortie
     public StatutSortie Statut { get; set; } = StatutSortie.EnPreparation;
     public DateTime? DepartValideLe { get; set; }
     public DateTime? ClotureeLe { get; set; }
+
+    /// <summary>
+    /// Sortie nominative : chaque équipement qui part est attribué à un adhérent. Repris du type à la création
+    /// (ou au changement de type en préparation) : changer le réglage du type ensuite ne touche pas la sortie.
+    /// </summary>
+    public bool Nominatif { get; set; }
 }

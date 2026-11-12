@@ -120,19 +120,23 @@ public class HistoriqueDepotsTests : IAsyncLifetime
         var moniteurs = new MoniteurRepository(_base.Fabrique);
         var reglages = new Reglages();
         var scan = new ServiceScan(equipements, sorties, journal, horloge, reglages);
-        var serviceSortie = new ServiceSortie(sorties, moniteurs, journal, horloge, reglages, null, new TypeSortieRepository(_base.Fabrique));
+        var adherents = new AdherentRepository(_base.Fabrique);
+        var serviceSortie = new ServiceSortie(sorties, moniteurs, journal, horloge, reglages, null, new TypeSortieRepository(_base.Fabrique), adherents);
         Assert.True(await DonneesDemo.ChargerSiVideAsync(_base.Fabrique, horloge.AujourdHui));
         var niveau1 = (await moniteurs.ListerAsync(true)).Single(m => m.Genre == GenreResponsable.Classe && m.Nom == "Niveau 1");
 
-        // Mer : 4 utilisations par type, 3 pour cette sortie.
+        // Mer : 4 utilisations par type, 3 pour cette sortie ; nominative (migration 014) : A01 est pris par Julie.
         var r = await serviceSortie.CreerAsync(new NouvelleSortie(new DateOnly(2026, 11, 6), TypeSortie.Mer, "Week-end Marseille", niveau1.Id, Utilisations: 3));
         Assert.True(r.Reussi, r.Message);
         var id = r.Id!.Value;
         await scan.ScannerDepartAsync(id, "A01");
-        await serviceSortie.ValiderDepartAsync(id);
+        var a01 = (await equipements.ObtenirParCodeAsync("A01"))!;
+        var julie = (await adherents.ListerAsync(true)).Single(a => a.Prenom == "Julie");
+        Assert.True((await serviceSortie.AttribuerAdherentAsync(id, a01.Id, julie.Id)).Reussi);
+        Assert.Equal("Julie Martin", (await sorties.ListerLignesAsync(id)).Single().AdherentNom);
+        Assert.True((await serviceSortie.ValiderDepartAsync(id)).Reussi);
         await scan.ScannerRetourAsync(id, "A01");
 
-        var a01 = (await equipements.ObtenirParCodeAsync("A01"))!;
         var p = (await sorties.ListerPassagesAsync(a01.Id)).Single(x => x.SortieId == id);
         Assert.Equal((TypeSortie.Mer, "Mer", 3, (int?)4, GenreResponsable.Classe, "Niveau 1"),
             (p.TypeSortie, p.TypeNom, p.Utilisations, p.UtilisationsType, p.MoniteurGenre, p.MoniteurNom));

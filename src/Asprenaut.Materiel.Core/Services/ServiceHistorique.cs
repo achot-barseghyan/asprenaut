@@ -57,6 +57,9 @@ public sealed class ServiceHistorique(
         [ActionsJournal.MoniteurModifie] = (TypeEvenement.Autre, "Moniteur modifié"),
         [ActionsJournal.ClasseCreee] = (TypeEvenement.Autre, "Classe ajoutée"),
         [ActionsJournal.ClasseModifiee] = (TypeEvenement.Autre, "Classe modifiée"),
+        [ActionsJournal.AdherentCree] = (TypeEvenement.Autre, "Adhérent ajouté"),
+        [ActionsJournal.AdherentModifie] = (TypeEvenement.Autre, "Adhérent modifié"),
+        [ActionsJournal.AdherentsImportes] = (TypeEvenement.Autre, "Liste des adhérents importée"),
         ["DonneesDemo"] = (TypeEvenement.Autre, "Données de démonstration"),
     };
 
@@ -151,7 +154,8 @@ public sealed class ServiceHistorique(
             ActionsJournal.ScanDepart or ActionsJournal.RetraitDepart or ActionsJournal.ScanRetour or ActionsJournal.ManquantRetrouve =>
                 (equipement, contexte),
             ActionsJournal.ManquantDeclare =>
-                (equipement, l.SortieId is null ? "" : Joindre("Pas rendu à la clôture", contexte)),
+                (equipement, l.SortieId is null ? "" : Joindre("Pas rendu à la clôture",
+                    l.AdherentNom is { Length: > 0 } adherent ? $"pris par {adherent}" : null, contexte)),
             ActionsJournal.DepartValide =>
                 (l.SortieIntitule, l.SortieId is null ? "" : Joindre(l.MoniteurNom, Libelles.Pluriel(l.SortieNbEquipements, "équipement"))),
             ActionsJournal.SortieCreee or ActionsJournal.SortieModifiee =>

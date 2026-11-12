@@ -60,7 +60,7 @@ public class ExportEtCompteurDepotsTests : IAsyncLifetime
 
         var fichiers = await new ServiceExport(new ExportRepository(_base.Fabrique), Horloge).ExporterAsync();
 
-        Assert.Equal(["materiel.csv", "moniteurs.csv", "sorties.csv", "materiel_des_sorties.csv", "controles.csv", "atelier.csv", "seances_tiv.csv", "journal.csv", "manuels.csv", "signalements.csv"],
+        Assert.Equal(["materiel.csv", "moniteurs.csv", "sorties.csv", "materiel_des_sorties.csv", "adherents.csv", "controles.csv", "atelier.csv", "seances_tiv.csv", "journal.csv", "manuels.csv", "signalements.csv"],
             fichiers.Select(f => f.Nom));
         var materiel = fichiers[0].Contenu.Split(Environment.NewLine);
         Assert.Equal(15, fichiers[0].Lignes);
@@ -70,9 +70,10 @@ public class ExportEtCompteurDepotsTests : IAsyncLifetime
         Assert.Contains("Classe;;Niveau 2;N2;;;Non;Oui", fichiers[1].Contenu, StringComparison.Ordinal);
         Assert.Contains($";06/11/2026;Piscine;Piscine;Pascal Durand;;En cours;1;0;", fichiers[2].Contenu, StringComparison.Ordinal);
         Assert.Contains(";Piscine;S01;Gilet Aqualung;Rendu;", fichiers[3].Contenu, StringComparison.Ordinal);
-        Assert.Contains(";BLOC-031;Bloc 12 L acier;TIV;Conforme;Pascal Durand;", fichiers[4].Contenu, StringComparison.Ordinal);
-        Assert.Equal(1, fichiers[6].Lignes);
-        Assert.Contains(fichiers[7].Contenu.Split(Environment.NewLine), l => l.Contains(";ScanRetour;", StringComparison.Ordinal) && l.EndsWith(";S01;Piscine", StringComparison.Ordinal));
+        Assert.Contains("Martin;Julie;Niveau 2;A-12-345678;;Non;Oui", fichiers[4].Contenu, StringComparison.Ordinal);
+        Assert.Contains(";BLOC-031;Bloc 12 L acier;TIV;Conforme;Pascal Durand;", fichiers[5].Contenu, StringComparison.Ordinal);
+        Assert.Equal(1, fichiers[7].Lignes);
+        Assert.Contains(fichiers[8].Contenu.Split(Environment.NewLine), l => l.Contains(";ScanRetour;", StringComparison.Ordinal) && l.EndsWith(";S01;Piscine", StringComparison.Ordinal));
     }
 
     // Règle : le compteur compte les retours scannés après le jour du dernier contrôle de l'équipement.

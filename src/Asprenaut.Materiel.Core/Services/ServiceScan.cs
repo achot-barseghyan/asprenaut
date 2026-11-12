@@ -37,6 +37,12 @@ public sealed class ServiceScan(
             return ResultatScan.Erreur("Cette sortie est clôturée. On ne peut plus y ajouter de matériel.");
         }
 
+        // Règle : sortie nominative → pas de nouveau scan tant que le précédent n'a pas d'adhérent.
+        if (sortie.Nominatif && ServiceSortie.AAttribuer(true, await sorties.ListerLignesAsync(sortieId, ct)) is { } enAttente)
+        {
+            return ResultatScan.Erreur($"Choisissez d'abord l'adhérent qui prend {enAttente.Code}. Ce scan n'a pas été pris en compte.");
+        }
+
         var equipement = await equipements.ObtenirParCodeAsync(code, ct);
         if (equipement is null)
         {
@@ -197,7 +203,10 @@ public sealed class ServiceScan(
         return ResultatScan.Avertissement($"{equipement.Code} ne fait pas partie de cette sortie. Rien n'a été modifié.", equipement);
     }
 
-    /// <summary>Retire un équipement scanné par erreur, uniquement pendant la préparation.</summary>
+    /// <summary>
+    /// Retire un équipement scanné par erreur, pendant la préparation. Sortie nominative : un équipement qui attend
+    /// encore son adhérent peut aussi être retiré après la validation (le scan est simplement annulé).
+    /// </summary>
     public async Task<ResultatOperation> RetirerDuDepartAsync(long sortieId, long equipementId, CancellationToken ct = default)
     {
         var sortie = await sorties.ObtenirAsync(sortieId, ct);
@@ -206,12 +215,14 @@ public sealed class ServiceScan(
             return ResultatOperation.Echec("Sortie introuvable.");
         }
 
-        if (sortie.Statut != StatutSortie.EnPreparation)
+        var affectation = await sorties.ObtenirAffectationAsync(sortieId, equipementId, ct);
+        var scanEnAttente = sortie.Nominatif && sortie.Statut == StatutSortie.EnCours
+            && affectation is { Statut: StatutSortieEquipement.Dehors, AdherentId: null };
+        if (sortie.Statut != StatutSortie.EnPreparation && !scanEnAttente)
         {
             return ResultatOperation.Echec("Le départ est validé. On ne peut plus retirer de matériel.");
         }
 
-        var affectation = await sorties.ObtenirAffectationAsync(sortieId, equipementId, ct);
         if (affectation is null)
         {
             return ResultatOperation.Echec("Cet équipement n'est pas dans la sortie.");

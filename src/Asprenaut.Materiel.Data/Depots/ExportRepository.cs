@@ -20,14 +20,14 @@ public sealed class ExportRepository(FabriqueConnexion fabrique) : IExportReposi
             SELECT e.code, e.libelle, c.nom, e.marque, e.modele, e.taille, e.numero_serie, e.etat,
                    (SELECT MAX(ct.date_controle) FROM controle ct WHERE ct.equipement_id = e.id AND ct.type = 'Revision'),
                    e.date_prochaine_revision, e.date_requalification, e.montage, e.marque_deuxieme_etage, e.modele_deuxieme_etage,
-                   e.numero_deuxieme_etage, e.direct_system, e.manometre, e.octopus, e.numero_octopus, e.notes, e.cree_le
+                   e.numero_deuxieme_etage, e.direct_system, e.manometre, e.octopus, e.numero_octopus, e.nitrox, e.notes, e.cree_le
             FROM equipement e JOIN categorie c ON c.id = e.categorie_id ORDER BY e.code
             """,
             [new("Code"), new("Équipement"), new("Catégorie"), new("Marque"), new("Modèle"), new("Taille"), new("N° série"),
              new("État", GenreColonne.EtatEquipement), new("Dernière révision", GenreColonne.Date),
              new("Prochaine révision / TIV", GenreColonne.Date), new("Prochaine requalification", GenreColonne.Date),
              new("Étrier / DIN", GenreColonne.Montage), new("Marque deuxième étage"), new("Deuxième étage"), new("N° deuxième étage"),
-             new("D.S", GenreColonne.OuiNon), new("Mano"), new("Octopus"), new("N° octopus"), new("Notes"),
+             new("D.S", GenreColonne.OuiNon), new("Mano"), new("Octopus"), new("N° octopus"), new("Nitrox", GenreColonne.OuiNon), new("Notes"),
              new("Ajouté le", GenreColonne.Horodatage)]),
         ("moniteurs.csv",
             "SELECT m.genre, m.prenom, m.nom, m.abrege, m.niveau, m.telephone, m.inspecteur_tiv, m.actif FROM moniteur m ORDER BY m.genre = 'Classe', m.nom, m.prenom",
@@ -46,14 +46,20 @@ public sealed class ExportRepository(FabriqueConnexion fabrique) : IExportReposi
              new("Clôturée le", GenreColonne.Horodatage), new("Notes")]),
         ("materiel_des_sorties.csv",
             """
-            SELECT s.id, s.date_sortie, s.intitule, e.code, e.libelle, se.statut, se.scanne_depart_le, se.scanne_retour_le
+            SELECT s.id, s.date_sortie, s.intitule, e.code, e.libelle, se.statut, se.scanne_depart_le, se.scanne_retour_le,
+                   TRIM(COALESCE(ad.prenom, '') || ' ' || COALESCE(ad.nom, ''))
             FROM sortie_equipement se
             JOIN sortie s ON s.id = se.sortie_id
             JOIN equipement e ON e.id = se.equipement_id
+            LEFT JOIN adherent ad ON ad.id = se.adherent_id
             ORDER BY s.date_sortie, s.id, se.scanne_depart_le, se.id
             """,
             [new("Sortie n°"), new("Date de la sortie", GenreColonne.Date), new("Sortie"), new("Code"), new("Équipement"),
-             new("Statut", GenreColonne.StatutSortieEquipement), new("Parti le", GenreColonne.Horodatage), new("Rentré le", GenreColonne.Horodatage)]),
+             new("Statut", GenreColonne.StatutSortieEquipement), new("Parti le", GenreColonne.Horodatage), new("Rentré le", GenreColonne.Horodatage),
+             new("Adhérent")]),
+        ("adherents.csv",
+            "SELECT nom, prenom, niveau, licence, telephone, nitrox, actif FROM adherent ORDER BY nom, prenom",
+            [new("Nom"), new("Prénom"), new("Niveau"), new("Licence"), new("Téléphone"), new("Certifié nitrox", GenreColonne.OuiNon), new("Actif", GenreColonne.OuiNon)]),
         ("controles.csv",
             $"""
             SELECT ct.date_controle, e.code, e.libelle, ct.type, ct.resultat, {Moniteur}, ct.notes, ct.saisi_le

@@ -28,6 +28,8 @@ public sealed class Contexte
     public ServiceTypesSortie TypesSortie { get; }
     public ServiceSignalements Signalements { get; }
     public SignalementRepositoryMemoire DepotSignalements { get; }
+    public ServiceAdherents Adherents { get; }
+    public AdherentRepositoryMemoire DepotAdherents { get; }
 
     public Contexte()
     {
@@ -42,7 +44,9 @@ public sealed class Contexte
         Scan = new ServiceScan(equipements, sorties, journal, Horloge, Reglages, Compteur);
         var types = new TypeSortieRepositoryMemoire(Db);
         TypesSortie = new ServiceTypesSortie(types, Gestion);
-        Sorties = new ServiceSortie(sorties, moniteurs, journal, Horloge, Reglages, Gestion, types);
+        DepotAdherents = new AdherentRepositoryMemoire(Db);
+        Adherents = new ServiceAdherents(DepotAdherents, journal, Horloge, Gestion);
+        Sorties = new ServiceSortie(sorties, moniteurs, journal, Horloge, Reglages, Gestion, types, DepotAdherents);
         Inventaire = new ServiceInventaire(equipements, categories, journal, Horloge, Reglages, Gestion, sorties, DepotRevisions);
         ServiceReglages = new ServiceReglages(Reglages, Stockage, Sauvegardes, Gestion);
         DepotSignalements = new SignalementRepositoryMemoire(Db);

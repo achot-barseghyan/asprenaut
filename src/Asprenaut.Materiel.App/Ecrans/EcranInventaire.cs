@@ -474,7 +474,8 @@ public sealed class EcranInventaire : EcranBase
     private static string SousTitre(LigneInventaire l)
     {
         var fiche = string.Join(" ", new[] { l.Marque, l.Modele }.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim()));
-        return fiche.Length > 0 ? $"{fiche} · {l.Categorie}" : l.Categorie;
+        var ligne = fiche.Length > 0 ? $"{fiche} · {l.Categorie}" : l.Categorie;
+        return l.Nitrox ? $"Nitrox · {ligne}" : ligne;
     }
 
     /// <summary>Le nom souligné ouvre la fiche de suivi, comme le bouton « Suivi ».</summary>

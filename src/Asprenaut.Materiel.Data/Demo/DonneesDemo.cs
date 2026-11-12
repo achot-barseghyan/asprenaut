@@ -34,6 +34,19 @@ public static class DonneesDemo
         await cx.ExecuteAsync(sqlMoniteur, new { nom = "Durand", prenom = "Pascal", niveau = "MF1", telephone = "06 12 34 56 78", tiv = 1 }, tx);
         await cx.ExecuteAsync(sqlMoniteur, new { nom = "Lemoine", prenom = "Sophie", niveau = "E3", telephone = "", tiv = 0 }, tx);
 
+        // Adhérents (sorties nominatives : mer, lac).
+        (string Nom, string Prenom, string Niveau, string Licence)[] adherents =
+        [
+            ("Martin", "Julie", "Niveau 2", "A-12-345678"), ("Bernard", "Thomas", "Niveau 3", "A-12-345679"),
+            ("Dubois", "Léa", "Niveau 1", "A-12-345680"), ("Moreau", "Hugo", "Niveau 2", "A-12-345681"),
+            ("Laurent", "Camille", "Niveau 1", "A-12-345682"), ("Petit", "Nicolas", "Niveau 4", "A-12-345683"),
+        ];
+        foreach (var a in adherents)
+        {
+            await cx.ExecuteAsync("INSERT INTO adherent (nom, prenom, niveau, licence, actif) VALUES (@Nom, @Prenom, @Niveau, @Licence, 1);",
+                new { a.Nom, a.Prenom, a.Niveau, a.Licence }, tx); // Pas le tuple : Dapper ne voit pas les noms de ses éléments.
+        }
+
         // (code, libellé, catégorie, taille, état, décalage de révision en jours ou null)
         (string Code, string Libelle, string Categorie, string? Taille, EtatEquipement Etat, int? Revision)[] equipements =
         [

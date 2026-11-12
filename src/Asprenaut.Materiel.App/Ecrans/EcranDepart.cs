@@ -30,9 +30,20 @@ public sealed class EcranDepart : EcranScanBase
 
     private readonly GardeGestion _garde;
 
-    public EcranDepart(ServiceSortie sorties, ServiceScan scan, ServiceInventaire inventaire, ServiceMoniteurs moniteurs, IHorloge horloge, ServiceReglages reglages, INavigation navigation, GardeGestion garde, ServiceTypesSortie typesSortie, ServiceManuels manuels)
+    // Sortie nominative : panneau « À qui est ce détendeur ? » à la place de la zone de scan, vue « Par adhérent ».
+    private readonly ServiceAdherents _adherents;
+    private readonly PanneauAdherent _panneau = new() { Visible = false, Dock = DockStyle.Fill };
+    private readonly Bascule _vue = new("Par équipement", "Par adhérent") { Margin = new Padding(0, 0, 0, 10) };
+    private readonly ListeMateriel _listePersonnes = new(StyleListe.Personne, "Aucun équipement attribué pour l'instant.") { Visible = false };
+    private readonly TableLayoutPanel _carteListe;
+    private bool _nominatif;
+    private LigneSortie? _enAttente;
+
+    public EcranDepart(ServiceSortie sorties, ServiceScan scan, ServiceInventaire inventaire, ServiceMoniteurs moniteurs, IHorloge horloge, ServiceReglages reglages, INavigation navigation, GardeGestion garde, ServiceTypesSortie typesSortie, ServiceManuels manuels,
+        ServiceAdherents adherents)
         : base(navigation, reglages, manuels, ModeScan.Depart)
     {
+        _adherents = adherents;
         _garde = garde;
         _garde.Lier(_supprimer, ActionProtegee.SupprimerSortie);
         _moniteurs = moniteurs;
@@ -49,19 +60,42 @@ public sealed class EcranDepart : EcranScanBase
         _valider.Margin = new Padding(0, 12, 0, 0);
         _valider.Click += (_, _) => Executer(ValiderAsync);
         _filtre.Changement += (_, _) => AfficherListe();
+        _vue.Changement += (_, _) => AfficherListe();
+        _panneau.Choisi += (_, id) => Executer(() => AttribuerAsync(id));
+        _panneau.ScanRefuse += (_, code) => ZoneScan.AfficherMessage(NiveauResultat.Erreur,
+            $"Choisissez d'abord l'adhérent qui prend {_panneau.Code}. Le scan de {code} n'a pas été pris en compte.", code);
+        _panneau.AnnulerScan += (_, _) =>
+        {
+            if (_enAttente is { } ligne)
+            {
+                Executer(() => RetirerAsync(new ElementMateriel(ligne.EquipementId, ligne.Code, ligne.Libelle)));
+            }
+        };
 
+        // Zone de scan, ou panneau « À qui est… ? » au même endroit (le bandeau des messages reste dessous).
+        var zone = new Panel { Margin = Padding.Empty, BackColor = Theme.Fond };
+        ZoneScan.Dock = DockStyle.Fill;
+        zone.Controls.Add(ZoneScan);
+        zone.Controls.Add(_panneau);
         var gauche = Ui.Colonne(
-            (ZoneScan, SizeType.Percent, 100),
+            (zone, SizeType.Percent, 100),
             (ZoneScan.Bandeau, SizeType.Absolute, 76 + 16));
         ZoneScan.Bandeau.Margin = new Padding(0, 16, 0, 0);
         gauche.Margin = new Padding(0, 0, 22, 0);
 
         var carteListe = new Carte();
-        carteListe.Controls.Add(Ui.Colonne(
+        var listes = new Panel { Margin = Padding.Empty, BackColor = Theme.Surface };
+        _liste.Dock = _listePersonnes.Dock = DockStyle.Fill;
+        listes.Controls.Add(_liste);
+        listes.Controls.Add(_listePersonnes);
+        _carteListe = Ui.Colonne(
             (EnteteListe(Ui.TitreCarte("Matériel de la sortie"), _compte), SizeType.Absolute, HauteurEnteteListe),
+            (_vue, SizeType.Absolute, 0), // 44 + 10 pour une sortie nominative.
             (_filtre, SizeType.Absolute, 44 + 10),
-            (_liste, SizeType.Percent, 100),
-            (_valider, SizeType.Absolute, 56 + 12)));
+            (listes, SizeType.Percent, 100),
+            (_valider, SizeType.Absolute, 56 + 12));
+        _vue.Visible = false;
+        carteListe.Controls.Add(_carteListe);
 
         // Rangée de droite à gauche : « Modifier la sortie » tout à droite, « Supprimer » à sa gauche (sortie vide seulement).
         Composer(Ui.Colonnes((gauche, SizeType.Percent, 58), (carteListe, SizeType.Percent, 42)), _modifier, _supprimer);
@@ -86,10 +120,77 @@ public sealed class EcranDepart : EcranScanBase
         _valider.Style = enPreparation ? StyleBouton.Depart : StyleBouton.Retour;
         _valider.Visible = _statut != StatutSortie.Cloturee;
 
+        // Sortie nominative : un équipement sans adhérent bloque le scan suivant et la validation.
+        _nominatif = resume.Nominatif;
+        var etaitEnAttente = _enAttente is not null;
+        _enAttente = ServiceSortie.AAttribuer(_nominatif, lignes);
+        if (_enAttente is { } attente)
+        {
+            var tous = await _adherents.ListerPourDepartAsync();
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            _panneau.Afficher(attente, ServiceSortie.AdherentsRecents(lignes), tous);
+            _valider.Enabled = false;
+            _valider.Text = $"Attribuez {attente.Code} avant de valider";
+            _valider.Icone = Icones.Cadenas;
+        }
+        else
+        {
+            _valider.Enabled = true;
+        }
+
+        _panneau.Visible = _enAttente is not null;
+        ZoneScan.Visible = _enAttente is null;
+        var vueVisible = _nominatif;
+        if (_vue.Visible != vueVisible)
+        {
+            _vue.Visible = vueVisible;
+            _carteListe.RowStyles[1].Height = vueVisible ? Dessin.Echelle(this, 44 + 10) : 0;
+        }
+
         await ChargerManuelsAsync();
         _lignes = lignes;
         _filtre.Afficher(lignes.Count, Categories(lignes, l => true));
         AfficherListe();
+
+        // Le focus suit : recherche d'adhérent quand un équipement attend, sinon le champ de scan (le pistolet y tape).
+        if (etaitEnAttente != (_enAttente is not null) && IsHandleCreated)
+        {
+            DonnerFocus();
+        }
+    }
+
+    protected override void DonnerFocus()
+    {
+        if (_enAttente is not null)
+        {
+            _panneau.PrendreFocus();
+        }
+        else
+        {
+            ZoneScan.PrendreFocus();
+        }
+    }
+
+    /// <summary>L'équipement en attente est pris par cet adhérent ; on revient au champ de scan.</summary>
+    private async Task AttribuerAsync(long adherentId)
+    {
+        if (_enAttente is not { } ligne)
+        {
+            return;
+        }
+
+        var resultat = await _sorties.AttribuerAdherentAsync(SortieId, ligne.EquipementId, adherentId);
+        ZoneScan.AfficherMessage(resultat.Reussi ? NiveauResultat.Succes : NiveauResultat.Erreur, resultat.Message, ligne.Code);
+        if (!resultat.Reussi)
+        {
+            _panneau.Signaler(resultat.Message);
+        }
+
+        await RafraichirAsync();
     }
 
     /// <summary>Catégories présentes dans la sortie (ordre alphabétique), avec le nombre d'équipements retenus.</summary>
@@ -102,6 +203,22 @@ public sealed class EcranDepart : EcranScanBase
     {
         var enPreparation = _statut == StatutSortie.EnPreparation;
         var aujourdHui = _horloge.AujourdHui;
+
+        // Sortie nominative, « Par adhérent » : une ligne par personne avec ses codes.
+        var parAdherent = _nominatif && _vue.SelectedIndex == 1;
+        _listePersonnes.Visible = parAdherent;
+        _liste.Visible = !parAdherent;
+        if (parAdherent)
+        {
+            _listePersonnes.Afficher(_lignes
+                .Where(l => _filtre.Accepte(l.Categorie) && l.AdherentId is not null)
+                .GroupBy(l => l.AdherentId!.Value)
+                .OrderByDescending(g => g.Max(l => l.ScanneDepartLe))
+                .Select(g => new ElementMateriel(-g.Key, string.Join(" · ", g.OrderBy(l => l.ScanneDepartLe).Select(l => l.Code)),
+                    g.First().AdherentNom ?? "", Alerte: Libelles.Pluriel(g.Count(), "équipement"), CouleurAlerte: Theme.TexteSecondaireClair)));
+            return;
+        }
+
         _liste.DefinirVide(_filtre.Selection is null
             ? "Rien n'est encore scanné. Scannez la première étiquette."
             : "Rien dans cette catégorie.");
@@ -112,11 +229,13 @@ public sealed class EcranDepart : EcranScanBase
                 .Select(l => new ElementMateriel(
                     l.EquipementId,
                     l.Code,
-                    string.IsNullOrWhiteSpace(l.Taille) ? l.Libelle : $"{l.Libelle} · {l.Taille}",
+                    (string.IsNullOrWhiteSpace(l.Taille) ? l.Libelle : $"{l.Libelle} · {l.Taille}") + (l.Nitrox ? " · nitrox" : ""),
                     l.Categorie,
                     Alerte: l.RevisionDepassee(aujourdHui) ? $"Révision dépassée ({Libelles.Date(l.EcheanceDepassee(aujourdHui)!.Value)})" : null,
                     CouleurAlerte: Theme.Avertissement,
-                    ManuelId: ManuelDe(l.EquipementId))),
+                    ManuelId: ManuelDe(l.EquipementId),
+                    Adherent: _nominatif ? l.AdherentNom : null,
+                    EnAttente: _enAttente?.LigneId == l.LigneId)),
             enPreparation ? "Retirer" : null,
             Icones.Croix,
             element => Executer(() => RetirerAsync(element)),

@@ -37,6 +37,9 @@ public sealed class SortieResume
     public int NbRendus { get; set; }
     public int NbManquants { get; set; }
 
+    /// <summary>Sortie nominative : chaque équipement est attribué à un adhérent.</summary>
+    public bool Nominatif { get; set; }
+
     public int NbDehors => NbTotal - NbRendus - NbManquants;
 
     /// <summary>Part rendue, entre 0 et 1.</summary>
@@ -58,6 +61,15 @@ public sealed class LigneSortie
     public StatutSortieEquipement Statut { get; set; }
     public DateTime ScanneDepartLe { get; set; }
     public DateTime? ScanneRetourLe { get; set; }
+
+    /// <summary>Adhérent qui a pris l'équipement (sortie nominative), ou null.</summary>
+    public long? AdherentId { get; set; }
+
+    /// <summary>Bloc ou détendeur nitrox : réservé à un adhérent certifié nitrox.</summary>
+    public bool Nitrox { get; set; }
+
+    /// <summary>« Julie Martin », ou null.</summary>
+    public string? AdherentNom { get; set; }
 
     /// <summary>Révision, TIV ou requalification dépassée.</summary>
     public bool RevisionDepassee(DateOnly aujourdHui) =>
@@ -105,6 +117,9 @@ public sealed class LigneInventaire
     public string Manometre { get; set; } = "";
     public string Octopus { get; set; } = "";
     public string NumeroOctopus { get; set; } = "";
+
+    /// <summary>Bloc ou détendeur nitrox.</summary>
+    public bool Nitrox { get; set; }
 
     /// <summary>Date du dernier contrôle « révision » enregistré (colonne « Date de la dernière révision »).</summary>
     public DateOnly? DerniereRevision { get; set; }

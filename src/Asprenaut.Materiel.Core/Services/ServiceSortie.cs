@@ -23,24 +23,25 @@ public sealed class ServiceSortie(
     IHorloge horloge,
     Reglages reglages,
     ServiceGestion? gestion = null,
-    ITypeSortieRepository? types = null)
+    ITypeSortieRepository? types = null,
+    IAdherentRepository? adherents = null)
 {
     /// <summary>
     /// Type de la sortie : celui choisi (<see cref="NouvelleSortie.TypeId"/>), qui doit être proposé, ou rester celui
     /// de la sortie modifiée s'il a été masqué depuis ; sans choix, le premier type proposé de la famille demandée.
     /// Retourne (famille, id du type) ou une erreur.
     /// </summary>
-    private async Task<(TypeSortie Famille, long? TypeId, int UtilisationsDuType, ResultatOperation? Erreur)> TypeAsync(NouvelleSortie demande, long? typeActuel, CancellationToken ct)
+    private async Task<(TypeSortie Famille, long? TypeId, int UtilisationsDuType, bool Nominatif, ResultatOperation? Erreur)> TypeAsync(NouvelleSortie demande, long? typeActuel, CancellationToken ct)
     {
         if (demande.Utilisations is < TypeDeSortie.UtilisationsMin or > TypeDeSortie.UtilisationsMax)
         {
-            return (demande.Type, null, 1, ResultatOperation.Echec(
+            return (demande.Type, null, 1, false, ResultatOperation.Echec(
                 $"Utilisations : entre {TypeDeSortie.UtilisationsMin} et {TypeDeSortie.UtilisationsMax} par sortie."));
         }
 
         if (types is null)
         {
-            return (demande.Type, demande.TypeId, TypeDeSortie.UtilisationsParDefaut(demande.Type), null);
+            return (demande.Type, demande.TypeId, TypeDeSortie.UtilisationsParDefaut(demande.Type), false, null);
         }
 
         var tous = await types.ListerAsync(ct);
@@ -48,8 +49,8 @@ public sealed class ServiceSortie(
             ? tous.FirstOrDefault(t => t.Id == id && (t.Actif || t.Id == typeActuel))
             : tous.FirstOrDefault(t => t.Actif && t.Pictogramme == demande.Type);
         return type is null
-            ? (demande.Type, null, 1, ResultatOperation.Echec("Choisissez un type de sortie."))
-            : (type.Pictogramme, type.Id, type.Utilisations, null);
+            ? (demande.Type, null, 1, false, ResultatOperation.Echec("Choisissez un type de sortie."))
+            : (type.Pictogramme, type.Id, type.Utilisations, type.Nominatif, null);
     }
 
     /// <summary>
@@ -93,7 +94,7 @@ public sealed class ServiceSortie(
             return ResultatOperation.Echec(moniteur?.EstClasse == true ? "Cette classe n'est pas disponible." : "Ce moniteur n'est pas disponible.");
         }
 
-        var (famille, typeId, utilisationsDuType, erreurType) = await TypeAsync(demande, null, ct);
+        var (famille, typeId, utilisationsDuType, nominatif, erreurType) = await TypeAsync(demande, null, ct);
         if (erreurType is not null)
         {
             return erreurType;
@@ -117,6 +118,7 @@ public sealed class ServiceSortie(
             Lieu = demande.Lieu.Trim(),
             Notes = demande.Notes.Trim(),
             Statut = StatutSortie.EnPreparation,
+            Nominatif = nominatif,
         };
         var id = await sorties.AjouterAsync(sortie, ct);
         await JournaliserAsync(ActionsJournal.SortieCreee, $"Sortie {id} « {intitule} » du {Libelles.Date(demande.Date)} ({moniteur.NomComplet})", ct, sortieId: id);
@@ -159,7 +161,7 @@ public sealed class ServiceSortie(
             return ResultatOperation.Echec(moniteur?.EstClasse == true ? "Cette classe n'est pas disponible." : "Ce moniteur n'est pas disponible.");
         }
 
-        var (famille, typeId, utilisationsDuType, erreurType) = await TypeAsync(demande, sortie.TypeId, ct);
+        var (famille, typeId, utilisationsDuType, nominatif, erreurType) = await TypeAsync(demande, sortie.TypeId, ct);
         if (erreurType is not null)
         {
             return erreurType;
@@ -172,6 +174,12 @@ public sealed class ServiceSortie(
         if (utilisations != attendues && gestion?.Exiger(ActionProtegee.CompteurSortie) is { Reussi: false } refusCompteur)
         {
             return refusCompteur;
+        }
+
+        // Nominative : reprise du nouveau type s'il change ; sinon la sortie garde la sienne (réglage du type changé depuis).
+        if (typeId != sortie.TypeId)
+        {
+            sortie.Nominatif = nominatif;
         }
 
         sortie.Utilisations = utilisations;
@@ -236,6 +244,12 @@ public sealed class ServiceSortie(
             return ResultatOperation.Echec("Aucun matériel scanné. Scannez au moins un équipement.");
         }
 
+        // Sortie nominative : chaque équipement doit avoir son adhérent.
+        if (sortie.Nominatif && AAttribuer(true, await sorties.ListerLignesAsync(sortieId, ct)) is { } enAttente)
+        {
+            return ResultatOperation.Echec($"Attribuez {enAttente.Code} à un adhérent avant de valider le départ.");
+        }
+
         sortie.Statut = StatutSortie.EnCours;
         sortie.DepartValideLe = horloge.MaintenantUtc;
         await sorties.MettreAJourAsync(sortie, ct);
@@ -296,11 +310,22 @@ public sealed class ServiceSortie(
 
         if (manquants.Count > 0)
         {
-            var codes = (await sorties.ListerLignesAsync(sortieId, ct)).ToDictionary(l => l.EquipementId, l => l.Code);
+            // Sortie nominative : l'entrée du journal garde l'adhérent qui avait l'équipement (« pris par Julie Martin »).
+            var lignes = (await sorties.ListerLignesAsync(sortieId, ct)).ToDictionary(l => l.EquipementId);
             foreach (var a in manquants)
             {
-                var code = codes.GetValueOrDefault(a.EquipementId, $"Équipement {a.EquipementId}");
-                await JournaliserAsync(ActionsJournal.ManquantDeclare, $"{code} manquant (sortie {sortieId})", ct, a.EquipementId, sortieId);
+                var ligne = lignes.GetValueOrDefault(a.EquipementId);
+                var code = ligne?.Code ?? $"Équipement {a.EquipementId}";
+                var pris = ligne?.AdherentNom is { Length: > 0 } nom ? $", pris par {nom}" : "";
+                await journal.AjouterAsync(new EntreeJournal
+                {
+                    Horodatage = horloge.MaintenantUtc,
+                    Action = ActionsJournal.ManquantDeclare,
+                    Details = $"{code} manquant (sortie {sortieId}){pris}",
+                    EquipementId = a.EquipementId,
+                    SortieId = sortieId,
+                    AdherentId = a.AdherentId,
+                }, ct);
             }
         }
 
@@ -309,6 +334,78 @@ public sealed class ServiceSortie(
         return manquants.Count == 0
             ? ResultatOperation.Ok("Sortie clôturée. Tout est rendu.", sortieId)
             : ResultatOperation.Ok($"Sortie clôturée avec {Libelles.Pluriel(manquants.Count, "manquant")}.", sortieId);
+    }
+
+    // ---------------------------------------------------------------- Sorties nominatives
+
+    /// <summary>
+    /// Équipement d'une sortie nominative qui attend son adhérent (le dernier scanné d'abord), ou null.
+    /// Tant qu'il y en a un, le scan suivant et la validation du départ sont refusés.
+    /// </summary>
+    public static LigneSortie? AAttribuer(bool nominatif, IEnumerable<LigneSortie> lignes) =>
+        nominatif
+            ? lignes.Where(l => l.Statut == StatutSortieEquipement.Dehors && l.AdherentId is null)
+                .OrderByDescending(l => l.ScanneDepartLe).ThenByDescending(l => l.LigneId).FirstOrDefault()
+            : null;
+
+    /// <summary>
+    /// Raccourcis du départ : les derniers adhérents choisis dans cette sortie (le plus récent d'abord), avec le nombre
+    /// d'équipements de chacun. Un plongeur prend souvent bloc, gilet et détendeur à la suite.
+    /// </summary>
+    public static IReadOnlyList<AdherentRecent> AdherentsRecents(IEnumerable<LigneSortie> lignes, int nombre = 3) =>
+        lignes.Where(l => l.AdherentId is not null)
+            .GroupBy(l => l.AdherentId!.Value)
+            .Select(g => (Recent: new AdherentRecent(g.Key, g.First().AdherentNom ?? "", g.Count()),
+                Dernier: g.Max(l => (l.ScanneDepartLe, l.LigneId))))
+            .OrderByDescending(x => x.Dernier)
+            .Take(nombre)
+            .Select(x => x.Recent)
+            .ToList();
+
+    /// <summary>
+    /// Sortie nominative : l'équipement scanné est pris par cet adhérent (actif). Possible tant qu'il est dehors,
+    /// pour corriger aussi une attribution.
+    /// </summary>
+    public async Task<ResultatOperation> AttribuerAdherentAsync(long sortieId, long equipementId, long adherentId, CancellationToken ct = default)
+    {
+        if (await sorties.ObtenirAsync(sortieId, ct) is not { } sortie)
+        {
+            return ResultatOperation.Echec("Sortie introuvable.");
+        }
+
+        if (!sortie.Nominatif)
+        {
+            return ResultatOperation.Echec("Cette sortie ne demande pas le nom des adhérents.");
+        }
+
+        if (sortie.Statut == StatutSortie.Cloturee)
+        {
+            return ResultatOperation.Echec("Cette sortie est clôturée.");
+        }
+
+        var affectation = await sorties.ObtenirAffectationAsync(sortieId, equipementId, ct);
+        if (affectation is null || affectation.Statut != StatutSortieEquipement.Dehors)
+        {
+            return ResultatOperation.Echec("Cet équipement n'est plus dans la sortie.");
+        }
+
+        var adherent = adherents is null ? null : await adherents.ObtenirAsync(adherentId, ct);
+        if (adherent is null)
+        {
+            return ResultatOperation.Echec("Cet adhérent n'existe plus.");
+        }
+
+        // Règles : un adhérent désactivé ne prend pas de matériel ; un bloc ou un détendeur nitrox ne part qu'avec un certifié nitrox.
+        var ligne = (await sorties.ListerLignesAsync(sortieId, ct)).FirstOrDefault(l => l.EquipementId == equipementId);
+        var code = ligne?.Code ?? "";
+        if (ServiceAdherents.RefusPour(adherent, ligne?.Nitrox ?? false, code) is { } refus)
+        {
+            return ResultatOperation.Echec(refus);
+        }
+
+        await sorties.AttribuerAdherentAsync(affectation.Id, adherent.Id, ct);
+        affectation.AdherentId = adherent.Id;
+        return ResultatOperation.Ok($"{code} attribué à {adherent.NomComplet}.", adherent.Id);
     }
 
     private Task JournaliserAsync(string action, string details, CancellationToken ct, long? equipementId = null, long? sortieId = null) =>

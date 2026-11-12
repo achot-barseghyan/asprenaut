@@ -20,6 +20,16 @@ public abstract class EcranScanBase : EcranBase
     private readonly Label _titreSortie = Ui.Libelle("", Theme.PoliceGrasse(21f));
     private readonly Label _infosSortie = Ui.Libelle("", Theme.Police(10.5f), Theme.TexteSecondaireClair);
 
+    /// <summary>Sortie nominative : « Nom obligatoire à chaque scan » à droite des informations (réglé dans Paramètres).</summary>
+    private readonly Pastille _badgeNominatif = new("Nom obligatoire à chaque scan", Theme.Teinte(Theme.Accent, 0.12f), Theme.AccentClair,
+        police: Theme.PoliceGrasse(8.25f), hauteur: 26)
+    {
+        Visible = false,
+        Bordure = Theme.Teinte(Theme.Accent, 0.40f),
+        Margin = new Padding(10, 0, 0, 0),
+        AccessibleDescription = "Réglé dans Paramètres, types de sortie",
+    };
+
     protected EcranScanBase(INavigation navigation, ServiceReglages reglages, ServiceManuels manuels, ModeScan mode)
     {
         Navigation = navigation;
@@ -61,12 +71,27 @@ public abstract class EcranScanBase : EcranBase
     {
         _titreSortie.AutoEllipsis = true;
         _titreSortie.Margin = new Padding(0, 0, 0, 6);
-        _infosSortie.Margin = Padding.Empty;
-        var textes = Ui.Pile(_titreSortie, _infosSortie);
+        _infosSortie.Margin = new Padding(0, 4, 0, 0);
+        var infos = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Color.Transparent,
+            Margin = Padding.Empty,
+        };
+        infos.Controls.Add(_infosSortie);
+        infos.Controls.Add(_badgeNominatif);
+        var textes = Ui.Pile(_titreSortie, infos);
         textes.Margin = new Padding(18, 0, 12, 0);
 
         var entete = new Carte { Padding = new Padding(26, 20, 26, 20), Margin = new Padding(0, 0, 0, 22) };
         var ligne = Ui.Colonnes((_date, SizeType.Absolute, 62), (textes, SizeType.Percent, 100), (Etapes, SizeType.Absolute, 320));
+
+        // Écran étroit : le badge se raccourcit plutôt que d'être coupé par les étapes.
+        _ligneEntete = ligne;
+        ligne.SizeChanged += (_, _) => AjusterBadge();
         _date.Dock = textes.Dock = Etapes.Dock = DockStyle.None;
         _date.Anchor = AnchorStyles.Left;
         textes.Anchor = AnchorStyles.Left;
@@ -91,8 +116,11 @@ public abstract class EcranScanBase : EcranBase
     {
         SortieId = parametre as long? ?? throw new ArgumentException("Identifiant de sortie attendu.", nameof(parametre));
         await RafraichirAsync();
-        ZoneScan.PrendreFocus();
+        DonnerFocus();
     }
+
+    /// <summary>Focus au chargement : le champ de scan (le Départ d'une sortie nominative peut le donner à la recherche d'adhérent).</summary>
+    protected virtual void DonnerFocus() => ZoneScan.PrendreFocus();
 
     /// <summary>Recharge les données affichées.</summary>
     protected abstract Task RafraichirAsync();
@@ -115,6 +143,34 @@ public abstract class EcranScanBase : EcranBase
         }
 
         _infosSortie.Text = complement is null ? infos : $"{infos} · {complement}";
+        _badgeNominatif.Visible = s.Nominatif;
+        if (_ligneEntete is not null)
+        {
+            AjusterBadge();
+        }
+    }
+
+    private const string BadgeComplet = "Nom obligatoire à chaque scan";
+    private const string BadgeCourt = "Nom obligatoire";
+
+    private TableLayoutPanel? _ligneEntete;
+
+    /// <summary>Place de la colonne du titre (entre la date et les étapes), marges des textes comprises.</summary>
+    private void AjusterBadge()
+    {
+        if (_ligneEntete is not { } ligne || ligne.GetColumnWidths() is not { Length: 3 } colonnes)
+        {
+            return;
+        }
+
+        var largeurDisponible = colonnes[1] - (int)Dessin.Echelle(this, 30);
+        var police = Theme.PoliceGrasse(8.25f);
+        var complet = TextRenderer.MeasureText(BadgeComplet, police).Width + (int)Dessin.Echelle(this, 34);
+        var texte = _infosSortie.PreferredWidth + _badgeNominatif.Margin.Horizontal + complet <= largeurDisponible ? BadgeComplet : BadgeCourt;
+        if (_badgeNominatif.Text != texte)
+        {
+            _badgeNominatif.Definir(texte, Theme.Teinte(Theme.Accent, 0.12f), Theme.AccentClair);
+        }
     }
 
     /// <summary>Hauteur de la ligne d'en-tête d'une carte de liste (marge comprise).</summary>

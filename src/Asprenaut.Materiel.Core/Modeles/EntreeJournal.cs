@@ -13,6 +13,9 @@ public sealed class EntreeJournal
 
     /// <summary>Sortie concernée (création, scans, validation, clôture), ou null.</summary>
     public long? SortieId { get; set; }
+
+    /// <summary>Adhérent concerné (équipement déclaré manquant dans une sortie nominative), ou null.</summary>
+    public long? AdherentId { get; set; }
 }
 
 /// <summary>Noms d'actions utilisés dans le journal.</summary>
@@ -42,4 +45,7 @@ public static class ActionsJournal
     public const string ClasseModifiee = "ClasseModifiee";
     public const string ComposantAjoute = "ComposantAjoute";
     public const string ProblemeSignale = "ProblemeSignale";
+    public const string AdherentCree = "AdherentCree";
+    public const string AdherentModifie = "AdherentModifie";
+    public const string AdherentsImportes = "AdherentsImportes";
 }

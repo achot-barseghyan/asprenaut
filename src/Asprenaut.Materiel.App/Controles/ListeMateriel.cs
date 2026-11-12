@@ -11,7 +11,9 @@ public sealed record ElementMateriel(
     string? Detail = null,
     string? Alerte = null,
     Color? CouleurAlerte = null,
-    long? ManuelId = null);
+    long? ManuelId = null,
+    string? Adherent = null,
+    bool EnAttente = false);
 
 public enum StyleListe
 {
@@ -23,6 +25,12 @@ public enum StyleListe
 
     /// <summary>Matériel rentré : coche verte, fond vert sombre.</summary>
     Rendu,
+
+    /// <summary>
+    /// Un adhérent et ses équipements (départ d'une sortie nominative, « Par adhérent ») : pastille aux initiales,
+    /// nom (<see cref="ElementMateriel.Libelle"/>), codes (<see cref="ElementMateriel.Code"/>).
+    /// </summary>
+    Personne,
 }
 
 /// <summary>Liste verticale défilante de lignes de matériel, avec bouton optionnel par ligne (pictogramme seul).</summary>
@@ -153,7 +161,12 @@ public sealed class ListeMateriel : FlowLayoutPanel
             Margin = new Padding(0, 0, 0, 6);
             Height = element.Alerte is not null && style == StyleListe.Depart ? 70 : 52;
             AccessibleRole = AccessibleRole.ListItem;
-            AccessibleName = $"{element.Code} {element.Libelle}" + (element.Alerte is null ? "" : $", {element.Alerte}");
+            AccessibleName = $"{element.Code} {element.Libelle}" + (element.Alerte is null ? "" : $", {element.Alerte}")
+                + (element.EnAttente ? ", à attribuer" : element.Adherent is { } adherent ? $", pris par {adherent}" : "");
+            if (element.EnAttente)
+            {
+                BackColor = Theme.Sur(Theme.Surface, Theme.Avertissement, 0.08f);
+            }
 
             if (libelleAction is not null && action is not null)
             {
@@ -204,12 +217,34 @@ public sealed class ListeMateriel : FlowLayoutPanel
             using (var pinceau = new SolidBrush(fond))
             {
                 g.FillPath(pinceau, chemin);
+                if (_element.EnAttente)
+                {
+                    // Équipement qui attend son adhérent : cadre jaune en tirets (maquette).
+                    using var tirets = new Pen(Theme.Sur(fond, Theme.Avertissement, 0.6f), E(1)) { DashPattern = [4f, 3f] };
+                    g.DrawPath(tirets, chemin);
+                }
             }
 
             var x = E(10);
             var haut = E(52) / 2;
             switch (_style)
             {
+                case StyleListe.Personne:
+                    {
+                        var d = E(34);
+                        var cercle = new RectangleF(x, haut - (d / 2), d, d);
+                        using (var pinceau = new SolidBrush(Theme.Sur(fond, Theme.Accent, 0.16f)))
+                        using (var bord = new Pen(Theme.Sur(fond, Theme.Accent, 0.45f), E(1)))
+                        {
+                            g.FillEllipse(pinceau, cercle);
+                            g.DrawEllipse(bord, cercle);
+                        }
+
+                        Dessin.Texte(g, Core.Modeles.Libelles.Initiales(_element.Libelle), Theme.PoliceGrasse(9f), Rectangle.Round(cercle), Theme.AccentClair, centre: true);
+                        x = cercle.Right + E(12);
+                        break;
+                    }
+
                 case StyleListe.Depart:
                     {
                         var cote = E(34);
@@ -284,7 +319,37 @@ public sealed class ListeMateriel : FlowLayoutPanel
             var gauche = (int)x;
             Dessin.Texte(g, _element.Libelle, nom, new Rectangle(gauche, y, droite - gauche, hNom), _style == StyleListe.Rendu ? Theme.TexteDoux : Theme.Texte);
             var ligneCode = _element.Detail is null ? _element.Code : $"{_element.Code} · {_element.Detail}";
-            Dessin.Texte(g, ligneCode, code, new Rectangle(gauche, y + hNom + (int)E(2), droite - gauche, hCode), _style == StyleListe.Depart ? Theme.Accent : Theme.TexteSecondaire);
+            var yCode = y + hNom + (int)E(2);
+            var couleurCode = _style is StyleListe.Depart or StyleListe.Personne ? Theme.Accent : Theme.TexteSecondaire;
+            if (!_element.EnAttente && _element.Adherent is null)
+            {
+                Dessin.Texte(g, ligneCode, code, new Rectangle(gauche, yCode, droite - gauche, hCode), couleurCode);
+            }
+            else
+            {
+                // Sortie nominative : le code, puis l'adhérent qui l'a pris, ou l'étiquette « À attribuer ».
+                // Mesure avec la marge de TextRenderer (celle du dessin), sinon le code est coupé par « … ».
+                var largeurCode = Math.Min(droite - gauche, TextRenderer.MeasureText(g, ligneCode, code).Width);
+                Dessin.Texte(g, ligneCode, code, new Rectangle(gauche, yCode, largeurCode, hCode), couleurCode);
+                var xNom = gauche + largeurCode + (int)E(6);
+                if (_element.EnAttente)
+                {
+                    var police = Theme.PoliceGrasse(7.5f);
+                    var texte = "À attribuer";
+                    var r = new RectangleF(xNom, yCode + ((hCode - E(18)) / 2), TextRenderer.MeasureText(g, texte, police).Width + E(8), E(18));
+                    using (var chemin = Dessin.Arrondi(r, r.Height / 2))
+                    using (var pinceau = new SolidBrush(Theme.Sur(fond, Theme.Avertissement, 0.18f)))
+                    {
+                        g.FillPath(pinceau, chemin);
+                    }
+
+                    Dessin.Texte(g, texte, police, Rectangle.Round(r), Theme.Avertissement, centre: true);
+                }
+                else if (xNom < droite)
+                {
+                    Dessin.Texte(g, _element.Adherent!, Theme.PoliceTitre(8.5f), new Rectangle(xNom, yCode - (int)E(1), droite - xNom, hCode + (int)E(2)), Theme.TexteDoux);
+                }
+            }
 
             if (_style == StyleListe.Depart && _element.Alerte is { } alerte)
             {

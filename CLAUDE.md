@@ -46,7 +46,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   (échéancier, contrôles, atelier, séances TIV), `ServiceReglages`, `ServiceHistorique` (journal lisible, période, regroupement,
   export CSV, vie d'un équipement, utilisations d'un équipement), `ServiceGestion` (mode consultation / mode gestion, code gestionnaire),
   `ServiceBilan` (bilan de saison pour l'AG), `ServiceManuels` (notices des fabricants), `ServiceSignalements` (problèmes
-  signalés au retour ou depuis l'inventaire). Toutes les règles métier sont ici.
+  signalés au retour ou depuis l'inventaire), `ServiceAdherents` (adhérents : liste, filtres, fiche, ajout, import Excel). Toutes les règles métier sont ici.
 - **Core/Resultats** : `ResultatScan` (Niveau Succes/Avertissement/Erreur, Message, Equipement, `ActionProposee`, Code, AutreSortieId),
   `ResultatOperation`, `ApercuCloture`. Les cas métier ne lèvent pas d'exception : ils retournent un résultat.
 - **Core/Saisie** : `CodeScanne.Lire` / `Nettoyer` et `AntiRebond` — logique pure, testée. Médailles QR du club :
@@ -65,7 +65,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   fenêtres vers la « parking window » de WinForms, 1,4 s pour Paramètres). Écrans dans `Ecrans/` (héritent d'`EcranBase` ; Départ/Retour héritent d'`EcranScanBase`
   qui sérialise les scans et fournit fil d'Ariane + carte d'en-tête via `Composer(corps)`).
 - **Maquette** : https://claude.ai/artifact/8op5sAWFbf4mRQCxzd37aa (Sorties, Nouvelle sortie, Départ, Retour, Inventaire, Manuels,
-  Moniteurs, Historique, Bilan de saison, Révisions, Paramètres, Déverrouillage, Utilisations d'un équipement). Polices Sora/Manrope remplacées par Segoe UI Variable ; pas de fond dégradé ni de bulles animées.
+  Moniteurs (page « Membres du club »), Historique, Bilan de saison, Révisions, Paramètres, Déverrouillage, Utilisations d'un équipement). Polices Sora/Manrope remplacées par Segoe UI Variable ; pas de fond dégradé ni de bulles animées.
 - **Briques d'interface** (`Controles/`) : `Carte`, `ControleDessine` (base des contrôles peints), `AnneauProgression`,
   `IndicateurEtapes`, `PastilleDate`, `Pastille`, `Picto`, `GrilleAdaptative` (colonnes auto, ajuste sa ligne de TableLayoutPanel),
   `Tuile`, `FilAriane`, `BarreRecherche`, `ChampSaisie` (`Icone` et `ADroite` optionnels), `ChampDate` (remplace le DateTimePicker, blanc et en anglais),
@@ -297,6 +297,32 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     du filtre (`ExporterUtilisationsCsv`). `ListerPassagesAsync` ramène aussi type, utilisations (de la sortie et du type) et genre
     du responsable.
 
+30. Sorties nominatives et adhérents (`ServiceAdherents`, `ServiceSortie.AttribuerAdherentAsync`, migration 014, maquettes « Départ du
+    matériel », « Membres du club », Paramètres › Types de sortie) : case « Nom de l'adhérent à chaque scan » par type (`CaseOption`,
+    `ServiceTypesSortie.ChangerNominatifAsync`, action Paramètres ; Mer et Lac d'origine). Une sortie reprend le réglage de son type à
+    sa création (et si son type change en préparation) : changer le type ensuite ne la touche pas. Sortie nominative : badge « Nom
+    obligatoire à chaque scan » ; chaque scan attend son adhérent (`ServiceSortie.AAttribuer`) : le scan suivant est refusé
+    (`ServiceScan`), la validation aussi (« Attribuez A07 à un adhérent… »). Départ : `PanneauAdherent` remplace la zone de scan
+    (« À qui est ce détendeur ? », 3 derniers adhérents de la sortie `AdherentsRecents`, liste des actifs filtrée sans accents,
+    flèches + Entrée ; un code tapé par le pistolet dans la recherche est refusé), puis le focus revient au champ de scan ; liste
+    « À attribuer » / nom de l'adhérent, vue « Par adhérent ». « Annuler ce scan » retire l'équipement en attente (aussi après la
+    validation). Retour : nom de l'adhérent sur le matériel dehors. Clôture : `ManquantDeclare` garde `AdherentId` (« pris par … »
+    dans l'historique). Adhérents (onglet de `EcranMoniteurs`, menu « Membres ») : jamais responsables de sortie, jamais supprimés
+    (inactif : plus proposé au départ, gardé dans l'historique) ; nom et prénom obligatoires, licence unique ; filtres Tous / Matériel
+    dehors / Non rendu ; fiche (matériel en ce moment, non rendu, dernières sorties nominatives, Modifier) ; ajouter et importer
+    demandent le code (action Moniteurs). Import (`ImporterAsync`, `LireTableau`) : en-tête « Nom » + « Prénom » (Niveau, Licence,
+    Téléphone facultatifs), mise à jour par licence (sinon nom + prénom), ajout des autres, personne retiré ; fichier .xlsx ou .csv
+    lu par `Infrastructure/LecteurTableur` (zip XML, sans bibliothèque). Export : `adherents.csv`, colonne Adhérent du matériel des sorties.
+
+31. Nitrox et adhérents désactivés (migration 015) : case « Nitrox » de la fiche des blocs et des détendeurs seulement
+    (`ServiceInventaire.PeutEtreNitrox`, vidée pour les autres catégories, journal « nitrox » / « plus nitrox ») ; « Certifié nitrox »
+    sur l'adhérent (formulaire, pastille NITROX, colonne « Nitrox » oui / non de l'import : absente = inchangé). Au départ d'une sortie
+    nominative, `ServiceAdherents.RefusPour` (utilisé par `AttribuerAdherentAsync`) refuse un adhérent désactivé et un équipement nitrox
+    pour un adhérent non certifié : l'équipement reste en attente. Le panneau l'annonce (« nitrox : adhérent certifié nitrox »),
+    met les certifiés en premier et marque les autres « pas certifié nitrox ». Fiche adhérent : « Désactiver » (confirmation) /
+    « Réactiver » (`ChangerActifAsync`, action Moniteurs) ; désactivé : ne sort plus de matériel, gardé dans la liste (à la fin)
+    pour être réactivé. Sortie non nominative : pas de contrôle nitrox.
+
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
 à côté de la base d'essai : les essais ne touchent jamais les réglages réels. Préfixe des étiquettes : `CodeScanne.Nettoyer(brut, prefixe)`.
@@ -324,12 +350,15 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   de la base, non copiés par les sauvegardes de la base) ; 010 : codes des médailles (DET-007 → A07, GIL-012 → S12, journal
   corrigé ; un code déjà pris reste inchangé) ; 011 : controle.composant (vide = équipement complet) ; 012 : composant (equipement_id + role, numero_serie, fabrication,
   mise_en_service, origine CHECK Neuve/Recuperee) ; 013 : signalement (cause, gravite CHECK ASurveiller/HorsService, precision,
-  signale_le, mis_hors_service 0/1, traite_le ; sortie_id ON DELETE SET NULL ; index partiel `ux_signalement_ouvert`).
+  signale_le, mis_hors_service 0/1, traite_le ; sortie_id ON DELETE SET NULL ; index partiel `ux_signalement_ouvert`) ;
+  014 : adherent (nom, prenom, niveau, licence unique si renseignée `ux_adherent_licence`, telephone, actif), type_sortie.nominatif
+  (Mer et Lac à 1), sortie.nominatif (0 pour les sorties existantes), sortie_equipement.adherent_id, journal.adherent_id.
+  015 : equipement.nitrox et adherent.nitrox (0/1).
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/014_xxx.sql`, sans jamais modifier un script déjà livré
+- Nouvelle migration : ajouter `Migrations/016_xxx.sql`, sans jamais modifier un script déjà livré
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.

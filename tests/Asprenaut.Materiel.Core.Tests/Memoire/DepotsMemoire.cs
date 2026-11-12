@@ -15,6 +15,7 @@ public sealed class BaseMemoire
     public List<Controle> Controles { get; } = [];
     public List<DetailComposant> Composants { get; } = [];
     public List<TypeDeSortie> TypesSortie { get; } = [];
+    public List<Adherent> Adherents { get; } = [];
 
     private long _sequence;
 
@@ -89,6 +90,7 @@ public sealed class EquipementRepositoryMemoire(BaseMemoire db) : IEquipementRep
                     ModeleDeuxiemeEtage = e.ModeleDeuxiemeEtage,
                     NumeroDeuxiemeEtage = e.NumeroDeuxiemeEtage,
                     DirectSystem = e.DirectSystem,
+                    Nitrox = e.Nitrox,
                     Manometre = e.Manometre,
                     Octopus = e.Octopus,
                     NumeroOctopus = e.NumeroOctopus,
@@ -208,9 +210,18 @@ public sealed class SortieRepositoryMemoire(BaseMemoire db) : ISortieRepository
                     Statut = a.Statut,
                     ScanneDepartLe = a.ScanneDepartLe,
                     ScanneRetourLe = a.ScanneRetourLe,
+                    AdherentId = a.AdherentId,
+                    AdherentNom = db.Adherents.FirstOrDefault(x => x.Id == a.AdherentId)?.NomComplet,
+                    Nitrox = e.Nitrox,
                 };
             })
             .ToList());
+
+    public Task AttribuerAdherentAsync(long affectationId, long? adherentId, CancellationToken ct = default)
+    {
+        db.Affectations.First(a => a.Id == affectationId).AdherentId = adherentId;
+        return Task.CompletedTask;
+    }
 
     public Task<IReadOnlyList<PassageSortie>> ListerPassagesAsync(long equipementId, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<PassageSortie>>(db.Affectations
@@ -323,6 +334,7 @@ public sealed class SortieRepositoryMemoire(BaseMemoire db) : ISortieRepository
             NbTotal = lignes.Count,
             NbRendus = lignes.Count(a => a.Statut == StatutSortieEquipement.Rendu),
             NbManquants = lignes.Count(a => a.Statut == StatutSortieEquipement.Manquant),
+            Nominatif = s.Nominatif,
         };
     }
 }
@@ -367,6 +379,7 @@ public sealed class JournalRepositoryMemoire(BaseMemoire db) : IJournalRepositor
                     SortieTypeNom = db.TypesSortie.FirstOrDefault(x => s is not null && x.Id == s.TypeId)?.Nom,
                     SortieLieu = s?.Lieu,
                     MoniteurNom = db.Moniteurs.FirstOrDefault(m => m.Id == s?.MoniteurId)?.NomComplet,
+                    AdherentNom = db.Adherents.FirstOrDefault(a => a.Id == j.AdherentId)?.NomComplet,
                     SortieNbEquipements = lignes.Count,
                     SortieNbManquants = lignes.Count(a => a.Statut == StatutSortieEquipement.Manquant),
                 };

@@ -9,7 +9,7 @@ namespace Asprenaut.Materiel.Data.Depots;
 public sealed class TypeSortieRepository(FabriqueConnexion fabrique) : ITypeSortieRepository
 {
     private const string Select = """
-        SELECT t.id, t.nom, t.pictogramme, t.actif, t.ordre, t.utilisations,
+        SELECT t.id, t.nom, t.pictogramme, t.actif, t.ordre, t.utilisations, t.nominatif,
                (SELECT COUNT(*) FROM sortie s WHERE s.type_sortie_id = t.id) AS nb_sorties
         FROM type_sortie t
         """;
@@ -31,7 +31,7 @@ public sealed class TypeSortieRepository(FabriqueConnexion fabrique) : ITypeSort
     {
         await using var cx = await fabrique.OuvrirAsync(ct);
         type.Id = await cx.ExecuteScalarAsync<long>(new CommandDefinition(
-            "INSERT INTO type_sortie (nom, pictogramme, actif, ordre, utilisations) VALUES (@Nom, @Pictogramme, @Actif, @Ordre, @Utilisations) RETURNING id;",
+            "INSERT INTO type_sortie (nom, pictogramme, actif, ordre, utilisations, nominatif) VALUES (@Nom, @Pictogramme, @Actif, @Ordre, @Utilisations, @Nominatif) RETURNING id;",
             Parametres(type), cancellationToken: ct));
         return type.Id;
     }
@@ -40,7 +40,7 @@ public sealed class TypeSortieRepository(FabriqueConnexion fabrique) : ITypeSort
     {
         await using var cx = await fabrique.OuvrirAsync(ct);
         await cx.ExecuteAsync(new CommandDefinition(
-            "UPDATE type_sortie SET nom = @Nom, pictogramme = @Pictogramme, actif = @Actif, ordre = @Ordre, utilisations = @Utilisations WHERE id = @Id;",
+            "UPDATE type_sortie SET nom = @Nom, pictogramme = @Pictogramme, actif = @Actif, ordre = @Ordre, utilisations = @Utilisations, nominatif = @Nominatif WHERE id = @Id;",
             Parametres(type), cancellationToken: ct));
     }
 
@@ -61,5 +61,6 @@ public sealed class TypeSortieRepository(FabriqueConnexion fabrique) : ITypeSort
         Actif = t.Actif ? 1 : 0,
         t.Ordre,
         t.Utilisations,
+        Nominatif = t.Nominatif ? 1 : 0,
     };
 }

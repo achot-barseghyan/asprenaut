@@ -98,6 +98,29 @@ public sealed class ServiceTypesSortie(ITypeSortieRepository types, ServiceGesti
         return ResultatOperation.Ok("Enregistré.", type.Utilisations);
     }
 
+    /// <summary>
+    /// Case « Nom de l'adhérent à chaque scan » : les sorties de ce type créées ensuite sont nominatives (ou ne le sont plus).
+    /// Les sorties existantes gardent leur réglage.
+    /// </summary>
+    public async Task<ResultatOperation> ChangerNominatifAsync(long id, bool nominatif, CancellationToken ct = default)
+    {
+        if (Autorisation() is { Reussi: false } refus)
+        {
+            return refus;
+        }
+
+        if (await types.ObtenirAsync(id, ct) is not { } type)
+        {
+            return ResultatOperation.Echec("Ce type de sortie n'existe plus.");
+        }
+
+        type.Nominatif = nominatif;
+        await types.MettreAJourAsync(type, ct);
+        return ResultatOperation.Ok(nominatif
+            ? $"« {type.Nom} » : le nom de l'adhérent sera demandé à chaque scan (nouvelles sorties)."
+            : $"« {type.Nom} » : plus de nom demandé au départ (nouvelles sorties).");
+    }
+
     /// <summary>Bouton œil : masque un type proposé, ou réaffiche un type masqué.</summary>
     public async Task<ResultatOperation> BasculerMasqueAsync(long id, CancellationToken ct = default)
     {

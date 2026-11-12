@@ -28,6 +28,9 @@ public sealed class TypeDeSortie
     public string Nom { get; set; } = "";
     public TypeSortie Pictogramme { get; set; } = TypeSortie.Autre;
     public bool Actif { get; set; } = true;
+
+    /// <summary>Nom de l'adhérent demandé à chaque scan au départ (sorties créées ensuite ; Mer et Lac d'origine).</summary>
+    public bool Nominatif { get; set; }
     public int Ordre { get; set; }
 
     /// <summary>Nombre de sorties de ce type (lecture seulement).</summary>

@@ -93,7 +93,7 @@ public sealed class ServiceInventaire(
 
         var taille = string.IsNullOrWhiteSpace(modifie.Taille) ? null : modifie.Taille.Trim();
         var requalification = ServiceRevisions.EstBloc(categorie.Nom) ? modifie.DateRequalification : null;
-        var fiche = Fiche(modifie, EstDetendeur(categorie.Nom));
+        var fiche = Fiche(modifie, categorie.Nom);
         Noter("code", actuel.Code, code);
         Noter("nom", actuel.Libelle, modifie.Libelle.Trim());
         Noter("catégorie", actuel.CategorieId, modifie.CategorieId);
@@ -102,6 +102,7 @@ public sealed class ServiceInventaire(
         Noter("requalification", actuel.DateRequalification, requalification);
         Noter("notes", actuel.Notes, (modifie.Notes ?? "").Trim());
         Noter("fiche", ResumeFiche(actuel), ResumeFiche(fiche));
+        Noter(fiche.Nitrox ? "nitrox" : "plus nitrox", actuel.Nitrox, fiche.Nitrox);
         Noter($"état : {Libelles.De(modifie.Etat).ToLower(Libelles.Culture)}", actuel.Etat, modifie.Etat);
         if (nouvelleRevision is { } dateRevision)
         {
@@ -136,6 +137,9 @@ public sealed class ServiceInventaire(
     }
 
     // ---------------------------------------------------------------- Fiche matériel
+
+    /// <summary>Seuls les blocs et les détendeurs peuvent être « nitrox » (case de la fiche ; vidée pour les autres catégories).</summary>
+    public static bool PeutEtreNitrox(string? categorie) => EstDetendeur(categorie) || ServiceRevisions.EstBloc(categorie ?? "");
 
     /// <summary>Catégorie « Détendeurs » : montage, deuxième étage, D.S, manomètre et octopus.</summary>
     public static bool EstDetendeur(string? categorie)
@@ -386,9 +390,10 @@ public sealed class ServiceInventaire(
     }
 
     /// <summary>Copie nettoyée de la fiche : textes sans espaces superflus, champs du détendeur vidés pour les autres catégories.</summary>
-    private static Equipement Fiche(Equipement e, bool detendeur)
+    private static Equipement Fiche(Equipement e, string categorie)
     {
         static string T(string? s) => (s ?? "").Trim();
+        var detendeur = EstDetendeur(categorie);
         return new Equipement
         {
             Marque = T(e.Marque),
@@ -402,6 +407,7 @@ public sealed class ServiceInventaire(
             Manometre = detendeur ? T(e.Manometre) : "",
             Octopus = detendeur ? T(e.Octopus) : "",
             NumeroOctopus = detendeur ? T(e.NumeroOctopus) : "",
+            Nitrox = PeutEtreNitrox(categorie) && e.Nitrox,
         };
     }
 
@@ -418,6 +424,7 @@ public sealed class ServiceInventaire(
         cible.Manometre = source.Manometre;
         cible.Octopus = source.Octopus;
         cible.NumeroOctopus = source.NumeroOctopus;
+        cible.Nitrox = source.Nitrox;
     }
 
     private static string ResumeFiche(Equipement e) => string.Join("|",
@@ -759,7 +766,7 @@ public sealed class ServiceInventaire(
             return ResultatOperation.Echec("Une date de prochain contrôle est déjà passée. Vérifiez-la.");
         }
 
-        CopierFiche(Fiche(nouveau, EstDetendeur(categorie.Nom)), nouveau);
+        CopierFiche(Fiche(nouveau, categorie.Nom), nouveau);
         nouveau.DateProchaineRevision = prochaine;
         nouveau.Code = code;
         nouveau.Libelle = nouveau.Libelle.Trim();

@@ -46,6 +46,9 @@ public sealed class LigneJournal
     public string? SortieLieu { get; set; }
     public string? MoniteurNom { get; set; }
 
+    /// <summary>Adhérent qui avait l'équipement (manquant d'une sortie nominative), ou null.</summary>
+    public string? AdherentNom { get; set; }
+
     /// <summary>Nombre d'équipements de la sortie (aujourd'hui).</summary>
     public int SortieNbEquipements { get; set; }
 

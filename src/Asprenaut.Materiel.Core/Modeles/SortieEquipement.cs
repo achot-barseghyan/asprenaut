@@ -9,4 +9,7 @@ public sealed class SortieEquipement
     public DateTime ScanneDepartLe { get; set; }
     public DateTime? ScanneRetourLe { get; set; }
     public StatutSortieEquipement Statut { get; set; } = StatutSortieEquipement.Dehors;
+
+    /// <summary>Adhérent qui a pris l'équipement (sortie nominative), ou null.</summary>
+    public long? AdherentId { get; set; }
 }

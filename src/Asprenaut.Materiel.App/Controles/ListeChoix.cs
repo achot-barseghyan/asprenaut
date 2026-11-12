@@ -176,14 +176,34 @@ public sealed class ListeChoix : ScrollableControl
         {
             Focus();
             Selectionner(i);
+            ChoixValide?.Invoke(this, EventArgs.Empty);
         }
     }
 
     protected override bool IsInputKey(Keys keyData) => keyData is Keys.Up or Keys.Down || base.IsInputKey(keyData);
 
+    /// <summary>Choix suivant (+1) ou précédent (−1) : flèches tapées dans un champ de recherche au-dessus de la liste.</summary>
+    public void Deplacer(int sens)
+    {
+        if (_elements.Count > 0)
+        {
+            Selectionner(Math.Clamp(_choix + sens, 0, _elements.Count - 1));
+        }
+    }
+
+    /// <summary>Un clic (ou Entrée) a validé l'élément sous la souris.</summary>
+    public event EventHandler? ChoixValide;
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
+        if (e.KeyCode == Keys.Enter && Choix is not null)
+        {
+            ChoixValide?.Invoke(this, EventArgs.Empty);
+            e.Handled = e.SuppressKeyPress = true;
+            return;
+        }
+
         if (_elements.Count > 0 && e.KeyCode is Keys.Up or Keys.Down)
         {
             Selectionner(Math.Clamp(_choix + (e.KeyCode == Keys.Down ? 1 : -1), 0, _elements.Count - 1));

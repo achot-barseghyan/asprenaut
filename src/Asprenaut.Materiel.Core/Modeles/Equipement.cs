@@ -45,6 +45,9 @@ public sealed class Equipement
 
     public string NumeroOctopus { get; set; } = "";
 
+    /// <summary>Bloc ou détendeur nitrox : lors d'une sortie nominative, seul un adhérent certifié nitrox peut le prendre.</summary>
+    public bool Nitrox { get; set; }
+
     /// <summary>Échéance la plus proche : révision/TIV ou requalification.</summary>
     public DateOnly? ProchaineEcheance =>
         DateProchaineRevision is { } r && DateRequalification is { } q ? (r < q ? r : q) : DateProchaineRevision ?? DateRequalification;
