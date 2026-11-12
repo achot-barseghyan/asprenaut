@@ -65,6 +65,44 @@ public class AntiRebondTests
     }
 }
 
+public class DetecteurRafaleTests
+{
+    private static DetecteurRafale Recevoir(params long[] instants)
+    {
+        var detecteur = new DetecteurRafale();
+        foreach (var t in instants)
+        {
+            detecteur.Caractere(t);
+        }
+
+        return detecteur;
+    }
+
+    [Fact]
+    public void Frappe_du_pistolet_est_une_rafale() =>
+        Assert.True(Recevoir(1_000, 1_008, 1_016, 1_025).EstRafale);
+
+    [Fact]
+    public void Frappe_humaine_n_est_pas_une_rafale() =>
+        Assert.False(Recevoir(1_000, 1_180, 1_350, 1_520).EstRafale);
+
+    [Fact]
+    public void Deux_caracteres_rapides_ne_suffisent_pas() =>
+        Assert.False(Recevoir(1_000, 1_010).EstRafale);
+
+    [Fact]
+    public void Un_caractere_lent_apres_la_rafale_la_coupe() =>
+        Assert.False(Recevoir(1_000, 1_010, 1_020, 1_400).EstRafale);
+
+    [Fact]
+    public void Reinitialiser_efface_la_rafale()
+    {
+        var detecteur = Recevoir(1_000, 1_010, 1_020);
+        detecteur.Reinitialiser();
+        Assert.False(detecteur.EstRafale);
+    }
+}
+
 public class InventaireTests
 {
     private readonly Contexte _ctx = new();

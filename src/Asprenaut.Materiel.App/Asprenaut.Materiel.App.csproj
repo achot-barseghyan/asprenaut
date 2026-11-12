@@ -26,6 +26,8 @@
     <EmbeddedResource Include="Ressources\LogoClub.png" LogicalName="LogoClub.png" />
     <!-- Notices des fabricants installées au premier lancement (Infrastructure\ManuelsFournis). -->
     <EmbeddedResource Include="Ressources\Manuels\*.pdf" LogicalName="Manuels.%(Filename)%(Extension)" />
+    <!-- Son d'un scan réussi au départ et au retour (PCM 16 bits mono, lu par SoundPlayer). -->
+    <EmbeddedResource Include="Ressources\Sons\ScanReussi.wav" LogicalName="Sons.ScanReussi.wav" />
   </ItemGroup>
 
   <ItemGroup>

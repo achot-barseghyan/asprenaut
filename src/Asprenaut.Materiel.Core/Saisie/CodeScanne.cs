@@ -69,6 +69,31 @@ public static partial class CodeScanne
 }
 
 /// <summary>
+/// Reconnaît la frappe d'un pistolet : au moins <c>longueurMin</c> caractères à moins de <c>ecartMaxMs</c> les uns des autres
+/// (une personne ne tape pas aussi vite). Permet de valider le scan sans Entrée, après une courte pause.
+/// Le temps est fourni par l'appelant (millisecondes).
+/// </summary>
+public sealed class DetecteurRafale(int ecartMaxMs = 50, int longueurMin = 3)
+{
+    private long _dernierMs;
+    private int _suite;
+
+    /// <summary>Pause après la rafale avant de valider le code.</summary>
+    public const int PauseValidationMs = 150;
+
+    /// <summary>Les derniers caractères reçus forment-ils une rafale de pistolet ?</summary>
+    public bool EstRafale => _suite >= longueurMin;
+
+    public void Caractere(long instantMs)
+    {
+        _suite = _suite > 0 && instantMs - _dernierMs <= ecartMaxMs ? _suite + 1 : 1;
+        _dernierMs = instantMs;
+    }
+
+    public void Reinitialiser() => _suite = 0;
+}
+
+/// <summary>
 /// Anti-rebond : ignore le même code reçu deux fois dans un court délai
 /// (double lecture du pistolet). Le temps est fourni par l'appelant (millisecondes).
 /// </summary>

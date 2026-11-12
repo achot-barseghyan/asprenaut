@@ -27,10 +27,11 @@ public sealed class CodeScanneEventArgs(string code, string? type = null) : Even
 /// Grande zone de scan. Capte la saisie du pistolet (mode clavier HID : le code puis Entrée)
 /// ou une saisie manuelle, et déclenche <see cref="CodeScanne"/>.
 /// - Nettoie le code (voir Core.Saisie.CodeScanne).
+/// - Sans Entrée : une frappe de pistolet (rafale, voir Core.Saisie.DetecteurRafale) est validée après 150 ms de pause.
 /// - Anti-rebond : le même code reçu deux fois en moins de 800 ms est ignoré.
 /// - Garde le focus : s'il part ailleurs dans l'écran, il revient au champ après 1 seconde
 ///   (sauf si l'utilisateur tape dans un autre champ, ou si une autre fenêtre est active).
-/// - Retour visuel dans <see cref="Bandeau"/> (vert / jaune / rouge) et sonore (SystemSounds).
+/// - Retour visuel dans <see cref="Bandeau"/> (vert / jaune / rouge) et sonore (son du club au succès, SystemSounds sinon).
 /// Le bandeau n'est pas un enfant de la zone : l'écran le place où il veut.
 /// </summary>
 public sealed class ScanInput : UserControl, IFondDessine
@@ -43,6 +44,7 @@ public sealed class ScanInput : UserControl, IFondDessine
     private readonly System.Windows.Forms.Timer _minuterieFocus = new() { Interval = 200 };
     private readonly System.Windows.Forms.Timer _animation = new() { Interval = 40 };
     private readonly Saisie.AntiRebond _antiRebond = new(800);
+    private readonly ValidationSansEntree _sansEntree;
     private long _perteFocusMs;
     private ModeScan _mode;
     private string _consigne = "";
@@ -71,6 +73,7 @@ public sealed class ScanInput : UserControl, IFondDessine
         Bandeau = new BandeauMessage();
 
         _champ.KeyDown += SurToucheChamp;
+        _sansEntree = new ValidationSansEntree(_champ, Valider);
         _champ.Enter += (_, _) => _perteFocusMs = -1;
         _champ.Leave += (_, _) => _perteFocusMs = Environment.TickCount64;
         _minuterieFocus.Tick += (_, _) => RendreFocusSiBesoin();
@@ -160,7 +163,7 @@ public sealed class ScanInput : UserControl, IFondDessine
         switch (niveau)
         {
             case NiveauResultat.Succes:
-                SystemSounds.Beep.Play();
+                JouerScanReussi();
                 break;
             case NiveauResultat.Avertissement:
                 SystemSounds.Exclamation.Play();
@@ -168,6 +171,40 @@ public sealed class ScanInput : UserControl, IFondDessine
             default:
                 SystemSounds.Hand.Play();
                 break;
+        }
+    }
+
+    // Son du club (ressource « Sons.ScanReussi.wav »), chargé une fois ; bip de Windows s'il est illisible.
+    private static readonly Lazy<SoundPlayer?> SonScanReussi = new(() =>
+    {
+        try
+        {
+            var flux = typeof(ScanInput).Assembly.GetManifestResourceStream("Sons.ScanReussi.wav");
+            if (flux is null)
+            {
+                return null;
+            }
+
+            var lecteur = new SoundPlayer(flux);
+            lecteur.Load();
+            return lecteur;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or TimeoutException)
+        {
+            return null;
+        }
+    });
+
+    private static void JouerScanReussi()
+    {
+        if (SonScanReussi.Value is { } lecteur)
+        {
+            // Play est asynchrone : un nouveau scan coupe le son précédent au lieu de s'empiler.
+            lecteur.Play();
+        }
+        else
+        {
+            SystemSounds.Beep.Play();
         }
     }
 
@@ -315,6 +352,7 @@ public sealed class ScanInput : UserControl, IFondDessine
         {
             _minuterieFocus.Dispose();
             _animation.Dispose();
+            _sansEntree.Dispose();
         }
 
         base.Dispose(disposing);
@@ -362,6 +400,12 @@ public sealed class ScanInput : UserControl, IFondDessine
 
         e.Handled = true;
         e.SuppressKeyPress = true; // Pas de "ding" Windows.
+        Valider();
+    }
+
+    private void Valider()
+    {
+        _sansEntree.Annuler();
         var brut = _champ.Text;
         _champ.Clear();
         Soumettre(brut);

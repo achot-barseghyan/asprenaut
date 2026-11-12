@@ -4,7 +4,9 @@ Application desktop Windows de suivi des sorties et retours du matériel du club
 (blocs, gilets, détendeurs, combinaisons, palmes, masques, ordinateurs). Un seul PC, pas de réseau.
 Utilisateurs : bénévoles peu à l'aise avec l'informatique → interface simple, gros boutons, messages courts.
 
-Le matériel porte une étiquette QR. Le pistolet scanner USB est en mode clavier (HID) : il tape le code puis Entrée.
+Le matériel porte une étiquette QR. Le pistolet scanner USB est en mode clavier (HID) : il tape le code puis Entrée. Sans Entrée (pistolet sans suffixe,
+téléphone en clavier Bluetooth), une rafale de frappe (`DetecteurRafale` : ≥ 3 caractères à ≤ 50 ms) suivie de 150 ms de pause
+est validée seule (`Controles/ValidationSansEntree`, champ de scan et « Tester le pistolet ») ; la saisie à la main attend Entrée.
 
 ## Commandes
 
@@ -67,7 +69,8 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   `IndicateurEtapes`, `PastilleDate`, `Pastille`, `Picto`, `GrilleAdaptative` (colonnes auto, ajuste sa ligne de TableLayoutPanel),
   `Tuile`, `FilAriane`, `BarreRecherche`, `ChampSaisie` (`Icone` et `ADroite` optionnels), `ChampDate` (remplace le DateTimePicker, blanc et en anglais),
   `ListeDeroulante` (cadre et bouton repeints par-dessus Windows dans `WndProc`), `ListeMateriel` (styles Depart / ARendre / Rendu),
-  `ScanInput` + `BandeauMessage`, `BandeauAccueil`, `Logo`, `CarteScanner`, `Tableaux` (pastilles et pictogrammes dans les DataGridView),
+  `ScanInput` + `BandeauMessage` (scan réussi : `Ressources/Sons/ScanReussi.wav`, ressource `Sons.ScanReussi.wav`, PCM 16 bits mono
+  car `SoundPlayer` ne lit pas tous les WAV ; avertissement / erreur : sons de Windows ; réglage `SonsActifs`), `BandeauAccueil`, `Logo`, `CarteScanner`, `Tableaux` (pastilles et pictogrammes dans les DataGridView),
   `FiltreCategories` (puces « Tout 12 / Blocs 3 », `CouleurPoint` et `Unite` optionnels), `FenetreFormulaire` (fenêtre modale sombre ;
   la validation passe par un service et ne ferme qu'en cas de succès), `Interrupteur`, `SelecteurNombre`, `Bascule` (options côte à côte, nombres), `ChoixResponsable`, `CarteSection`, `LigneReglage`,
   `ListeChoix` (liste de choix dessinée, badge + titre + détail, clic ou flèches), `JournalHistorique` (journal par jour dessiné dans un seul contrôle défilant : seule la partie visible est peinte, le clic sur un

@@ -177,10 +177,20 @@ public sealed class PastilleVerrou : IDisposable
         foreach (var ancien in _hotes)
         {
             ancien.Paint -= PeindreSurHote;
-            if (_zones.Remove(ancien, out var zone) && !ancien.IsDisposed)
+            if (ancien.IsDisposed)
+            {
+                _zones.Remove(ancien);
+                continue;
+            }
+
+            // Zone de la dernière peinture, et place actuelle : un parent intermédiaire a pu bouger depuis
+            // sans prévenir (le contrôle garde la même Location), et la pastille resterait à moitié affichée.
+            if (_zones.Remove(ancien, out var zone))
             {
                 ancien.Invalidate(zone, true);
             }
+
+            ancien.Invalidate(Zone(ancien), true);
         }
 
         _hotes.Clear();
@@ -250,6 +260,15 @@ public sealed class PastilleVerrou : IDisposable
         if (_visible && sender is Control hote && _controle.Visible && !_controle.IsDisposed && BornesSur(hote) is { } b)
         {
             Dessiner(e.Graphics, _controle, b);
+
+            // Retenir où elle est réellement peinte : c'est cette zone qu'il faudra effacer.
+            var zone = Zone(hote);
+            if (_zones.TryGetValue(hote, out var ancienne) && ancienne != zone)
+            {
+                hote.Invalidate(ancienne, true); // Morceau resté à l'ancienne place (parent déplacé).
+            }
+
+            _zones[hote] = zone;
         }
     }
 

@@ -335,14 +335,10 @@ public sealed class EcranParametres : EcranBase
         essai.Champ.Font = Theme.PoliceCode(11.25f);
         essai.Champ.AccessibleName = "Tester le pistolet";
         essai.Margin = new Padding(0, 0, 0, 10);
-        essai.Champ.KeyDown += (_, e) =>
+        ValidationSansEntree? sansEntree = null;
+        void Lire()
         {
-            if (e.KeyCode != Keys.Enter)
-            {
-                return;
-            }
-
-            e.SuppressKeyPress = true;
+            sansEntree?.Annuler();
             var brut = essai.Valeur.Trim();
             var code = Saisie.CodeScanne.Nettoyer(brut, _reglages.Actuels.PrefixeEtiquette);
             _dernierCode.Text = code.Length == 0
@@ -350,6 +346,16 @@ public sealed class EcranParametres : EcranBase
                 : brut == code ? $"✓ Dernier code lu : {code}" : $"✓ Dernier code lu : {brut} → {code}";
             _dernierCode.ForeColor = code.Length == 0 ? Theme.Erreur : Theme.RetourClair;
             essai.Valeur = "";
+        }
+
+        sansEntree = new ValidationSansEntree(essai.Champ, Lire);
+        essai.Champ.KeyDown += (_, e) =>
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                e.SuppressKeyPress = true;
+                Lire();
+            }
         };
         _dernierCode.Text = $"Ex. : {Saisie.CodeScanne.ExempleMedaille} → A24";
         _dernierCode.ForeColor = Theme.TexteSecondaire;
@@ -361,7 +367,7 @@ public sealed class EcranParametres : EcranBase
         zone.Ajouter(_dernierCode);
         carte.Ajouter(zone);
 
-        carte.Ajouter(Interrupteur("Sons de confirmation", "Bip au succès, son grave en cas d'erreur", r.SonsActifs, v => _reglages.Modifier(x => x.SonsActifs = v), filet: false));
+        carte.Ajouter(Interrupteur("Sons de confirmation", "Son de confirmation au succès, son grave en cas d'erreur", r.SonsActifs, v => _reglages.Modifier(x => x.SonsActifs = v), filet: false));
         carte.Ajouter(Interrupteur("Garder le champ de scan actif", "Le curseur revient seul dans la zone de scan", r.GarderFocusScan, v => _reglages.Modifier(x => x.GarderFocusScan = v)));
         carte.Ajouter(Interrupteur("Ignorer les doubles lectures", "Même code lu deux fois en moins d'une seconde", r.IgnorerDoublesLectures, v => _reglages.Modifier(x => x.IgnorerDoublesLectures = v)));
 
