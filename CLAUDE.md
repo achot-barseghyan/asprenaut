@@ -45,7 +45,8 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   `ServiceInventaire`, `ServiceMoniteurs` (moniteurs et classes : cartes, fiche, ajout/modification, saison au 1er septembre), `ServiceRevisions`
   (échéancier, contrôles, atelier, séances TIV), `ServiceReglages`, `ServiceHistorique` (journal lisible, période, regroupement,
   export CSV, vie d'un équipement), `ServiceGestion` (mode consultation / mode gestion, code gestionnaire),
-  `ServiceBilan` (bilan de saison pour l'AG), `ServiceManuels` (notices des fabricants). Toutes les règles métier sont ici.
+  `ServiceBilan` (bilan de saison pour l'AG), `ServiceManuels` (notices des fabricants), `ServiceSignalements` (problèmes
+  signalés au retour ou depuis l'inventaire). Toutes les règles métier sont ici.
 - **Core/Resultats** : `ResultatScan` (Niveau Succes/Avertissement/Erreur, Message, Equipement, `ActionProposee`, Code, AutreSortieId),
   `ResultatOperation`, `ApercuCloture`. Les cas métier ne lèvent pas d'exception : ils retournent un résultat.
 - **Core/Saisie** : `CodeScanne.Lire` / `Nettoyer` et `AntiRebond` — logique pure, testée. Médailles QR du club :
@@ -264,6 +265,22 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     « + Ajouter un composant » de la fiche s'il manque un composant, sinon « Modifier la fiche » (`FormulaireEquipement`).
     `FenetreFormulaire.EnTete(sousTitre, badge)` : sous-titre et pastille « Mode gestion ».
 
+28. Problèmes signalés (`ServiceSignalements`, migration 013, maquette « Retour du matériel ») : fenêtre « Problème sur A07 »
+    (`Ecrans/FormulaireSignalement`, `CibleSignalement`) ouverte au retour (bouton « Signaler un problème » à côté du message
+    du dernier rendu, drapeau sur chaque ligne « Rendu ») et depuis l'inventaire (bouton jaune « Signaler »). Causes selon la
+    catégorie (`CausesPour`, « Autre » en dernier ; pictogrammes `Icones.PourCause`), cause obligatoire (60 car.), précision
+    facultative (200 car.). « À surveiller » libre : l'équipement reste en service (pastille « À surveiller » dans l'inventaire).
+    « Hors service » : action protégée Révisions, refusé si dehors, met HorsService (`MisHorsService`) ; redescendre à
+    « À surveiller » demande aussi le code et ne remet en service que si c'est le signalement qui l'avait arrêté (et hors atelier).
+    Un seul signalement ouvert par équipement (index `ux_signalement_ouvert`) : signaler de nouveau le modifie. Réformé refusé.
+    Journal `ProblemeSignale` (type Révision). Révisions › À prévoir : cartes `CarteRevision.Signalement` en tête, famille
+    « Signalé » (`ServiceRevisions.FamilleSignalement`, première du filtre), même hors service, sauf en atelier ; actions
+    « Envoyer en atelier » / « Faire maintenant » (jamais la séance TIV). Toute intervention enregistrée (`EnregistrerControleAsync`)
+    ferme le signalement ouvert et, s'il avait mis hors service, remet en service sauf résultat refusé ou atelier en cours.
+    Fiche EPI : interventions `TypeInterventionSuivie.Signalement` (« Problème signalé : cause : précision », responsable de la
+    sortie ou « Inventaire », « · traité »). Retour : bandeau « N problèmes signalés · Voir › » (ceux de la sortie) → Révisions.
+    Export : `signalements.csv`.
+
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
 à côté de la base d'essai : les essais ne touchent jamais les réglages réels. Préfixe des étiquettes : `CodeScanne.Nettoyer(brut, prefixe)`.
@@ -290,12 +307,13 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   depuis 009 : manuel (fichier, nb_pages, sommaire et entretien en texte, une ligne par entrée ; PDF dans `Manuels\` à côté
   de la base, non copiés par les sauvegardes de la base) ; 010 : codes des médailles (DET-007 → A07, GIL-012 → S12, journal
   corrigé ; un code déjà pris reste inchangé) ; 011 : controle.composant (vide = équipement complet) ; 012 : composant (equipement_id + role, numero_serie, fabrication,
-  mise_en_service, origine CHECK Neuve/Recuperee).
+  mise_en_service, origine CHECK Neuve/Recuperee) ; 013 : signalement (cause, gravite CHECK ASurveiller/HorsService, precision,
+  signale_le, mis_hors_service 0/1, traite_le ; sortie_id ON DELETE SET NULL ; index partiel `ux_signalement_ouvert`).
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/013_xxx.sql`, sans jamais modifier un script déjà livré
+- Nouvelle migration : ajouter `Migrations/014_xxx.sql`, sans jamais modifier un script déjà livré
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.

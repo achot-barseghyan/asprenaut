@@ -27,11 +27,20 @@ public sealed class EcranRetour : EcranScanBase
     private IReadOnlyList<LigneSortie> _lignes = [];
 
     private readonly GardeGestion _garde;
+    private readonly ServiceSignalements _signalements;
+    private readonly BoutonArrondi _signalerDernier = new("Signaler un problème", StyleBouton.Secondaire, Icones.Drapeau) { Visible = false };
+    private readonly LienSignalements _lienSignalements = new() { Visible = false };
+    private IReadOnlyDictionary<long, Signalement> _ouverts = new Dictionary<long, Signalement>();
+    private SortieResume? _resume;
+    private long? _dernierRendu;
+    private bool _boutonCourt;
 
-    public EcranRetour(ServiceSortie sorties, ServiceScan scan, ServiceReglages reglages, INavigation navigation, GardeGestion garde, ServiceManuels manuels)
+    public EcranRetour(ServiceSortie sorties, ServiceScan scan, ServiceReglages reglages, INavigation navigation, GardeGestion garde, ServiceManuels manuels,
+        ServiceSignalements signalements)
         : base(navigation, reglages, manuels, ModeScan.Retour)
     {
         _garde = garde;
+        _signalements = signalements;
         _actualiserCloture = _garde.Lier(_cloturer, ActionProtegee.CloturerAvecManquants, () => _nbDehors > 0);
         _sorties = sorties;
         _scan = scan;
@@ -66,11 +75,37 @@ public sealed class EcranRetour : EcranScanBase
             ligne.ColumnStyles[0].Width = large ? Dessin.Echelle(carteProgression, 124) : 0;
         };
 
+        // Message du dernier scan, et à droite « Signaler un problème » sur l'équipement qui vient de rentrer.
+        _signalerDernier.AutoSize = false;
+        _signalerDernier.CouleurIcone = Theme.Avertissement;
+        _signalerDernier.AccessibleDescription = "Signaler un problème sur le dernier équipement rendu";
+        _signalerDernier.Click += (_, _) =>
+        {
+            if (_dernierRendu is { } id && _lignes.FirstOrDefault(l => l.EquipementId == id) is { } ligne)
+            {
+                Executer(() => SignalerAsync(ligne));
+            }
+        };
+        ZoneScan.Bandeau.Margin = Padding.Empty;
+        _signalerDernier.Margin = new Padding(12, 0, 0, 0);
+        var ligneBandeau = Ui.Colonnes((ZoneScan.Bandeau, SizeType.Percent, 100), (_signalerDernier, SizeType.AutoSize, 0));
+        _signalerDernier.Dock = DockStyle.None;
+        _signalerDernier.Anchor = AnchorStyles.Right;
+        _signalerDernier.Size = new Size(228, 52);
+        ligneBandeau.Margin = new Padding(0, 16, 0, 0);
+
+        // Colonne étroite (1280 × 800) : bouton court, le message du scan garde la place de deux lignes lisibles.
+        ligneBandeau.Resize += (_, _) =>
+        {
+            _boutonCourt = ligneBandeau.Width < Dessin.Echelle(ligneBandeau, 600);
+            _signalerDernier.Width = (int)Dessin.Echelle(ligneBandeau, _boutonCourt ? 132 : 228);
+            AfficherSignalements();
+        };
+
         var gauche = Ui.Colonne(
             (ZoneScan, SizeType.Percent, 100),
-            (ZoneScan.Bandeau, SizeType.Absolute, 76 + 16),
+            (ligneBandeau, SizeType.Absolute, 76 + 16),
             (carteProgression, SizeType.Absolute, 190 + 16));
-        ZoneScan.Bandeau.Margin = new Padding(0, 16, 0, 0);
         gauche.Margin = new Padding(0, 0, 22, 0);
 
         // Écran peu haut : la zone de scan garde au moins la place de sa consigne et de son champ ;
@@ -93,7 +128,9 @@ public sealed class EcranRetour : EcranScanBase
             (_rendu, SizeType.Percent, 100)));
         var cartes = Ui.Colonnes((carteARendre, SizeType.Percent, 50), (carteRendu, SizeType.Percent, 50));
         _filtre.Changement += (_, _) => AfficherListes();
-        var droite = Ui.Colonne((_filtre, SizeType.Absolute, 44 + 12), (cartes, SizeType.Percent, 100));
+        _lienSignalements.Margin = new Padding(0, 0, 0, 12);
+        _lienSignalements.Click += (_, _) => Navigation.AllerA<EcranRevisions>();
+        var droite = Ui.Colonne((_lienSignalements, SizeType.AutoSize, 0), (_filtre, SizeType.Absolute, 44 + 12), (cartes, SizeType.Percent, 100));
 
         Composer(Ui.Colonnes((gauche, SizeType.Percent, 40), (droite, SizeType.Percent, 60)));
     }
@@ -104,6 +141,8 @@ public sealed class EcranRetour : EcranScanBase
     {
         var resume = await _sorties.ObtenirResumeAsync(SortieId) ?? throw new InvalidOperationException("Sortie introuvable.");
         var lignes = await _sorties.ListerMaterielAsync(SortieId);
+        _ouverts = await _signalements.OuvertsAsync();
+        _resume = resume;
         AfficherSortie(resume, resume.DepartValideLe is { } parti ? $"parti à {Heure(parti)}" : null);
 
         var cloturee = resume.Statut == StatutSortie.Cloturee;
@@ -134,6 +173,49 @@ public sealed class EcranRetour : EcranScanBase
         _lignes = lignes;
         _filtre.Afficher(aRendre.Count, EcranDepart.Categories(lignes, l => l.Statut != StatutSortieEquipement.Rendu));
         AfficherListes();
+        AfficherSignalements();
+    }
+
+    /// <summary>Bouton du dernier rendu (« Signaler » ou « Modifier le problème ») et bandeau des problèmes de cette sortie.</summary>
+    private void AfficherSignalements()
+    {
+        var dernier = _dernierRendu is { } id ? _lignes.FirstOrDefault(l => l.EquipementId == id && l.Statut == StatutSortieEquipement.Rendu) : null;
+        _signalerDernier.Visible = dernier is not null;
+        if (dernier is not null)
+        {
+            var dejaSignale = _ouverts.ContainsKey(dernier.EquipementId);
+            _signalerDernier.Text = (dejaSignale, _boutonCourt) switch
+            {
+                (true, true) => "Modifier",
+                (true, false) => "Modifier le problème",
+                (false, true) => "Signaler",
+                _ => "Signaler un problème",
+            };
+            _signalerDernier.AccessibleName = dejaSignale ? "Modifier le problème" : "Signaler un problème";
+        }
+
+        var deCetteSortie = _lignes.Count(l => _ouverts.TryGetValue(l.EquipementId, out var s) && s.SortieId == SortieId);
+        _lienSignalements.Nombre = deCetteSortie;
+        _lienSignalements.Visible = deCetteSortie > 0;
+    }
+
+    /// <summary>Fenêtre « Problème sur A07 » pour un équipement rendu, puis le message dans le bandeau du scan.</summary>
+    private async Task SignalerAsync(LigneSortie ligne)
+    {
+        var contexte = _resume is { } s
+            ? $"{s.Intitule} du {s.DateSortie.ToString("dd/MM", Libelles.Culture)} · {s.MoniteurNom}"
+            : "";
+        var resultat = await FormulaireSignalement.OuvrirAsync(FindForm(), _signalements, _garde,
+            new CibleSignalement(ligne.EquipementId, ligne.Code, ligne.Libelle, ligne.Categorie ?? "", SortieId, contexte));
+        if (resultat is null || IsDisposed)
+        {
+            ZoneScan.PrendreFocus();
+            return;
+        }
+
+        ZoneScan.AfficherMessage(NiveauResultat.Avertissement, resultat.Message, ligne.Code);
+        await RafraichirAsync();
+        ZoneScan.PrendreFocus();
     }
 
     private void AfficherListes()
@@ -163,19 +245,37 @@ public sealed class EcranRetour : EcranScanBase
             Alerte: l.Statut == StatutSortieEquipement.Manquant ? "Manquant" : null,
             CouleurAlerte: Theme.Erreur,
             ManuelId: ManuelDe(l.EquipementId))), ouvrirManuel: OuvrirManuel);
-        _rendu.Afficher(rendus.Select(l => new ElementMateriel(
-            l.EquipementId,
-            l.Code,
-            l.Libelle,
-            l.Categorie,
-            l.ScanneRetourLe is { } r ? Heure(r) : null,
-            ManuelId: ManuelDe(l.EquipementId))), ouvrirManuel: OuvrirManuel);
+        // Rendu : drapeau « Signaler » sur chaque ligne ; un problème ouvert se voit en pastille et dans le détail.
+        _rendu.Afficher(rendus.Select(l =>
+        {
+            var probleme = _ouverts.GetValueOrDefault(l.EquipementId);
+            var heure = l.ScanneRetourLe is { } r ? Heure(r) : null;
+            return new ElementMateriel(
+                l.EquipementId,
+                l.Code,
+                l.Libelle,
+                l.Categorie,
+                probleme is null ? heure : string.Join(" · ", new[] { heure, probleme.Cause }.Where(t => t is not null)),
+                Alerte: probleme is null ? null : ServiceSignalements.Libelle(probleme.Gravite),
+                CouleurAlerte: probleme?.Gravite == GraviteSignalement.HorsService ? Theme.Erreur : Theme.Avertissement,
+                ManuelId: ManuelDe(l.EquipementId));
+        }), "Signaler un problème sur", Icones.Drapeau, e =>
+        {
+            if (_lignes.FirstOrDefault(l => l.EquipementId == e.EquipementId) is { } ligne)
+            {
+                Executer(() => SignalerAsync(ligne));
+            }
+        }, OuvrirManuel);
     }
 
     protected override async Task TraiterCodeAsync(string code)
     {
         var resultat = await _scan.ScannerRetourAsync(SortieId, code);
         ZoneScan.AfficherResultat(resultat);
+        if (resultat is { Niveau: NiveauResultat.Succes, Equipement: { } rendu })
+        {
+            _dernierRendu = rendu.Id; // « Signaler un problème » apparaît à côté du message.
+        }
 
         if (resultat is { Action: ActionProposee.RentrerDansAutreSortie, AutreSortieId: { } autre, Code: { } c }
             && Dialogues.Confirmer(FindForm(), resultat.Message))
@@ -209,5 +309,86 @@ public sealed class EcranRetour : EcranScanBase
 
         Dialogues.Information(FindForm(), resultat.Message);
         Navigation.AllerA<EcranSorties>();
+    }
+
+    /// <summary>
+    /// Bandeau au-dessus des listes : « 2 problèmes signalés · envoyés dans Révisions › À prévoir. » et « Voir › »
+    /// (ouvre Révisions). Toute la bande est cliquable.
+    /// </summary>
+    private sealed class LienSignalements : ControleDessine
+    {
+        private int _nombre;
+        private bool _survol;
+
+        public LienSignalements()
+        {
+            Height = 48;
+            Cursor = Cursors.Hand;
+            SetStyle(ControlStyles.Selectable, true);
+            TabStop = true;
+            AccessibleRole = AccessibleRole.Link;
+        }
+
+        [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+        public int Nombre
+        {
+            get => _nombre;
+            set
+            {
+                _nombre = value;
+                AccessibleName = $"{Texte} Voir dans Révisions";
+                Invalidate();
+            }
+        }
+
+        private string Texte => $"{Libelles.Pluriel(_nombre, "problème signalé", "problèmes signalés")} · {(_nombre > 1 ? "envoyés" : "envoyé")} dans Révisions › À prévoir.";
+
+        protected override void OnMouseEnter(EventArgs e)
+        {
+            base.OnMouseEnter(e);
+            _survol = true;
+            Invalidate();
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            base.OnMouseLeave(e);
+            _survol = false;
+            Invalidate();
+        }
+
+        protected override bool IsInputKey(Keys keyData) => keyData == Keys.Enter || base.IsInputKey(keyData);
+
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            base.OnKeyDown(e);
+            if (e.KeyCode is Keys.Enter or Keys.Space)
+            {
+                OnClick(EventArgs.Empty);
+                e.Handled = true;
+            }
+        }
+
+        protected override void Peindre(Graphics g)
+        {
+            var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
+            using (var chemin = Dessin.Arrondi(r, E(16)))
+            using (var fond = new SolidBrush(Theme.Sur(Theme.Fond, Theme.Erreur, _survol ? 0.16f : 0.10f)))
+            using (var bord = new Pen(Theme.Sur(Theme.Fond, Theme.Erreur, Focused ? 0.8f : 0.4f), E(1)))
+            {
+                g.FillPath(fond, chemin);
+                g.DrawPath(bord, chemin);
+            }
+
+            var t = E(20);
+            Icones.Dessiner(g, Icones.Alerte, new RectangleF(E(16), (Height - t) / 2, t, t), Theme.Erreur, 2f);
+            var voir = "Voir ›";
+            var policeVoir = Theme.PoliceTitre(9.75f);
+            var lVoir = TextRenderer.MeasureText(g, voir, policeVoir).Width;
+            var droite = Width - (int)E(16);
+            Dessin.Texte(g, voir, policeVoir, new Rectangle(droite - lVoir, 0, lVoir, Height), Theme.AccentClair);
+            var gauche = (int)(E(16) + t + E(12));
+            Dessin.Texte(g, Texte, Theme.Police(10f), new Rectangle(gauche, 0, droite - lVoir - (int)E(12) - gauche, Height), Theme.Texte);
+        }
     }
 }

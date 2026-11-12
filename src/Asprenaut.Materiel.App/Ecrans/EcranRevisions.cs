@@ -182,7 +182,7 @@ public sealed class EcranRevisions : EcranBase
         switch (c.Etape)
         {
             case EtapeRevision.APrevoir:
-                if (c.Type == TypeControle.Tiv)
+                if (c.Type == TypeControle.Tiv && !c.Signalement) // Un problème signalé sur un bloc ne se règle pas en séance TIV.
                 {
                     Action("Ajouter à la séance TIV", StyleBouton.Principal, () => AjouterASeanceAsync(c));
                 }

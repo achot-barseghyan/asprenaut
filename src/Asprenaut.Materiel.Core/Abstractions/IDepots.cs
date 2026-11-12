@@ -143,6 +143,26 @@ public interface IRevisionRepository
     Task<SeanceTiv?> ProchaineSeanceAsync(DateOnly aPartirDu, CancellationToken ct = default);
 }
 
+/// <summary>Problèmes signalés (table signalement, migration 013) : au plus un ouvert par équipement.</summary>
+public interface ISignalementRepository
+{
+    Task<long> AjouterAsync(Signalement signalement, CancellationToken ct = default);
+
+    Task MettreAJourAsync(Signalement signalement, CancellationToken ct = default);
+
+    /// <summary>Signalement encore ouvert de l'équipement, ou null.</summary>
+    Task<Signalement?> ObtenirOuvertAsync(long equipementId, CancellationToken ct = default);
+
+    /// <summary>Tous les signalements ouverts, du plus récent au plus ancien.</summary>
+    Task<IReadOnlyList<Signalement>> ListerOuvertsAsync(CancellationToken ct = default);
+
+    /// <summary>Signalements d'un équipement, ouverts et traités, du plus récent au plus ancien (fiche de suivi).</summary>
+    Task<IReadOnlyList<Signalement>> ListerAsync(long equipementId, CancellationToken ct = default);
+
+    /// <summary>Ferme le signalement ouvert de l'équipement (intervention enregistrée) ; retourne le nombre fermé.</summary>
+    Task<int> TraiterAsync(long equipementId, DateTime traiteLe, CancellationToken ct = default);
+}
+
 /// <summary>Types de sortie (table type_sortie), avec le nombre de sorties de chacun.</summary>
 public interface ITypeSortieRepository
 {

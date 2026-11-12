@@ -71,7 +71,11 @@ public static class Tableaux
     /// Le clic est géré par la grille via <see cref="BoutonSous"/> ; la cellule entière est assez haute
     /// (lignes de 60 px) pour un doigt ou une souris peu précise.
     /// </summary>
-    public static void PeindreBoutons(DataGridViewCellPaintingEventArgs e, params string[] textes)
+    public static void PeindreBoutons(DataGridViewCellPaintingEventArgs e, params string[] textes) =>
+        PeindreBoutons(e, textes.Select(t => (t, (Color?)null)).ToArray());
+
+    /// <summary>Comme <see cref="PeindreBoutons(DataGridViewCellPaintingEventArgs, string[])"/>, avec une couleur par bouton (null = turquoise).</summary>
+    public static void PeindreBoutons(DataGridViewCellPaintingEventArgs e, params (string Texte, Color? Couleur)[] boutons)
     {
         if (e.Graphics is not { } g)
         {
@@ -81,19 +85,20 @@ public static class Tableaux
         PeindreFond(e, (e.State & DataGridViewElementStates.Selected) != 0);
         var etat = g.Save(); // Le lissage ne doit pas déborder sur les cellules suivantes (voir PeindreFond).
         Dessin.Qualite(g);
-        var zones = ZonesBoutons(e.CellBounds, g.DpiX / 96f, textes.Length);
-        for (var i = 0; i < textes.Length; i++)
+        var zones = ZonesBoutons(e.CellBounds, g.DpiX / 96f, boutons.Length);
+        for (var i = 0; i < boutons.Length; i++)
         {
             var r = zones[i];
+            var couleur = boutons[i].Couleur ?? Theme.Accent;
             using (var chemin = Dessin.Arrondi(r, 12f * g.DpiX / 96f))
-            using (var fond = new SolidBrush(Theme.Teinte(Theme.Accent, 0.12f)))
-            using (var bord = new Pen(Theme.Teinte(Theme.Accent, 0.30f)))
+            using (var fond = new SolidBrush(Theme.Teinte(couleur, 0.12f)))
+            using (var bord = new Pen(Theme.Teinte(couleur, boutons[i].Couleur is null ? 0.30f : 0.45f)))
             {
                 g.FillPath(fond, chemin);
                 g.DrawPath(bord, chemin);
             }
 
-            Dessin.Texte(g, textes[i], Theme.PoliceTitre(9f), Rectangle.Round(r), Theme.AccentClair, centre: true);
+            Dessin.Texte(g, boutons[i].Texte, Theme.PoliceTitre(9f), Rectangle.Round(r), boutons[i].Couleur ?? Theme.AccentClair, centre: true);
         }
 
         g.Restore(etat);

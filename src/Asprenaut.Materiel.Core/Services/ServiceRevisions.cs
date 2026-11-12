@@ -19,7 +19,8 @@ public sealed class ServiceRevisions(
     IHorloge horloge,
     Reglages reglages,
     ServiceGestion? gestion = null,
-    ServiceCompteur? compteur = null)
+    ServiceCompteur? compteur = null,
+    ISignalementRepository? signalements = null)
 {
     /// <summary>Une séance TIV prépare les blocs dont la TIV tombe au plus tard ce nombre de jours après elle.</summary>
     public const int JoursPreparationSeance = 30;
@@ -311,6 +312,19 @@ public sealed class ServiceRevisions(
         // Intervention faite : l'équipement quitte la séance TIV où il était prévu.
         await revisions.RetirerDesSeancesAsync(equipement.Id, ct);
 
+        // Et le problème signalé est traité. S'il avait mis l'équipement hors service, une intervention non refusée
+        // le remet en service (hors atelier : c'est le retour d'atelier qui s'en charge).
+        if (signalements is not null && await signalements.ObtenirOuvertAsync(equipement.Id, ct) is { } signalement)
+        {
+            if (signalement.MisHorsService && resultat != ResultatControle.Refuse && equipement.Etat == EtatEquipement.HorsService
+                && await revisions.ObtenirPassageEnCoursAsync(equipement.Id, ct) is null)
+            {
+                equipement.Etat = EtatEquipement.EnService;
+            }
+
+            await signalements.TraiterAsync(equipement.Id, horloge.MaintenantUtc, ct);
+        }
+
         if (resultat == ResultatControle.Refuse)
         {
             equipement.Etat = EtatEquipement.HorsService;
@@ -384,6 +398,34 @@ public sealed class ServiceRevisions(
             cartes.Add(Carte(EtapeRevision.APrevoir, l, usages.GetValueOrDefault(l.EquipementId)));
         }
 
+        // Problèmes signalés par les moniteurs : en tête de « À prévoir » (même hors service), sauf en atelier.
+        if (signalements is not null)
+        {
+            var signales = new List<CarteRevision>();
+            foreach (var s in await signalements.ListerOuvertsAsync(ct))
+            {
+                if (!parId.TryGetValue(s.EquipementId, out var e) || e.Etat == EtatEquipement.Reforme || enAtelier.Contains(s.EquipementId))
+                {
+                    continue;
+                }
+
+                var sortie = s.SortieId is { } sid ? await sorties.ObtenirResumeAsync(sid, ct) : null;
+                var detail = string.Join(" · ", new[]
+                {
+                    $"Signalé le {DateOnly.FromDateTime(s.SignaleLe.ToLocalTime()).ToString("dd/MM", Libelles.Culture)}",
+                    sortie?.Intitule ?? "inventaire",
+                    s.Precision,
+                }.Where(t => !string.IsNullOrWhiteSpace(t)));
+                var horsService = s.Gravite == GraviteSignalement.HorsService;
+                signales.Add(new CarteRevision(EtapeRevision.APrevoir, e.EquipementId, e.Code, e.Libelle, e.Categorie, FamilleSignalement,
+                    TypesPour(e.Categorie)[0], s.Cause, detail,
+                    horsService ? EtatCarte.HorsService : EtatCarte.ASurveiller, ServiceSignalements.Libelle(s.Gravite),
+                    horsService, null, Signalement: true));
+            }
+
+            cartes.InsertRange(0, signales);
+        }
+
         foreach (var id in planifies.Where(id => parId.ContainsKey(id) && !enAtelier.Contains(id)))
         {
             var e = parId[id];
@@ -442,6 +484,9 @@ public sealed class ServiceRevisions(
 
         return new TableauRevisions(seance, cartes);
     }
+
+    /// <summary>Famille du filtre de Révisions pour les problèmes signalés.</summary>
+    public const string FamilleSignalement = "Signalé";
 
     private static string Famille(TypeControle type, string categorie) => type switch
     {

@@ -24,10 +24,14 @@ public sealed class EcranInventaire : EcranBase
     private long? _categorie;
 
     private readonly GardeGestion _garde;
+    private readonly ServiceSignalements _signalements;
+    private IReadOnlyDictionary<long, Signalement> _problemes = new Dictionary<long, Signalement>();
 
-    public EcranInventaire(ServiceInventaire inventaire, INavigation navigation, ServiceReglages reglages, ServiceCompteur compteur, GardeGestion garde)
+    public EcranInventaire(ServiceInventaire inventaire, INavigation navigation, ServiceReglages reglages, ServiceCompteur compteur, GardeGestion garde,
+        ServiceSignalements signalements)
     {
         _garde = garde;
+        _signalements = signalements;
         _inventaire = inventaire;
         _navigation = navigation;
         _compteur = compteur;
@@ -73,8 +77,8 @@ public sealed class EcranInventaire : EcranBase
         _grille.CellFormatting += ColorerCellule;
         _grille.CellPainting += PeindreCellule;
 
-        // Clic sur la ligne (nom souligné, double-clic, Entrée) : fiche de suivi. La cellule d'actions a deux boutons :
-        // « Suivi » puis « Modifier ».
+        // Clic sur la ligne (nom souligné, double-clic, Entrée) : fiche de suivi. La cellule d'actions a trois boutons :
+        // « Suivi », « Signaler » (libre, comme au retour d'une sortie) puis « Modifier ».
         _grille.CellMouseClick += (_, e) =>
         {
             if (e.Button != MouseButtons.Left || e.RowIndex < 0 || _grille.Rows[e.RowIndex].Tag is not LigneInventaire l)
@@ -85,12 +89,15 @@ public sealed class EcranInventaire : EcranBase
             if (Colonne(e.ColumnIndex) == "action")
             {
                 var cellule = _grille.GetCellDisplayRectangle(e.ColumnIndex, e.RowIndex, false);
-                switch (Tableaux.BoutonSous(cellule, _grille.DeviceDpi / 96f, 2, e.Location))
+                switch (Tableaux.BoutonSous(cellule, _grille.DeviceDpi / 96f, 3, e.Location))
                 {
                     case 0:
                         Executer(() => OuvrirSuiviAsync(l));
                         break;
                     case 1:
+                        Executer(() => SignalerAsync(l));
+                        break;
+                    case 2:
                         Executer(() => ModifierEquipementAsync(l));
                         break;
                 }
@@ -141,6 +148,7 @@ public sealed class EcranInventaire : EcranBase
         var categories = await _inventaire.ListerCategoriesAsync();
         var tout = await _inventaire.ListerAsync(null, null);
         _utilisations = await _compteur.ListerUtilisationsAsync(tout);
+        _problemes = await _signalements.OuvertsAsync();
         if (IsDisposed)
         {
             return;
@@ -236,6 +244,7 @@ public sealed class EcranInventaire : EcranBase
     {
         var lignes = await _inventaire.ListerAsync(_recherche.Champ.Text, _categorie);
         _utilisations = await _compteur.ListerUtilisationsAsync(lignes);
+        _problemes = await _signalements.OuvertsAsync();
         if (!IsDisposed)
         {
             Afficher(lignes);
@@ -262,6 +271,20 @@ public sealed class EcranInventaire : EcranBase
     {
         _navigation.AllerA<EcranFicheSuivi>(ligne.EquipementId);
         return Task.CompletedTask;
+    }
+
+    /// <summary>Fenêtre « Problème sur A07 » (même que celle du retour), puis la liste est rechargée.</summary>
+    private async Task SignalerAsync(LigneInventaire ligne)
+    {
+        var resultat = await FormulaireSignalement.OuvrirAsync(FindForm(), _signalements, _garde,
+            new CibleSignalement(ligne.EquipementId, ligne.Code, ligne.Libelle, ligne.Categorie, null, "Signalé depuis l'inventaire"));
+        if (resultat is null || IsDisposed)
+        {
+            return;
+        }
+
+        await RechargerAsync();
+        Dialogues.Information(FindForm(), resultat.Message);
     }
 
     /// <summary>Modification de l'équipement (action protégée), puis la liste est rechargée.</summary>
@@ -297,7 +320,7 @@ public sealed class EcranInventaire : EcranBase
 
     private static string Date(DateOnly? d) => d is { } v ? Libelles.Date(v) : "—";
 
-    private static readonly ColonneInventaire Action = new("action", "", 170, _ => "");
+    private static readonly ColonneInventaire Action = new("action", "", 235, _ => "");
 
     private static readonly ColonneInventaire Statut = new("statut", "Statut", 110, l => Libelles.De(l.Statut));
 
@@ -316,7 +339,7 @@ public sealed class EcranInventaire : EcranBase
         Statut,
         Utilisation,
         new("sortie", "Sortie en cours", 130, l => Ou(l.SortieEnCoursIntitule)),
-        new("revision", "Prochaine révision", 130, l => Date(ProchaineEcheance(l))),
+        new("revision", "Prochaine révision", 155, l => Date(ProchaineEcheance(l))),
         Action,
     ];
 
@@ -354,7 +377,7 @@ public sealed class EcranInventaire : EcranBase
         new("derniere", "Dernière révision", 120, l => Date(l.DerniereRevision)),
         new("revision", "À réviser avant", 150, l => Date(l.DateProchaineRevision)),
         new("identification", "Identification", 300, l => _inventaire.Identification(l.Categorie, l.Code, l.Taille)),
-        new("action", "", 200, _ => ""),
+        new("action", "", 300, _ => ""),
     ];
 
     private ColonneInventaire[] _colonnes = [];
@@ -508,7 +531,12 @@ public sealed class EcranInventaire : EcranBase
         }
         else if (colonne == "action")
         {
-            Tableaux.PeindreBoutons(e, "Suivi", "Modifier");
+            Tableaux.PeindreBoutons(e, ("Suivi", null), ("Signaler", Theme.Avertissement), ("Modifier", null));
+        }
+        else if (colonne == "statut" && l.Statut == StatutInventaire.Disponible && _problemes.TryGetValue(l.EquipementId, out var probleme))
+        {
+            // Problème signalé, encore en service : il part quand même, mais on le voit.
+            Tableaux.PeindrePastille(e, ServiceSignalements.Libelle(probleme.Gravite), Theme.Avertissement);
         }
         else if (colonne == "statut")
         {

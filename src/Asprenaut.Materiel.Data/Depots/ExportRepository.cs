@@ -91,6 +91,16 @@ public sealed class ExportRepository(FabriqueConnexion fabrique) : IExportReposi
             """,
             [new("Marque"), new("Titre"), new("Catégorie"), new("Modèles"), new("Édition"), new("Fichier"), new("Pages"),
              new("Révision fabricant (mois)"), new("Page de l'entretien")]),
+        ("signalements.csv",
+            """
+            SELECT sg.signale_le, e.code, e.libelle, sg.cause, sg.gravite, sg.precision, s.intitule, sg.traite_le
+            FROM signalement sg
+            JOIN equipement e ON e.id = sg.equipement_id
+            LEFT JOIN sortie s ON s.id = sg.sortie_id
+            ORDER BY sg.signale_le, sg.id
+            """,
+            [new("Signalé le", GenreColonne.Horodatage), new("Code"), new("Équipement"), new("Problème"),
+             new("Gravité", GenreColonne.GraviteSignalement), new("Précision"), new("Sortie"), new("Traité le", GenreColonne.Horodatage)]),
     ];
 
     public async Task<IReadOnlyList<TableExport>> ListerTablesAsync(CancellationToken ct = default)

@@ -180,19 +180,21 @@ public sealed record CarteRevision(
     bool Bloque,
     UsageEquipement? Usage,
     long? PassageAtelierId = null,
-    string? Prestataire = null);
+    string? Prestataire = null,
+    bool Signalement = false);
 
 /// <summary>Tableau des révisions : la prochaine séance TIV et toutes les cartes.</summary>
 public sealed record TableauRevisions(ProchaineSeance? Seance, IReadOnlyList<CarteRevision> Cartes)
 {
-    /// <summary>Familles du filtre, dans l'ordre : TIV, Requalification, Utilisation, puis les catégories.</summary>
+    /// <summary>Familles du filtre, dans l'ordre : Signalé, TIV, Requalification, Utilisation, puis les catégories.</summary>
     public IReadOnlyList<string> Familles
     {
         get
         {
             var presentes = Cartes.Select(c => c.Famille).Distinct().ToList();
-            return new[] { "TIV", "Requalification", "Utilisation" }.Where(presentes.Contains)
-                .Concat(presentes.Where(f => f is not ("TIV" or "Requalification" or "Utilisation")).OrderBy(f => f, StringComparer.Create(Libelles.Culture, true)))
+            string[] enTete = [Services.ServiceRevisions.FamilleSignalement, "TIV", "Requalification", "Utilisation"];
+            return enTete.Where(presentes.Contains)
+                .Concat(presentes.Where(f => !enTete.Contains(f)).OrderBy(f => f, StringComparer.Create(Libelles.Culture, true)))
                 .ToList();
         }
     }

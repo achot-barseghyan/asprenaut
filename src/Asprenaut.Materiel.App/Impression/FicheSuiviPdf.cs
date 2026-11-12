@@ -83,7 +83,7 @@ public static class FicheSuiviPdf
                     ResultatControle.Refuse => P.Erreur,
                     _ => P.TexteDoux,
                 };
-                string[] valeurs = [Libelles.Date(i.Date), i.Composant, i.Nature, i.Intervenant, i.Type == TypeInterventionSuivie.Atelier ? "Atelier" : "Contrôle"];
+                string[] valeurs = [Libelles.Date(i.Date), i.Composant, i.Nature, i.Intervenant, Ecrans.EcranFicheSuivi.LibelleType(i.Type)];
                 for (var c = 0; c < valeurs.Length; c++)
                 {
                     Texte(g, valeurs[c], Theme.Police(8.25f), new RectangleF(x + (l * Colonnes[c]), y + 3, (l * (Colonnes[c + 1] - Colonnes[c])) - 4, 16), c == 2 ? P.Texte : P.TexteDoux);

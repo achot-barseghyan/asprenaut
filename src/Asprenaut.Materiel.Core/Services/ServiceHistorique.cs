@@ -17,7 +17,8 @@ public sealed class ServiceHistorique(
     IRevisionRepository revisions,
     IMoniteurRepository moniteurs,
     IHorloge horloge,
-    Reglages reglages)
+    Reglages reglages,
+    ISignalementRepository? signalements = null)
 {
     /// <summary>Nombre maximum d'entrées lues (période « Tout » sur une base ancienne).</summary>
     public const int NombreMax = 5000;
@@ -45,6 +46,7 @@ public sealed class ServiceHistorique(
         [ActionsJournal.EquipementCree] = (TypeEvenement.Materiel, "Ajout"),
         [ActionsJournal.EquipementModifie] = (TypeEvenement.Materiel, "Modification"),
         [ActionsJournal.ComposantAjoute] = (TypeEvenement.Materiel, "Composant ajouté"),
+        [ActionsJournal.ProblemeSignale] = (TypeEvenement.Revision, "Problème signalé"),
         [ActionsJournal.ControleEnregistre] = (TypeEvenement.Revision, "Contrôle"),
         [ActionsJournal.EnvoiAtelier] = (TypeEvenement.Revision, "Envoi en atelier"),
         [ActionsJournal.RetourAtelier] = (TypeEvenement.Revision, "Retour d'atelier"),
@@ -166,7 +168,7 @@ public sealed class ServiceHistorique(
             ActionsJournal.EquipementModifie => (equipement, l.Categorie ?? ""),
             ActionsJournal.ComposantAjoute => (equipement, SansCode(l.Details, l.Code)),
             ActionsJournal.ControleEnregistre or ActionsJournal.EnvoiAtelier or ActionsJournal.RetourAtelier
-                or ActionsJournal.AjoutSeanceTiv or ActionsJournal.RetraitSeanceTiv =>
+                or ActionsJournal.AjoutSeanceTiv or ActionsJournal.RetraitSeanceTiv or ActionsJournal.ProblemeSignale =>
                 (equipement, SansCode(l.Details, l.Code)),
             _ => (null, ""),
         };
@@ -278,7 +280,8 @@ public sealed class ServiceHistorique(
         IReadOnlyList<PassageSortie> Passages,
         IReadOnlyList<Controle> Controles,
         IReadOnlyList<PassageAtelier> Ateliers,
-        IReadOnlyDictionary<long, string> Noms);
+        IReadOnlyDictionary<long, string> Noms,
+        IReadOnlyList<(Signalement Signalement, string Qui)> Signalements);
 
     private async Task<DonneesVie> ChargerAsync(Equipement e, CancellationToken ct)
     {
@@ -287,7 +290,16 @@ public sealed class ServiceHistorique(
         var controles = await revisions.ListerControlesAsync(e.Id, ct);
         var ateliers = await revisions.ListerPassagesAtelierAsync(e.Id, ct);
         var noms = (await moniteurs.ListerAsync(actifsSeulement: false, ct)).ToDictionary(m => m.Id, m => m.NomComplet);
-        return new DonneesVie(categorie, passages, controles, ateliers, noms);
+
+        // Problèmes signalés, avec le responsable de la sortie au retour de laquelle ils l'ont été.
+        var signales = new List<(Signalement, string)>();
+        foreach (var s in signalements is null ? [] : await signalements.ListerAsync(e.Id, ct))
+        {
+            var sortie = s.SortieId is { } id ? await sorties.ObtenirResumeAsync(id, ct) : null;
+            signales.Add((s, sortie?.MoniteurNom ?? "Inventaire"));
+        }
+
+        return new DonneesVie(categorie, passages, controles, ateliers, noms, signales);
     }
 
     private VieEquipement ConstruireVie(Equipement e, DonneesVie d)
@@ -416,6 +428,15 @@ public sealed class ServiceHistorique(
             interventions.Add((new InterventionSuivie(a.EnvoyeLe, ServiceInventaire.ComposantComplet,
                 motif.Length > 0 ? motif : "Envoi en atelier", prestataire.Length > 0 ? prestataire : "—", TypeInterventionSuivie.Atelier,
                 a.RevenuLe is { } revenu ? $"Revenu le {Libelles.Date(revenu)}" : "En atelier", null), 0));
+        }
+
+        foreach (var (s, qui) in d.Signalements)
+        {
+            var nature = $"Problème signalé : {s.Cause}{(s.Precision.Length > 0 ? $" : {s.Precision}" : "")}";
+            var resultat = ServiceSignalements.Libelle(s.Gravite) + (s.Ouvert ? "" : " · traité");
+            interventions.Add((new InterventionSuivie(DateOnly.FromDateTime(s.SignaleLe.ToLocalTime()), ServiceInventaire.ComposantComplet,
+                nature, qui, TypeInterventionSuivie.Signalement, resultat,
+                s.Gravite == GraviteSignalement.HorsService ? ResultatControle.Refuse : ResultatControle.ASurveiller), 2));
         }
 
         // Les contrôles arrivent déjà du plus récent au plus ancien (date puis saisie) : le tri stable garde cet ordre.

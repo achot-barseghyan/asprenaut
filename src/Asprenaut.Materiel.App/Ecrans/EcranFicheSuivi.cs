@@ -17,6 +17,14 @@ namespace Asprenaut.Materiel.App.Ecrans;
 /// </summary>
 public sealed class EcranFicheSuivi : EcranBase
 {
+    /// <summary>Colonne « Type » des interventions : Contrôle, Atelier ou Signalement (aussi dans le PDF de la fiche).</summary>
+    public static string LibelleType(TypeInterventionSuivie type) => type switch
+    {
+        TypeInterventionSuivie.Atelier => "Atelier",
+        TypeInterventionSuivie.Signalement => "Signalement",
+        _ => "Contrôle",
+    };
+
     private readonly ServiceHistorique _historique;
     private readonly ServiceRevisions _revisions;
     private readonly ServiceCompteur _compteur;
@@ -675,7 +683,7 @@ public sealed class EcranFicheSuivi : EcranBase
             _lignes = lignes;
             _composants = composants;
             AccessibleDescription = lignes.Count == 0 ? "Aucune intervention enregistrée."
-                : string.Join(". ", lignes.Select(l => $"{Libelles.Date(l.Date)}, {l.Composant}, {l.Nature}, {l.Intervenant}, {(l.Type == TypeInterventionSuivie.Atelier ? "atelier" : "contrôle")}, {l.Resultat}"));
+                : string.Join(". ", lignes.Select(l => $"{Libelles.Date(l.Date)}, {l.Composant}, {l.Nature}, {l.Intervenant}, {LibelleType(l.Type).ToLower(Libelles.Culture)}, {l.Resultat}"));
             Invalidate();
         }
 
@@ -733,8 +741,13 @@ public sealed class EcranFicheSuivi : EcranBase
                 Dessin.Texte(g, ligne.Nature, Theme.PoliceTitre(9.75f), new Rectangle(Colonne(2), y, Largeur(2), h), Theme.Texte);
                 Dessin.Texte(g, ligne.Intervenant, Theme.Police(9.75f), new Rectangle(Colonne(3), y, Largeur(3), h), Theme.TexteSecondaireClair);
 
-                var type = ligne.Type == TypeInterventionSuivie.Atelier ? Theme.Materiel : Theme.AccentClair;
-                Pilule(g, ligne.Type == TypeInterventionSuivie.Atelier ? "Atelier" : "Contrôle", Colonne(4), y, h, Largeur(4), type);
+                var type = ligne.Type switch
+                {
+                    TypeInterventionSuivie.Atelier => Theme.Materiel,
+                    TypeInterventionSuivie.Signalement => Theme.Avertissement,
+                    _ => Theme.AccentClair,
+                };
+                Pilule(g, LibelleType(ligne.Type), Colonne(4), y, h, Largeur(4), type);
 
                 var resultat = ligne.ResultatBrut is { } brut ? ChoixResultat.Couleur(brut)
                     : ligne.Resultat == "En atelier" ? Theme.Materiel : Theme.TexteSecondaireClair;

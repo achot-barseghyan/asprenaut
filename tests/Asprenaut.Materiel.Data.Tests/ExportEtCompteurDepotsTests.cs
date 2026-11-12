@@ -60,7 +60,7 @@ public class ExportEtCompteurDepotsTests : IAsyncLifetime
 
         var fichiers = await new ServiceExport(new ExportRepository(_base.Fabrique), Horloge).ExporterAsync();
 
-        Assert.Equal(["materiel.csv", "moniteurs.csv", "sorties.csv", "materiel_des_sorties.csv", "controles.csv", "atelier.csv", "seances_tiv.csv", "journal.csv", "manuels.csv"],
+        Assert.Equal(["materiel.csv", "moniteurs.csv", "sorties.csv", "materiel_des_sorties.csv", "controles.csv", "atelier.csv", "seances_tiv.csv", "journal.csv", "manuels.csv", "signalements.csv"],
             fichiers.Select(f => f.Nom));
         var materiel = fichiers[0].Contenu.Split(Environment.NewLine);
         Assert.Equal(15, fichiers[0].Lignes);

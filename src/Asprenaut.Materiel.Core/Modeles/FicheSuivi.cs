@@ -10,6 +10,9 @@ public enum TypeInterventionSuivie
 
     /// <summary>Passage en atelier (envoi chez un prestataire).</summary>
     Atelier,
+
+    /// <summary>Problème signalé par un moniteur (table signalement).</summary>
+    Signalement,
 }
 
 /// <summary>D'où vient un composant ajouté à un détendeur.</summary>

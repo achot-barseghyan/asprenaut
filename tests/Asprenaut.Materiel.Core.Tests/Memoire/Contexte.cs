@@ -26,6 +26,8 @@ public sealed class Contexte
     public ServiceCompteur Compteur { get; }
     public Moniteur Pascal { get; }
     public ServiceTypesSortie TypesSortie { get; }
+    public ServiceSignalements Signalements { get; }
+    public SignalementRepositoryMemoire DepotSignalements { get; }
 
     public Contexte()
     {
@@ -43,9 +45,11 @@ public sealed class Contexte
         Sorties = new ServiceSortie(sorties, moniteurs, journal, Horloge, Reglages, Gestion, types);
         Inventaire = new ServiceInventaire(equipements, categories, journal, Horloge, Reglages, Gestion, sorties, DepotRevisions);
         ServiceReglages = new ServiceReglages(Reglages, Stockage, Sauvegardes, Gestion);
-        Revisions = new ServiceRevisions(equipements, categories, sorties, DepotRevisions, moniteurs, journal, Horloge, Reglages, Gestion, Compteur);
+        DepotSignalements = new SignalementRepositoryMemoire(Db);
+        Signalements = new ServiceSignalements(DepotSignalements, equipements, categories, sorties, DepotRevisions, journal, Horloge, Gestion);
+        Revisions = new ServiceRevisions(equipements, categories, sorties, DepotRevisions, moniteurs, journal, Horloge, Reglages, Gestion, Compteur, DepotSignalements);
         Moniteurs = new ServiceMoniteurs(moniteurs, sorties, journal, Horloge, Gestion);
-        Historique = new ServiceHistorique(journal, equipements, categories, sorties, DepotRevisions, moniteurs, Horloge, Reglages);
+        Historique = new ServiceHistorique(journal, equipements, categories, sorties, DepotRevisions, moniteurs, Horloge, Reglages, DepotSignalements);
         Bilan = new ServiceBilan(sorties, DepotRevisions, equipements, Horloge);
 
         // Les six types d'origine (comme la migration 004).
