@@ -104,6 +104,9 @@ public static class Icones
     public const string Lac = "M3 14l5-7 4 5 3-3 6 5M3 18c2 0 2-1.5 4.5-1.5S10 18 12 18s2-1.5 4.5-1.5S19 18 21 18";
     public const string Bapteme = "M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.4l-5.2 2.7 1-5.8L3.5 9.2l5.9-.9z";
 
+    /// <summary>Liste (lien « Voir les sorties » de l'inventaire).</summary>
+    public const string Liste = "M4 6h16M4 12h16M4 18h10";
+
     // --- Problèmes signalés (maquette « Retour du matériel ») ---
     public const string Drapeau = "M5 21V4M5 4h11l-2 4 2 4H5";
     private const string Goutte = "M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z";
@@ -174,7 +177,7 @@ public static class Icones
     };
 
     /// <summary>Dessine le pictogramme centré dans <paramref name="zone"/> (carrée de préférence).</summary>
-    public static void Dessiner(Graphics g, string chemin, RectangleF zone, Color couleur, float epaisseur = 1.8f)
+    public static void Dessiner(Graphics g, string chemin, RectangleF zone, Color couleur, float epaisseur = 1.8f, bool plein = false)
     {
         var cote = Math.Min(zone.Width, zone.Height);
         var echelle = cote / 24f;
@@ -183,6 +186,13 @@ public static class Icones
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.TranslateTransform(zone.X + ((zone.Width - cote) / 2), zone.Y + ((zone.Height - cote) / 2));
         g.ScaleTransform(echelle, echelle);
+        if (plein)
+        {
+            // Pictogramme rempli (drapeau d'un problème déjà signalé) : chaque sous-chemin est fermé pour le remplissage.
+            using var pinceau = new SolidBrush(couleur);
+            g.FillPath(pinceau, Chemin(chemin));
+        }
+
         using (var stylo = new Pen(couleur, epaisseur))
         {
             stylo.StartCap = stylo.EndCap = LineCap.Round;

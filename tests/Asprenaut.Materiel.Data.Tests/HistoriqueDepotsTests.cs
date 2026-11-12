@@ -109,4 +109,39 @@ public class HistoriqueDepotsTests : IAsyncLifetime
             [("ScanDepart", 2L, 1L), ("ScanRetour", 2L, 1L), ("SortieCloturee", null, 1L), ("SortieCreee", null, null), ("MoniteurCree", null, null)],
             liens.Select(l => (l.Action, l.EquipementId, l.SortieId)));
     }
+
+    [Fact]
+    public async Task Les_passages_ramenent_le_type_les_utilisations_et_le_genre_du_responsable()
+    {
+        var horloge = new HorlogeFixe();
+        var equipements = new EquipementRepository(_base.Fabrique);
+        var sorties = new SortieRepository(_base.Fabrique);
+        var journal = new JournalRepository(_base.Fabrique);
+        var moniteurs = new MoniteurRepository(_base.Fabrique);
+        var reglages = new Reglages();
+        var scan = new ServiceScan(equipements, sorties, journal, horloge, reglages);
+        var serviceSortie = new ServiceSortie(sorties, moniteurs, journal, horloge, reglages, null, new TypeSortieRepository(_base.Fabrique));
+        Assert.True(await DonneesDemo.ChargerSiVideAsync(_base.Fabrique, horloge.AujourdHui));
+        var niveau1 = (await moniteurs.ListerAsync(true)).Single(m => m.Genre == GenreResponsable.Classe && m.Nom == "Niveau 1");
+
+        // Mer : 4 utilisations par type, 3 pour cette sortie.
+        var r = await serviceSortie.CreerAsync(new NouvelleSortie(new DateOnly(2026, 11, 6), TypeSortie.Mer, "Week-end Marseille", niveau1.Id, Utilisations: 3));
+        Assert.True(r.Reussi, r.Message);
+        var id = r.Id!.Value;
+        await scan.ScannerDepartAsync(id, "A01");
+        await serviceSortie.ValiderDepartAsync(id);
+        await scan.ScannerRetourAsync(id, "A01");
+
+        var a01 = (await equipements.ObtenirParCodeAsync("A01"))!;
+        var p = (await sorties.ListerPassagesAsync(a01.Id)).Single(x => x.SortieId == id);
+        Assert.Equal((TypeSortie.Mer, "Mer", 3, (int?)4, GenreResponsable.Classe, "Niveau 1"),
+            (p.TypeSortie, p.TypeNom, p.Utilisations, p.UtilisationsType, p.MoniteurGenre, p.MoniteurNom));
+
+        // De bout en bout : la page « Utilisations » de A01.
+        var historique = new ServiceHistorique(journal, equipements, new CategorieRepository(_base.Fabrique), sorties, new RevisionRepository(_base.Fabrique), moniteurs, horloge, reglages);
+        var u = (await historique.ObtenirUtilisationsAsync(a01.Id))!;
+        var ligne = u.Lignes.Single(l => l.SortieId == id);
+        Assert.Equal(("Classe Niveau 1", 3, true, true), (ligne.Responsable, ligne.Utilisations, ligne.Modifiees, ligne.Comptee));
+        Assert.Equal(u.Compteur, u.Sorties.Where(l => l.Compteur is not null).Select(l => l.Compteur).First());
+    }
 }

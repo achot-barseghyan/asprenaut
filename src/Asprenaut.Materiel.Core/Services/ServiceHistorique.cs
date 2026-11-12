@@ -275,6 +275,153 @@ public sealed class ServiceHistorique(
             donnees.Controles.Where(c => c.Type == TypeControle.Revision && c.Composant.Length == 0).Select(c => (DateOnly?)c.DateControle).Max());
     }
 
+    // ---------------------------------------------------------------- Utilisations d'un équipement
+
+    /// <summary>
+    /// Page « Utilisations » : toutes les sorties de l'équipement, de la plus récente, avec les utilisations de chacune
+    /// et le compteur après son retour ; chaque contrôle de l'équipement complet (pas d'un composant) remet le compteur
+    /// à zéro, comme <see cref="IEquipementRepository.ListerCompteursAsync"/> : un retour scanné le jour du contrôle
+    /// compte avant lui. Une sortie encore dehors ou manquante n'est pas comptée (le compteur avance au retour).
+    /// </summary>
+    public async Task<UtilisationsEquipement?> ObtenirUtilisationsAsync(long equipementId, CancellationToken ct = default)
+    {
+        if (await equipements.ObtenirAsync(equipementId, ct) is not { } e)
+        {
+            return null;
+        }
+
+        var d = await ChargerAsync(e, ct);
+        var controles = d.Controles.Where(c => c.Composant.Length == 0).ToList();
+
+        // Un contrôle daté sans heure tombe en fin de journée (UTC, comme la requête du compteur).
+        static DateTime FinDe(DateOnly date) => date.ToDateTime(new TimeOnly(23, 59, 59, 999), DateTimeKind.Utc);
+        static DateTime Utc(DateTime t) => t.Kind == DateTimeKind.Local ? t.ToUniversalTime() : DateTime.SpecifyKind(t, DateTimeKind.Utc);
+
+        // Frise chronologique : retours (ou départs pas encore rentrés) et contrôles.
+        var frise = d.Passages.Select(p => (Moment: Utc(p.ScanneRetourLe ?? p.ScanneDepartLe), Passage: (PassageSortie?)p, Controle: (Controle?)null))
+            .Concat(controles.Select(c => (Moment: FinDe(c.DateControle), Passage: (PassageSortie?)null, Controle: (Controle?)c)))
+            .OrderBy(x => x.Moment).ThenBy(x => x.Controle?.SaisiLe ?? DateTime.MinValue)
+            .ToList();
+
+        var lignes = new List<LigneUtilisation>();
+        var compteur = 0;
+        var total = 0;
+        foreach (var (_, passage, controle) in frise)
+        {
+            if (controle is not null)
+            {
+                compteur = 0;
+                lignes.Add(LigneControle(controle, d));
+                continue;
+            }
+
+            var p = passage!;
+            var comptee = p.ScanneRetourLe is not null;
+            if (comptee)
+            {
+                compteur += p.Utilisations;
+                total += p.Utilisations;
+            }
+
+            lignes.Add(LigneSortie(p, comptee ? compteur : null, d.Signalements.Select(s => s.Signalement)));
+        }
+
+        lignes.Reverse(); // La plus récente d'abord.
+
+        var dernier = controles.OrderByDescending(c => c.DateControle).ThenByDescending(c => c.SaisiLe).FirstOrDefault();
+        var depuis = dernier is null ? DateTime.MinValue : FinDe(dernier.DateControle);
+        var sortiesDepuis = d.Passages.Count(p => Utc(p.ScanneRetourLe ?? p.ScanneDepartLe) > depuis);
+        var problemes = d.Signalements.Count(s => Utc(s.Signalement.SignaleLe) > depuis);
+
+        var miseEnService = DateOnly.FromDateTime(e.CreeLe.ToLocalTime());
+        foreach (var date in d.Passages.Select(p => p.DateSortie).Concat(controles.Select(c => c.DateControle)))
+        {
+            miseEnService = date < miseEnService ? date : miseEnService;
+        }
+
+        var depuisLe = miseEnService.ToString("MM/yyyy", Libelles.Culture);
+        var fiche = string.Join(" ", new[] { e.Marque, e.Modele }.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim()));
+        var sousTitre = string.Join(" · ", new[] { e.Libelle.Trim(), fiche, $"en service depuis {depuisLe}" }.Where(v => v.Length > 0));
+
+        var seuil = ServiceCompteur.SeuilEtOrigine(reglages, e.Code, e.Libelle, d.Categorie);
+        var officiel = (await equipements.ListerCompteursAsync(e.Id, ct)).FirstOrDefault()?.Utilisations ?? compteur;
+        var etat = seuil is { } s ? ServiceCompteur.Etat(officiel, s.Seuil, reglages.PrevenirAvantSeuil) : EtatCompteur.Normal;
+        var dernierTexte = dernier is null ? "Jamais contrôlé"
+            : $"{(dernier.Type == TypeControle.Revision ? "Révisé" : "Contrôlé")} le {Libelles.Date(dernier.DateControle)}";
+
+        return new UtilisationsEquipement(e, d.Categorie, sousTitre, officiel, seuil?.Seuil, seuil?.Origine ?? OrigineSeuil.Categorie, etat,
+            sortiesDepuis, dernierTexte, total, $"Depuis {depuisLe} · {Libelles.Pluriel(controles.Count, "contrôle")}", problemes, lignes);
+    }
+
+    private static LigneUtilisation LigneControle(Controle c, DonneesVie d)
+    {
+        var nature = c.Nature.Trim().Length > 0 ? c.Nature.Trim() : ServiceRevisions.LibelleControle(c.Type, d.Categorie);
+        var intervenant = c.Intervenant.Trim();
+        if (intervenant.Length == 0 && c.InspecteurId is { } id && d.Noms.TryGetValue(id, out var nom))
+        {
+            intervenant = nom;
+        }
+
+        return new LigneUtilisation
+        {
+            EstControle = true,
+            Date = c.DateControle,
+            Titre = intervenant.Length > 0 ? $"{nature} · {intervenant}" : nature,
+        };
+    }
+
+    private static LigneUtilisation LigneSortie(PassageSortie p, int? compteur, IEnumerable<Signalement> signalements)
+    {
+        var depart = p.ScanneDepartLe.ToLocalTime();
+        var retour = p.ScanneRetourLe?.ToLocalTime();
+        var horaires = retour is { } r
+            ? $"{depart:HH:mm} · {(DateOnly.FromDateTime(r) == DateOnly.FromDateTime(depart) ? "" : r.ToString("dd/MM ", Libelles.Culture))}{r:HH:mm}"
+            : $"{depart:HH:mm} · {(p.Statut == StatutSortieEquipement.Manquant ? "manquant" : "en cours")}";
+
+        var probleme = signalements.Where(s => s.SortieId == p.SortieId).OrderByDescending(s => s.SignaleLe).FirstOrDefault();
+        var (etat, libelle) = p.Statut switch
+        {
+            StatutSortieEquipement.Dehors => (EtatRetourUtilisation.Dehors, "Sorti"),
+            StatutSortieEquipement.Manquant => (EtatRetourUtilisation.Manquant, "Manquant"),
+            _ when probleme is not null => (EtatRetourUtilisation.Signale, $"Rendu · {ServiceSignalements.Libelle(probleme.Gravite)} · {probleme.Cause}"),
+            _ when p.ClotureeLe is { } cloture && p.ScanneRetourLe > cloture => (EtatRetourUtilisation.Rendu, "Retrouvé"),
+            _ => (EtatRetourUtilisation.Rendu, "Rendu"),
+        };
+
+        return new LigneUtilisation
+        {
+            EstControle = false,
+            Date = p.DateSortie,
+            Titre = p.Intitule.Trim().Length > 0 ? p.Intitule.Trim() : p.TypeNom,
+            SortieId = p.SortieId,
+            Famille = p.TypeSortie,
+            TypeNom = p.TypeNom.Length > 0 ? p.TypeNom : Libelles.De(p.TypeSortie),
+            Responsable = p.MoniteurGenre == GenreResponsable.Classe ? $"Classe {p.MoniteurNom}" : p.MoniteurNom,
+            Horaires = horaires,
+            Utilisations = p.Utilisations,
+            Modifiees = p.UtilisationsType is { } u && u != p.Utilisations,
+            Comptee = compteur is not null,
+            Compteur = compteur,
+            Retour = etat,
+            LibelleRetour = libelle,
+        };
+    }
+
+    /// <summary>Lignes affichées de la page « Utilisations », pour Excel.</summary>
+    public static string ExporterUtilisationsCsv(UtilisationsEquipement u, IEnumerable<LigneUtilisation> lignes) =>
+        Csv.Ecrire(
+            ["Code", "Date", "Sortie", "Type", "Responsable", "Départ · retour", "Utilisations", "Compteur", "Retour"],
+            lignes.Select(l => l.EstControle
+                ? new[] { u.Equipement.Code, Libelles.Date(l.Date), l.Titre, "Contrôle", "", "", "", "0", "Compteur remis à 0" }
+                : new[]
+                {
+                    u.Equipement.Code, Libelles.Date(l.Date), l.Titre, l.TypeNom, l.Responsable, l.Horaires,
+                    l.Utilisations.ToString(Libelles.Culture), l.Compteur?.ToString(Libelles.Culture) ?? "", l.LibelleRetour,
+                }));
+
+    /// <summary>« Utilisations A07 2026-11-12.csv ».</summary>
+    public string NomFichierUtilisations(string code) => $"Utilisations {code} {horloge.AujourdHui:yyyy-MM-dd}.csv";
+
     private sealed record DonneesVie(
         string Categorie,
         IReadOnlyList<PassageSortie> Passages,

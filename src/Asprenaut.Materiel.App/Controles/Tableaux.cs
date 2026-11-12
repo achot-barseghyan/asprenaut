@@ -130,6 +130,127 @@ public static class Tableaux
         return zones;
     }
 
+    // ---------------------------------------------------------------- Boutons pictogrammes (colonne Actions de l'inventaire)
+
+    /// <summary>
+    /// Bouton carré de la colonne Actions : pictogramme, bulle d'aide, couleur (null = neutre), pictogramme rempli,
+    /// et cadenas jaune au coin si l'action demande le code gestionnaire.
+    /// </summary>
+    public sealed record BoutonIcone(string Icone, string Bulle, Color? Couleur = null, bool Plein = false, bool Verrou = false);
+
+    private const float CoteBoutonIcone = 38f;
+    private const float EcartBoutonIcone = 6f;
+    private const float HauteurPastilleAction = 20f;
+    private const float EcartPastilleAction = 5f;
+
+    /// <summary>Zones des boutons carrés, alignés à droite ; sous la pastille du problème s'il y en a une.</summary>
+    public static RectangleF[] ZonesBoutonsIcones(Rectangle cellule, float echelle, int nombre, bool avecPastille)
+    {
+        var cote = CoteBoutonIcone * echelle;
+        var ecart = EcartBoutonIcone * echelle;
+        var bloc = cote + (avecPastille ? (HauteurPastilleAction + EcartPastilleAction) * echelle : 0);
+        var haut = cellule.Top + ((cellule.Height - bloc) / 2f) + (bloc - cote);
+        var gauche = cellule.Right - (12f * echelle) - (nombre * cote) - ((nombre - 1) * ecart);
+        var zones = new RectangleF[nombre];
+        for (var i = 0; i < nombre; i++)
+        {
+            zones[i] = new RectangleF(gauche + (i * (cote + ecart)), haut, cote, cote);
+        }
+
+        return zones;
+    }
+
+    /// <summary>Indice du bouton carré sous la souris (position relative à la cellule), ou -1.</summary>
+    public static int BoutonIconeSous(Rectangle cellule, float echelle, int nombre, bool avecPastille, Point position)
+    {
+        var zones = ZonesBoutonsIcones(cellule, echelle, nombre, avecPastille);
+        var absolu = new PointF(cellule.Left + position.X, cellule.Top + position.Y);
+        for (var i = 0; i < zones.Length; i++)
+        {
+            if (RectangleF.Inflate(zones[i], 3 * echelle, 3 * echelle).Contains(absolu))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// Colonne Actions (maquette « Inventaire ») : la pastille du problème ouvert (« À surveiller · Embout abîmé »)
+    /// alignée à droite, puis les boutons carrés.
+    /// </summary>
+    public static void PeindreBoutonsIcones(DataGridViewCellPaintingEventArgs e, IReadOnlyList<BoutonIcone> boutons, (string Texte, Color Couleur)? pastille = null)
+    {
+        if (e.Graphics is not { } g || e.CellStyle is null)
+        {
+            return;
+        }
+
+        var selection = (e.State & DataGridViewElementStates.Selected) != 0;
+        PeindreFond(e, selection);
+        var etat = g.Save(); // Le lissage ne doit pas déborder sur les cellules suivantes (voir PeindreFond).
+        Dessin.Qualite(g);
+        var s = g.DpiX / 96f;
+        var fond = selection ? e.CellStyle.SelectionBackColor : e.CellStyle.BackColor;
+        var zones = ZonesBoutonsIcones(e.CellBounds, s, boutons.Count, pastille is not null);
+
+        if (pastille is { } p)
+        {
+            var police = Theme.PoliceGrasse(7.5f);
+            var droite = zones[^1].Right;
+            var largeur = Math.Min(TextRenderer.MeasureText(g, p.Texte, police).Width + (10f * s), droite - e.CellBounds.Left - (8f * s));
+            var r = new RectangleF(droite - largeur, zones[0].Top - ((HauteurPastilleAction + EcartPastilleAction) * s), largeur, HauteurPastilleAction * s);
+            using (var chemin = Dessin.Arrondi(r, r.Height / 2))
+            using (var pinceau = new SolidBrush(Theme.Sur(fond, p.Couleur, 0.16f)))
+            {
+                g.FillPath(pinceau, chemin);
+            }
+
+            Dessin.Texte(g, p.Texte, police, Rectangle.Round(r), p.Couleur, centre: true);
+        }
+
+        for (var i = 0; i < boutons.Count; i++)
+        {
+            var b = boutons[i];
+            var r = zones[i];
+            var couleurFond = b.Couleur is { } c ? Theme.Sur(fond, c, 0.14f) : Theme.Sur(fond, Theme.Fond, 0.5f);
+            var couleurBord = b.Couleur ?? Theme.Sur(fond, Theme.AccentClair, 0.24f);
+            using (var chemin = Dessin.Arrondi(r, 11f * s))
+            using (var pinceau = new SolidBrush(couleurFond))
+            using (var stylo = new Pen(couleurBord, s))
+            {
+                g.FillPath(pinceau, chemin);
+                g.DrawPath(stylo, chemin);
+            }
+
+            var icone = 17f * s;
+            Icones.Dessiner(g, b.Icone, new RectangleF(r.X + ((r.Width - icone) / 2), r.Y + ((r.Height - icone) / 2), icone, icone),
+                b.Couleur ?? Theme.TexteDoux, 1.9f, b.Plein);
+
+            if (b.Verrou)
+            {
+                // Cadenas jaune au coin haut droit, détouré de la couleur de la ligne (comme PastilleVerrou).
+                var d = 18f * s;
+                var rv = new RectangleF(r.Right - (d * 2 / 3), r.Top - (d / 3), d, d);
+                using (var detour = new SolidBrush(fond))
+                {
+                    g.FillEllipse(detour, RectangleF.Inflate(rv, 2 * s, 2 * s));
+                }
+
+                using (var jaune = new SolidBrush(Theme.Avertissement))
+                {
+                    g.FillEllipse(jaune, rv);
+                }
+
+                Icones.Dessiner(g, Icones.Cadenas, RectangleF.Inflate(rv, -4.5f * s, -4.5f * s), Theme.TexteSurAvertissement, 3f);
+            }
+        }
+
+        g.Restore(etat);
+        e.Handled = true;
+    }
+
     /// <summary>Indice du bouton sous le clic (position relative à la cellule), ou -1.</summary>
     public static int BoutonSous(Rectangle cellule, float echelle, int nombre, Point position)
     {
@@ -214,11 +335,41 @@ public static class Tableaux
         e.Handled = true;
     }
 
+    /// <summary>Lien sous le compteur d'utilisation de l'inventaire (ouvre la page « Utilisations »).</summary>
+    public const string LienUtilisation = "Voir les sorties";
+
+    /// <summary>Hauteurs de la cellule « Utilisation » : haut du texte, et zone du lien (vide sans lien).</summary>
+    private static (float Haut, Size Texte, RectangleF Lien) DispositionUtilisation(Graphics g, Rectangle cellule, Padding padding, string texte, bool barreVisible, bool avecLien)
+    {
+        var sx = g.DpiX / 96f;
+        const TextFormatFlags drapeaux = TextFormatFlags.NoPadding | TextFormatFlags.SingleLine;
+        var tTexte = TextRenderer.MeasureText(g, texte, Theme.PoliceTitre(9.5f), Size.Empty, drapeaux);
+        var hBarre = barreVisible ? 13f * sx : 0;
+        var tLien = avecLien ? TextRenderer.MeasureText(g, LienUtilisation, Theme.PoliceTitre(8.25f), Size.Empty, drapeaux) : Size.Empty;
+        var icone = 13f * sx;
+        var hLien = avecLien ? tLien.Height + (5f * sx) : 0;
+        var haut = cellule.Top + ((cellule.Height - tTexte.Height - hBarre - hLien) / 2);
+        var lien = avecLien
+            ? new RectangleF(cellule.Left + padding.Left, haut + tTexte.Height + hBarre + (5f * sx), icone + (5f * sx) + tLien.Width, tLien.Height)
+            : RectangleF.Empty;
+        return (haut, tTexte, lien);
+    }
+
+    /// <summary>Zone du lien « Voir les sorties » d'une cellule « Utilisation » (agrandie pour le doigt), pour le clic.</summary>
+    public static Rectangle ZoneLienUtilisation(Graphics g, Rectangle cellule, Padding padding, string texte, bool barreVisible)
+    {
+        var zone = Rectangle.Round(DispositionUtilisation(g, cellule, padding, texte, barreVisible, avecLien: true).Lien);
+        zone.Inflate((int)(6 * g.DpiX / 96f), (int)(5 * g.DpiY / 96f));
+        return zone;
+    }
+
     /// <summary>
     /// Compteur d'utilisation (colonne « Utilisation ») : « 64 / 80 utilisations », pastille « SEUIL MODÈLE » ou
-    /// « SEUIL ÉQUIPEMENT » si le seuil n'est pas celui de la catégorie, puis une barre fine (jaune à 90 %, rouge au seuil).
+    /// « SEUIL ÉQUIPEMENT » si le seuil n'est pas celui de la catégorie, une barre fine (jaune à 90 %, rouge au seuil),
+    /// puis le lien « Voir les sorties » si <paramref name="avecLien"/>.
     /// </summary>
-    public static void PeindreUtilisation(DataGridViewCellPaintingEventArgs e, string texte, double part, Color couleur, Color couleurTexte, string? badge, bool barreVisible)
+    public static void PeindreUtilisation(DataGridViewCellPaintingEventArgs e, string texte, double part, Color couleur, Color couleurTexte, string? badge, bool barreVisible,
+        bool avecLien = false)
     {
         if (e.Graphics is not { } g || e.CellStyle is null)
         {
@@ -233,13 +384,19 @@ public static class Tableaux
         var fond = selection ? e.CellStyle.SelectionBackColor : e.CellStyle.BackColor;
         var police = Theme.PoliceTitre(9.5f);
         var drapeaux = TextFormatFlags.NoPadding | TextFormatFlags.SingleLine;
-        var tTexte = TextRenderer.MeasureText(g, texte, police, Size.Empty, drapeaux);
+        var (haut, tTexte, lien) = DispositionUtilisation(g, e.CellBounds, e.CellStyle.Padding, texte, barreVisible, avecLien);
         var hBarre = barreVisible ? 6f * sx : 0;
         var ecart = barreVisible ? 7f * sx : 0;
         var gauche = e.CellBounds.Left + e.CellStyle.Padding.Left;
         var droite = e.CellBounds.Right - (12f * sx);
-        var haut = e.CellBounds.Top + ((e.CellBounds.Height - tTexte.Height - ecart - hBarre) / 2);
         TextRenderer.DrawText(g, texte, police, new Point(gauche, (int)haut), couleurTexte, drapeaux);
+
+        if (avecLien)
+        {
+            var icone = 13f * sx;
+            Icones.Dessiner(g, Icones.Liste, new RectangleF(lien.Left, lien.Top + ((lien.Height - icone) / 2), icone, icone), Theme.AccentClair);
+            TextRenderer.DrawText(g, LienUtilisation, Theme.PoliceTitre(8.25f), new Point((int)(lien.Left + icone + (5f * sx)), (int)lien.Top), Theme.AccentClair, drapeaux);
+        }
 
         if (badge is not null)
         {

@@ -77,6 +77,20 @@ public sealed class PassageSortie
     public StatutSortieEquipement Statut { get; set; }
     public DateTime ScanneDepartLe { get; set; }
     public DateTime? ScanneRetourLe { get; set; }
+
+    /// <summary>Famille du type de sortie (pictogramme, couleur).</summary>
+    public TypeSortie TypeSortie { get; set; }
+
+    /// <summary>Nom du type de sortie (vide si la sortie n'a pas de type).</summary>
+    public string TypeNom { get; set; } = "";
+
+    /// <summary>Utilisations comptées par cette sortie (sortie.utilisations).</summary>
+    public int Utilisations { get; set; } = 1;
+
+    /// <summary>Utilisations de son type aujourd'hui (différentes : nombre modifié pour cette sortie) ; null sans type.</summary>
+    public int? UtilisationsType { get; set; }
+
+    public GenreResponsable MoniteurGenre { get; set; }
 }
 
 /// <summary>Une étape de la vie d'un équipement. <see cref="Moment"/> en heure locale ; sans heure si <see cref="DateSeule"/>.</summary>

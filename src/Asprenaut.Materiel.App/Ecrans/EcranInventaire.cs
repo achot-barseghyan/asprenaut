@@ -70,15 +70,16 @@ public sealed class EcranInventaire : EcranBase
             Executer(RechargerAsync);
         };
 
-        Theme.AppliquerGrille(_grille, hauteurLigne: 60);
+        // Compteur, barre et lien « Voir les sorties » ; pastille du problème au-dessus des boutons d'actions.
+        Theme.AppliquerGrille(_grille, hauteurLigne: 70);
         _grille.AccessibleName = "Matériel du club";
         _grille.ScrollBars = ScrollBars.Both; // Les colonnes des détendeurs défilent en largeur.
         DefinirColonnes(ColonnesGenerales);
         _grille.CellFormatting += ColorerCellule;
         _grille.CellPainting += PeindreCellule;
 
-        // Clic sur la ligne (nom souligné, double-clic, Entrée) : fiche de suivi. La cellule d'actions a trois boutons :
-        // « Suivi », « Signaler » (libre, comme au retour d'une sortie) puis « Modifier ».
+        // Clic sur la ligne (nom souligné, double-clic, Entrée) : fiche de suivi. La cellule d'actions a trois boutons
+        // carrés (maquette) : fiche de suivi EPI, signaler (libre, comme au retour d'une sortie) puis modifier (code).
         _grille.CellMouseClick += (_, e) =>
         {
             if (e.Button != MouseButtons.Left || e.RowIndex < 0 || _grille.Rows[e.RowIndex].Tag is not LigneInventaire l)
@@ -88,8 +89,7 @@ public sealed class EcranInventaire : EcranBase
 
             if (Colonne(e.ColumnIndex) == "action")
             {
-                var cellule = _grille.GetCellDisplayRectangle(e.ColumnIndex, e.RowIndex, false);
-                switch (Tableaux.BoutonSous(cellule, _grille.DeviceDpi / 96f, 3, e.Location))
+                switch (BoutonAction(e.RowIndex, e.ColumnIndex, e.Location))
                 {
                     case 0:
                         Executer(() => OuvrirSuiviAsync(l));
@@ -109,6 +109,10 @@ public sealed class EcranInventaire : EcranBase
             {
                 Executer(() => OuvrirSuiviAsync(l));
             }
+            else if (SurLeLien(e.RowIndex, e.ColumnIndex, e.Location))
+            {
+                _navigation.AllerA<EcranUtilisations>(l.EquipementId);
+            }
         };
         _grille.CellDoubleClick += (_, e) =>
         {
@@ -126,7 +130,11 @@ public sealed class EcranInventaire : EcranBase
             }
         };
         _grille.CellMouseMove += (_, e) =>
-            _grille.Cursor = e.RowIndex >= 0 && (Colonne(e.ColumnIndex) == "action" || SurLeNom(e.RowIndex, e.ColumnIndex, e.Location)) ? Cursors.Hand : Cursors.Default;
+            _grille.Cursor = e.RowIndex >= 0 && ((Colonne(e.ColumnIndex) == "action" && BoutonAction(e.RowIndex, e.ColumnIndex, e.Location) >= 0)
+                || SurLeNom(e.RowIndex, e.ColumnIndex, e.Location) || SurLeLien(e.RowIndex, e.ColumnIndex, e.Location)) ? Cursors.Hand : Cursors.Default;
+
+        // Le cadenas du bouton « Modifier » suit le mode gestion (déverrouillage, expiration).
+        _garde.Gestion.EtatChange += SurChangementDeMode;
 
         var carteGrille = new Carte { Padding = new Padding(8, 6, 8, 8), Rayon = 22 };
         _grille.Dock = DockStyle.Fill;
@@ -190,6 +198,7 @@ public sealed class EcranInventaire : EcranBase
         if (disposing)
         {
             _attenteRecherche.Dispose();
+            _garde.Gestion.EtatChange -= SurChangementDeMode;
             foreach (var police in _policesBarrees.Values)
             {
                 police.Dispose();
@@ -320,9 +329,9 @@ public sealed class EcranInventaire : EcranBase
 
     private static string Date(DateOnly? d) => d is { } v ? Libelles.Date(v) : "—";
 
-    private static readonly ColonneInventaire Action = new("action", "", 235, _ => "");
+    private static readonly ColonneInventaire Action = new("action", "Actions", 170, _ => "");
 
-    private static readonly ColonneInventaire Statut = new("statut", "Statut", 110, l => Libelles.De(l.Statut));
+    private static readonly ColonneInventaire Statut = new("statut", "Statut", 125, l => Libelles.De(l.Statut));
 
     /// <summary>Compteur d'utilisation (maquette) : « 64 / 80 utilisations », barre et origine du seuil dessinées.</summary>
     private ColonneInventaire Utilisation => new("utilisation", "Utilisation", 175, TexteUtilisation);
@@ -377,7 +386,7 @@ public sealed class EcranInventaire : EcranBase
         new("derniere", "Dernière révision", 120, l => Date(l.DerniereRevision)),
         new("revision", "À réviser avant", 150, l => Date(l.DateProchaineRevision)),
         new("identification", "Identification", 300, l => _inventaire.Identification(l.Categorie, l.Code, l.Taille)),
-        new("action", "", 300, _ => ""),
+        new("action", "Actions", 210, _ => ""),
     ];
 
     private ColonneInventaire[] _colonnes = [];
@@ -406,6 +415,13 @@ public sealed class EcranInventaire : EcranBase
             Tableaux.AjouterColonne(_grille, c.Nom, c.Titre, c.Largeur);
             var colonne = _grille.Columns[c.Nom]!;
             colonne.HeaderCell.Style.Padding = colonne.DefaultCellStyle.Padding = new Padding((int)Dessin.Echelle(this, 8), 0, 4, 0);
+            if (c.Nom == "action")
+            {
+                // Titre « ACTIONS » aligné sur les boutons, à droite.
+                colonne.HeaderCell.Style.Alignment = DataGridViewContentAlignment.MiddleRight;
+                colonne.HeaderCell.Style.Padding = new Padding(0, 0, (int)Dessin.Echelle(this, 14), 0);
+            }
+
             if (largeursFixes)
             {
                 colonne.Width = (int)Dessin.Echelle(this, c.Largeur);
@@ -433,6 +449,12 @@ public sealed class EcranInventaire : EcranBase
         {
             var i = _grille.Rows.Add(_colonnes.Select(c => (object)c.Valeur(l)).ToArray());
             _grille.Rows[i].Tag = l;
+            if (_problemes.TryGetValue(l.EquipementId, out var probleme))
+            {
+                // Ligne d'un équipement signalé : légèrement teintée de la couleur du problème (maquette).
+                _grille.Rows[i].DefaultCellStyle.BackColor = Theme.Sur(_grille.DefaultCellStyle.BackColor, CouleurProbleme(probleme), 0.06f);
+            }
+
             if (_grille.Columns.Contains("utilisation") && _utilisations.TryGetValue(l.EquipementId, out var u) && u.Seuil is not null)
             {
                 _grille.Rows[i].Cells["utilisation"].ToolTipText = u.Origine switch
@@ -444,6 +466,7 @@ public sealed class EcranInventaire : EcranBase
             }
         }
 
+        MettreAJourBullesActions();
         _grille.ResumeLayout();
     }
 
@@ -467,6 +490,89 @@ public sealed class EcranInventaire : EcranBase
         var zone = Tableaux.ZoneTitre(g, cellule, _grille.Columns[colonne].DefaultCellStyle.Padding, l.Libelle);
         zone.Inflate(0, 3);
         return zone.Contains(cellule.Left + position.X, cellule.Top + position.Y);
+    }
+
+    /// <summary>
+    /// Boutons de la colonne Actions : fiche de suivi EPI, drapeau (rempli et coloré si un problème est ouvert : il le modifie),
+    /// crayon (cadenas tant que le mode gestion est fermé).
+    /// </summary>
+    private Tableaux.BoutonIcone[] BoutonsAction(LigneInventaire l)
+    {
+        var probleme = _problemes.TryGetValue(l.EquipementId, out var p) ? p : null;
+        var verrou = !_garde.Gestion.EstAutorise(ActionProtegee.Materiel);
+        return
+        [
+            new(Icones.Document, "Fiche de suivi EPI"),
+            new(Icones.Drapeau, probleme is null ? "Signaler un problème" : "Modifier le problème signalé",
+                probleme is null ? null : CouleurProbleme(probleme), Plein: probleme is not null),
+            new(Icones.Crayon, verrou ? "Modifier (code gestionnaire requis)" : "Modifier", Verrou: verrou),
+        ];
+    }
+
+    /// <summary>
+    /// Bulle de la cellule d'actions : les trois boutons dans l'ordre. La bulle de la grille garde le même texte pour toute
+    /// la cellule (elle le lit en y entrant) : une bulle par bouton ne s'affichait pas.
+    /// </summary>
+    private string BulleActions(LigneInventaire l) => string.Join("  ·  ", BoutonsAction(l).Select(b => b.Bulle));
+
+    /// <summary>Bulles des cellules d'actions (après un chargement, ou quand le mode gestion change le cadenas).</summary>
+    private void MettreAJourBullesActions()
+    {
+        if (!_grille.Columns.Contains("action"))
+        {
+            return;
+        }
+
+        foreach (DataGridViewRow ligne in _grille.Rows)
+        {
+            if (ligne.Tag is LigneInventaire l)
+            {
+                ligne.Cells["action"].ToolTipText = BulleActions(l);
+            }
+        }
+    }
+
+    /// <summary>À surveiller : jaune ; hors service : rouge.</summary>
+    private static Color CouleurProbleme(Signalement s) => s.Gravite == GraviteSignalement.HorsService ? Theme.Erreur : Theme.Avertissement;
+
+    /// <summary>Bouton d'actions sous la souris (0 fiche, 1 signaler, 2 modifier), ou -1.</summary>
+    private int BoutonAction(int ligne, int colonne, Point position) =>
+        ligne >= 0 && _grille.Rows[ligne].Tag is LigneInventaire l
+            ? Tableaux.BoutonIconeSous(_grille.GetCellDisplayRectangle(colonne, ligne, false), _grille.DeviceDpi / 96f, 3,
+                _problemes.ContainsKey(l.EquipementId), position)
+            : -1;
+
+    private void SurChangementDeMode(object? sender, EventArgs e)
+    {
+        void Actualiser()
+        {
+            MettreAJourBullesActions();
+            _grille.Invalidate();
+        }
+
+        if (_grille.IsHandleCreated && _grille.InvokeRequired)
+        {
+            _grille.BeginInvoke(Actualiser);
+        }
+        else if (!_grille.IsDisposed)
+        {
+            Actualiser();
+        }
+    }
+
+    /// <summary>« Voir les sorties » sous le compteur d'utilisation : la page « Utilisations » de l'équipement.</summary>
+    private bool SurLeLien(int ligne, int colonne, Point position)
+    {
+        if (Colonne(colonne) != "utilisation" || ligne < 0 || _grille.Rows[ligne].Tag is not LigneInventaire l
+            || !_utilisations.TryGetValue(l.EquipementId, out var u))
+        {
+            return false;
+        }
+
+        var cellule = _grille.GetCellDisplayRectangle(colonne, ligne, false);
+        using var g = _grille.CreateGraphics();
+        return Tableaux.ZoneLienUtilisation(g, cellule, _grille.Columns[colonne].DefaultCellStyle.Padding, u.Texte, u.Seuil is not null)
+            .Contains(cellule.Left + position.X, cellule.Top + position.Y);
     }
 
     /// <summary>Révision (ou TIV) ou requalification : la plus proche.</summary>
@@ -527,16 +633,15 @@ public sealed class EcranInventaire : EcranBase
                 OrigineSeuil.Equipement => "SEUIL ÉQUIPEMENT",
                 _ => null,
             };
-            Tableaux.PeindreUtilisation(e, u.Texte, u.Part, couleur, texte, badge, barreVisible: u.Seuil is not null);
+            Tableaux.PeindreUtilisation(e, u.Texte, u.Part, couleur, texte, badge, barreVisible: u.Seuil is not null, avecLien: true);
         }
         else if (colonne == "action")
         {
-            Tableaux.PeindreBoutons(e, ("Suivi", null), ("Signaler", Theme.Avertissement), ("Modifier", null));
-        }
-        else if (colonne == "statut" && l.Statut == StatutInventaire.Disponible && _problemes.TryGetValue(l.EquipementId, out var probleme))
-        {
-            // Problème signalé, encore en service : il part quand même, mais on le voit.
-            Tableaux.PeindrePastille(e, ServiceSignalements.Libelle(probleme.Gravite), Theme.Avertissement);
+            // Problème ouvert : « À surveiller · Embout abîmé » au-dessus des boutons.
+            (string, Color)? pastille = _problemes.TryGetValue(l.EquipementId, out var probleme)
+                ? ($"{ServiceSignalements.Libelle(probleme.Gravite)} · {probleme.Cause}", CouleurProbleme(probleme))
+                : null;
+            Tableaux.PeindreBoutonsIcones(e, BoutonsAction(l), pastille);
         }
         else if (colonne == "statut")
         {

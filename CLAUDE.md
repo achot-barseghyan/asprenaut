@@ -44,7 +44,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
 - **Core/Services** : `ServiceScan` (scan départ/retour, retrait), `ServiceSortie` (créer, valider départ, aperçu et clôture),
   `ServiceInventaire`, `ServiceMoniteurs` (moniteurs et classes : cartes, fiche, ajout/modification, saison au 1er septembre), `ServiceRevisions`
   (échéancier, contrôles, atelier, séances TIV), `ServiceReglages`, `ServiceHistorique` (journal lisible, période, regroupement,
-  export CSV, vie d'un équipement), `ServiceGestion` (mode consultation / mode gestion, code gestionnaire),
+  export CSV, vie d'un équipement, utilisations d'un équipement), `ServiceGestion` (mode consultation / mode gestion, code gestionnaire),
   `ServiceBilan` (bilan de saison pour l'AG), `ServiceManuels` (notices des fabricants), `ServiceSignalements` (problèmes
   signalés au retour ou depuis l'inventaire). Toutes les règles métier sont ici.
 - **Core/Resultats** : `ResultatScan` (Niveau Succes/Avertissement/Erreur, Message, Equipement, `ActionProposee`, Code, AutreSortieId),
@@ -65,7 +65,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   fenêtres vers la « parking window » de WinForms, 1,4 s pour Paramètres). Écrans dans `Ecrans/` (héritent d'`EcranBase` ; Départ/Retour héritent d'`EcranScanBase`
   qui sérialise les scans et fournit fil d'Ariane + carte d'en-tête via `Composer(corps)`).
 - **Maquette** : https://claude.ai/artifact/8op5sAWFbf4mRQCxzd37aa (Sorties, Nouvelle sortie, Départ, Retour, Inventaire, Manuels,
-  Moniteurs, Historique, Bilan de saison, Révisions, Paramètres, Déverrouillage). Polices Sora/Manrope remplacées par Segoe UI Variable ; pas de fond dégradé ni de bulles animées.
+  Moniteurs, Historique, Bilan de saison, Révisions, Paramètres, Déverrouillage, Utilisations d'un équipement). Polices Sora/Manrope remplacées par Segoe UI Variable ; pas de fond dégradé ni de bulles animées.
 - **Briques d'interface** (`Controles/`) : `Carte`, `ControleDessine` (base des contrôles peints), `AnneauProgression`,
   `IndicateurEtapes`, `PastilleDate`, `Pastille`, `Picto`, `GrilleAdaptative` (colonnes auto, ajuste sa ligne de TableLayoutPanel),
   `Tuile`, `FilAriane`, `BarreRecherche`, `ChampSaisie` (`Icone` et `ADroite` optionnels), `ChampDate` (remplace le DateTimePicker, blanc et en anglais),
@@ -93,8 +93,13 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
 - **Inventaire** : colonne « Utilisation » (`ServiceCompteur.ListerUtilisationsAsync` : « 64 / 80 utilisations », barre jaune à 90 %,
   rouge au seuil, pastille « SEUIL MODÈLE / ÉQUIPEMENT » selon `OrigineSeuil`, `Tableaux.PeindreUtilisation`) dans les trois jeux
   de colonnes ; nom souligné en pointillé + ligne « marque modèle · catégorie » (`Tableaux.PeindreIconeDeuxLignes`), le clic
-  sur le nom ouvre la fiche. Bouton « Modifier » dessiné dans la grille (`Tableaux.PeindreBouton`), double-clic ou Entrée →
-  `FormulaireEquipement.ModifierAsync` → `ServiceInventaire.ModifierAsync`.
+  sur le nom, le double-clic ou Entrée ouvrent la fiche de suivi. Colonne « Actions » (maquette) : trois boutons carrés dessinés
+  (`Tableaux.PeindreBoutonsIcones`, clic par `BoutonIconeSous`) — fiche de suivi EPI, drapeau « Signaler » (rempli et coloré
+  si un problème est ouvert : il le modifie), crayon « Modifier » (`FormulaireEquipement.ModifierAsync`, cadenas jaune tant
+  que le mode gestion est fermé, mis à jour sur `ServiceGestion.EtatChange`) ; au-dessus, la pastille du problème ouvert
+  (« À surveiller · Débit continu », rouge si hors service) et la ligne légèrement teintée. Bulle de la cellule : les trois
+  boutons (une bulle par bouton avec `ToolTip.Show` ne s'affichait pas). Lien « Voir les sorties » sous le compteur
+  (`Tableaux.ZoneLienUtilisation` pour le clic, lignes de 70 px) → `AllerA<EcranUtilisations>(idEquipement)` (règle 29).
 - **Pictogrammes** : `Apparence/Icones.cs`, chemins SVG 24 × 24 de la maquette lus par `CheminSvg` et tracés en GDI+.
 - **Icône de l'application** : `Ressources/Asprenaut.ico` (16 à 256 px ; tailles ≤ 96 en bitmap, 128 et 256 en PNG), fabriquée
   depuis `Ressources/Asprenaut.png` (1024 px). `ApplicationIcon` dans le .csproj pour le .exe, ressource embarquée lue par
@@ -243,7 +248,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     une. La liste est relue après chaque ajout / suppression (le code proposé suit la catégorie choisie).
 
 27. Fiche de suivi EPI (maquette « Fiche de suivi EPI », migration 011) : clic sur le nom souligné, double-clic, Entrée ou bouton
-    « Suivi » de l'inventaire → `AllerA<EcranFicheSuivi>(idEquipement)` (fil d'Ariane « Inventaire › Fiche de suivi EPI · A05 »).
+    « Fiche de suivi EPI » (colonne Actions) de l'inventaire → `AllerA<EcranFicheSuivi>(idEquipement)` (fil d'Ariane « Inventaire › Fiche de suivi EPI · A05 »).
     `ServiceHistorique.ObtenirFicheSuiviAsync` : `VieEquipement`, titre (nom puis modèles sans la marque répétée, sans le manomètre),
     composants (`ServiceInventaire.ComposantsDe` : détendeur → Premier étage, puis Deuxième étage / Octopus / Manomètre renseignés ;
     autre → une carte « Équipement complet »), interventions (contrôles + passages en atelier, du plus récent ; nature « : détails »).
@@ -267,9 +272,9 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
 
 28. Problèmes signalés (`ServiceSignalements`, migration 013, maquette « Retour du matériel ») : fenêtre « Problème sur A07 »
     (`Ecrans/FormulaireSignalement`, `CibleSignalement`) ouverte au retour (bouton « Signaler un problème » à côté du message
-    du dernier rendu, drapeau sur chaque ligne « Rendu ») et depuis l'inventaire (bouton jaune « Signaler »). Causes selon la
+    du dernier rendu, drapeau sur chaque ligne « Rendu ») et depuis l'inventaire (drapeau de la colonne Actions). Causes selon la
     catégorie (`CausesPour`, « Autre » en dernier ; pictogrammes `Icones.PourCause`), cause obligatoire (60 car.), précision
-    facultative (200 car.). « À surveiller » libre : l'équipement reste en service (pastille « À surveiller » dans l'inventaire).
+    facultative (200 car.). « À surveiller » libre : l'équipement reste en service (pastille « À surveiller · cause » au-dessus des actions de l'inventaire).
     « Hors service » : action protégée Révisions, refusé si dehors, met HorsService (`MisHorsService`) ; redescendre à
     « À surveiller » demande aussi le code et ne remet en service que si c'est le signalement qui l'avait arrêté (et hors atelier).
     Un seul signalement ouvert par équipement (index `ux_signalement_ouvert`) : signaler de nouveau le modifie. Réformé refusé.
@@ -280,6 +285,17 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     Fiche EPI : interventions `TypeInterventionSuivie.Signalement` (« Problème signalé : cause : précision », responsable de la
     sortie ou « Inventaire », « · traité »). Retour : bandeau « N problèmes signalés · Voir › » (ceux de la sortie) → Révisions.
     Export : `signalements.csv`.
+
+29. Utilisations d'un équipement (`ServiceHistorique.ObtenirUtilisationsAsync`, écran `EcranUtilisations`, maquette « Utilisations
+    d'un équipement », consultation libre) : toutes ses sorties, de la plus récente, avec les utilisations de chacune (« MODIFIÉ »
+    si elles diffèrent de celles de son type) et le compteur juste après son retour ; chaque contrôle de l'équipement complet
+    (pas d'un composant) est intercalé et remet le compteur à 0, comme `ListerCompteursAsync` (un retour du jour du contrôle compte
+    avant lui). Sortie encore dehors ou manquante : pas encore comptée. Retour : Rendu, « Rendu · À surveiller · cause » si un
+    problème a été signalé pour cette sortie, Retrouvé (rendu après la clôture), Sorti, Manquant. Chiffres : compteur et seuil
+    (`ServiceCompteur.SeuilEtOrigine`), sorties depuis le dernier contrôle, total, problèmes depuis le dernier contrôle. Filtre par
+    type de sortie (`Theme.CouleurTypeSortie`), les contrôles restent affichés ; 12 sorties puis par 50. « Exporter CSV » : lignes
+    du filtre (`ExporterUtilisationsCsv`). `ListerPassagesAsync` ramène aussi type, utilisations (de la sortie et du type) et genre
+    du responsable.
 
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit

@@ -229,6 +229,11 @@ public sealed class SortieRepositoryMemoire(BaseMemoire db) : ISortieRepository
                     Statut = a.Statut,
                     ScanneDepartLe = a.ScanneDepartLe,
                     ScanneRetourLe = a.ScanneRetourLe,
+                    TypeSortie = s.Type,
+                    TypeNom = db.TypesSortie.FirstOrDefault(x => x.Id == s.TypeId)?.Nom ?? "",
+                    Utilisations = s.Utilisations,
+                    UtilisationsType = db.TypesSortie.FirstOrDefault(x => x.Id == s.TypeId)?.Utilisations,
+                    MoniteurGenre = db.Moniteurs.FirstOrDefault(m => m.Id == s.MoniteurId)?.Genre ?? GenreResponsable.Moniteur,
                 };
             })
             .ToList());

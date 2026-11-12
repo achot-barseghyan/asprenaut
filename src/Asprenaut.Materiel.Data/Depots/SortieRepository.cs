@@ -97,10 +97,13 @@ public sealed class SortieRepository(FabriqueConnexion fabrique) : ISortieReposi
     {
         const string sql = """
             SELECT se.sortie_id, s.intitule, s.date_sortie, TRIM(m.prenom || ' ' || m.nom) AS moniteur_nom, s.cloturee_le,
-                   se.statut, se.scanne_depart_le, se.scanne_retour_le
+                   se.statut, se.scanne_depart_le, se.scanne_retour_le,
+                   s.type AS type_sortie, COALESCE(ts.nom, '') AS type_nom, s.utilisations, ts.utilisations AS utilisations_type,
+                   m.genre AS moniteur_genre
             FROM sortie_equipement se
             JOIN sortie s ON s.id = se.sortie_id
             JOIN moniteur m ON m.id = s.moniteur_id
+            LEFT JOIN type_sortie ts ON ts.id = s.type_sortie_id
             WHERE se.equipement_id = @equipementId
             ORDER BY se.scanne_depart_le DESC, se.id DESC;
             """;

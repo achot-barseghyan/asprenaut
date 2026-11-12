@@ -40,6 +40,9 @@ public sealed class Palette
     public required Color Erreur { get; init; }
     public required Color Materiel { get; init; }
 
+    /// <summary>Sorties en fosse (violet de la maquette).</summary>
+    public required Color Profondeur { get; init; }
+
     // Bordures et fonds teintés
     public required Color Bordure { get; init; }
     public required Color BordureForte { get; init; }
@@ -135,6 +138,18 @@ public static class Theme
     public static Color TexteSurAvertissement => _p.TexteSurAvertissement;
     public static Color Erreur => _p.Erreur;
     public static Color Materiel => _p.Materiel;
+    public static Color Profondeur => _p.Profondeur;
+
+    /// <summary>Couleur d'un type de sortie (point du filtre, pastille du tableau « Utilisations »), d'après sa famille.</summary>
+    public static Color CouleurTypeSortie(TypeSortie famille) => famille switch
+    {
+        TypeSortie.Piscine => AccentClair,
+        TypeSortie.Bapteme => Retour,
+        TypeSortie.Lac => Materiel,
+        TypeSortie.Mer => DepartClair,
+        TypeSortie.Fosse => Profondeur,
+        _ => TexteSecondaireClair,
+    };
 
     // --- Bordures ---
     public static Color Bordure => _p.Bordure;
@@ -214,6 +229,7 @@ public static class Theme
             TexteSurAvertissement = Hex("#2A1F04"),
             Erreur = erreur,
             Materiel = Hex("#B7C8FF"),
+            Profondeur = Hex("#C9A8FF"),
             Bordure = Melanger(surface, accentClair, 0.14f),
             BordureForte = Melanger(surface, accentClair, 0.26f),
             FondDepart = Melanger(surface, depart, 0.16f),
@@ -264,6 +280,7 @@ public static class Theme
             TexteSurAvertissement = Color.White,
             Erreur = erreur,
             Materiel = Hex("#4338CA"),
+            Profondeur = Hex("#7E22CE"),
             Bordure = Hex("#D5E1EA"),
             BordureForte = Hex("#B4C7D7"),
             FondDepart = Melanger(surface, depart, 0.10f),

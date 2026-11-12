@@ -278,7 +278,7 @@ public sealed class EcranFicheSuivi : EcranBase
     // ================================================================ Mise en page
 
     /// <summary>Page qui défile : chaque ligne prend toute la largeur (ou une largeur maximale) et la hauteur qu'elle demande.</summary>
-    private sealed class PageFiche : Panel
+    internal sealed class PageFiche : Panel
     {
         private readonly List<(Control Controle, Func<int, int> Hauteur, int Ecart, int LargeurMax)> _lignes = [];
 
@@ -341,7 +341,7 @@ public sealed class EcranFicheSuivi : EcranBase
     }
 
     /// <summary>Titre de section à gauche, boutons à droite (place gardée au-dessus pour la pastille du cadenas).</summary>
-    private sealed class EnteteSection : Panel
+    internal sealed class EnteteSection : Panel
     {
         private readonly Label _titre;
         private readonly Control[] _droite;
