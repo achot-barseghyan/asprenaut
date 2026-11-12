@@ -13,6 +13,22 @@ public static class Tableaux
         grille.Columns[i].SortMode = DataGridViewColumnSortMode.NotSortable;
     }
 
+    /// <summary>
+    /// Fond de la cellule (sélection comprise) et son trait de séparation. <c>e.PaintBackground</c> seul ne peint pas
+    /// la bordure : avec <c>e.Handled</c>, ce pixel n'était jamais repeint et gardait ce que l'écran affichait avant
+    /// (traits verts ou gris entre les lignes après un défilement ou un changement d'écran).
+    /// </summary>
+    private static void PeindreFond(DataGridViewCellPaintingEventArgs e, bool selection)
+    {
+        var parties = DataGridViewPaintParts.Background | DataGridViewPaintParts.Border;
+        if (selection)
+        {
+            parties |= DataGridViewPaintParts.SelectionBackground;
+        }
+
+        e.Paint(e.CellBounds, parties);
+    }
+
     /// <summary>Pastille arrondie avec point coloré, alignée à gauche dans la cellule.</summary>
     public static void PeindrePastille(DataGridViewCellPaintingEventArgs e, string texte, Color couleur, Color? couleurTexte = null)
     {
@@ -22,7 +38,8 @@ public static class Tableaux
         }
 
         var selection = (e.State & DataGridViewElementStates.Selected) != 0;
-        e.PaintBackground(e.CellBounds, selection);
+        PeindreFond(e, selection);
+        var etat = g.Save(); // Le lissage ne doit pas déborder sur les cellules suivantes (voir PeindreFond).
         Dessin.Qualite(g);
         var police = Theme.PoliceTitre(8.5f);
         var fond = selection ? e.CellStyle.SelectionBackColor : e.CellStyle.BackColor;
@@ -45,6 +62,7 @@ public static class Tableaux
 
         x += point + (7f * g.DpiX / 96f);
         Dessin.Texte(g, texte, police, Rectangle.Round(new RectangleF(x, r.Top, r.Right - x, hauteur)), couleurTexte ?? couleur);
+        g.Restore(etat);
         e.Handled = true;
     }
 
@@ -60,7 +78,8 @@ public static class Tableaux
             return;
         }
 
-        e.PaintBackground(e.CellBounds, (e.State & DataGridViewElementStates.Selected) != 0);
+        PeindreFond(e, (e.State & DataGridViewElementStates.Selected) != 0);
+        var etat = g.Save(); // Le lissage ne doit pas déborder sur les cellules suivantes (voir PeindreFond).
         Dessin.Qualite(g);
         var zones = ZonesBoutons(e.CellBounds, g.DpiX / 96f, textes.Length);
         for (var i = 0; i < textes.Length; i++)
@@ -77,6 +96,7 @@ public static class Tableaux
             Dessin.Texte(g, textes[i], Theme.PoliceTitre(9f), Rectangle.Round(r), Theme.AccentClair, centre: true);
         }
 
+        g.Restore(etat);
         e.Handled = true;
     }
 
@@ -147,7 +167,8 @@ public static class Tableaux
         }
 
         var selection = (e.State & DataGridViewElementStates.Selected) != 0;
-        e.PaintBackground(e.CellBounds, selection);
+        PeindreFond(e, selection);
+        var etat = g.Save(); // Le lissage ne doit pas déborder sur les cellules suivantes (voir PeindreFond).
         Dessin.Qualite(g);
         var sx = g.DpiX / 96f;
         var cote = 36f * sx;
@@ -184,6 +205,7 @@ public static class Tableaux
                 TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
         }
 
+        g.Restore(etat);
         e.Handled = true;
     }
 
@@ -199,7 +221,8 @@ public static class Tableaux
         }
 
         var selection = (e.State & DataGridViewElementStates.Selected) != 0;
-        e.PaintBackground(e.CellBounds, selection);
+        PeindreFond(e, selection);
+        var etat = g.Save(); // Le lissage ne doit pas déborder sur les cellules suivantes (voir PeindreFond).
         Dessin.Qualite(g);
         var sx = g.DpiX / 96f;
         var fond = selection ? e.CellStyle.SelectionBackColor : e.CellStyle.BackColor;
@@ -248,6 +271,7 @@ public static class Tableaux
             }
         }
 
+        g.Restore(etat);
         e.Handled = true;
     }
 
@@ -260,7 +284,8 @@ public static class Tableaux
         }
 
         var selection = (e.State & DataGridViewElementStates.Selected) != 0;
-        e.PaintBackground(e.CellBounds, selection);
+        PeindreFond(e, selection);
+        var etat = g.Save(); // Le lissage ne doit pas déborder sur les cellules suivantes (voir PeindreFond).
         Dessin.Qualite(g);
         var cote = 36f * g.DpiX / 96f;
         var boite = new RectangleF(e.CellBounds.Left + e.CellStyle.Padding.Left, e.CellBounds.Top + ((e.CellBounds.Height - cote) / 2), cote, cote);
@@ -273,6 +298,7 @@ public static class Tableaux
         Icones.Dessiner(g, icone, RectangleF.Inflate(boite, -cote * 0.25f, -cote * 0.25f), Theme.AccentClair);
         var gauche = (int)(boite.Right + (12f * g.DpiX / 96f));
         Dessin.Texte(g, texte, Theme.PoliceTitre(10.5f), Rectangle.FromLTRB(gauche, e.CellBounds.Top, e.CellBounds.Right - 4, e.CellBounds.Bottom), Theme.Texte);
+        g.Restore(etat);
         e.Handled = true;
     }
 }
