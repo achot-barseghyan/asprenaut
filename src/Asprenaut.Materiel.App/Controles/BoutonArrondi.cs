@@ -174,6 +174,20 @@ public class BoutonArrondi : Button, IVerrouillable
         }
     }
 
+    private bool _iconeSeule;
+
+    /// <summary>Entrée de menu réduit : pictogramme centré, sans texte (le texte reste le nom accessible et la bulle).</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool IconeSeule
+    {
+        get => _iconeSeule;
+        set
+        {
+            _iconeSeule = value;
+            Invalidate();
+        }
+    }
+
     /// <summary>
     /// Largeur = texte + Padding (+ pictogramme) ; hauteur = hauteur actuelle. Calculée sans passer par
     /// base.GetPreferredSize, qui (en GrowOnly) repart de la taille actuelle : la largeur grandirait à chaque mise en page.
@@ -326,6 +340,25 @@ public class BoutonArrondi : Button, IVerrouillable
 
         var couleur = _selectionne ? Theme.TexteActif : Theme.TexteSecondaireClair;
         var t = Dessin.Echelle(this, 20);
+        if (_iconeSeule)
+        {
+            // Menu réduit : pictogramme centré ; l'entrée active garde son fond et un trait turquoise à gauche.
+            if (_icone is not null)
+            {
+                Icones.Dessiner(g, _icone, new RectangleF((Width - t) / 2, (Height - t) / 2, t, t), _selectionne ? Theme.Accent : couleur);
+            }
+
+            if (_selectionne)
+            {
+                var h = Dessin.Echelle(this, 20);
+                using var chemin = Dessin.Arrondi(new RectangleF(0, (Height - h) / 2, Dessin.Echelle(this, 3), h), Dessin.Echelle(this, 1.5f));
+                using var trait = new SolidBrush(Theme.Accent);
+                g.FillPath(trait, chemin);
+            }
+
+            return;
+        }
+
         var x = Dessin.Echelle(this, 14);
         if (_icone is not null)
         {

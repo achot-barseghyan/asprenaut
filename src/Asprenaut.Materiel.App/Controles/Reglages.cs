@@ -4,8 +4,35 @@ using Asprenaut.Materiel.App.Apparence;
 namespace Asprenaut.Materiel.App.Controles;
 
 /// <summary>Interrupteur marche / arrêt (piste verte, pastille blanche). Case à cocher accessible au clavier.</summary>
-public sealed class Interrupteur : CheckBox
+public sealed class Interrupteur : CheckBox, IVerrouillable
 {
+    private bool _verrouille;
+    private PastilleVerrou? _pastille;
+
+    /// <summary>Changer la valeur demande le code gestionnaire : pastille au cadenas sur le coin (GardeGestion.Lier).</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool Verrouille
+    {
+        get => _verrouille;
+        set
+        {
+            if (_verrouille == value)
+            {
+                return;
+            }
+
+            _verrouille = value;
+            AccessibleDescription = value ? PastilleVerrou.TexteBulle : null;
+            if (value || _pastille is not null)
+            {
+                _pastille ??= new PastilleVerrou(this);
+                _pastille.Visible = value;
+            }
+
+            Invalidate();
+        }
+    }
+
     public Interrupteur(string nomAccessible)
     {
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
@@ -54,8 +81,12 @@ public sealed class Interrupteur : CheckBox
             g.FillEllipse(ombre, x, piste.Top + marge + 1.5f, d, d);
         }
 
-        using var pastille = new SolidBrush(Color.White);
-        g.FillEllipse(pastille, x, piste.Top + marge, d, d);
+        using (var pastille = new SolidBrush(Color.White))
+        {
+            g.FillEllipse(pastille, x, piste.Top + marge, d, d);
+        }
+
+        _pastille?.PeindreInterieur(g);
     }
 }
 

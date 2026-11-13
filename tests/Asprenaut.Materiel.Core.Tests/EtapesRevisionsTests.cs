@@ -308,4 +308,95 @@ public class EtapesRevisionsTests
         Assert.Equal("À envoyer chez Magasin A10 (Dépôt prévu le 15/11)", etape.Nature);
         Assert.Contains(fiche.Interventions, i => i.Type == TypeInterventionSuivie.Atelier); // Le départ.
     }
+
+    // Cartes : la précision du problème signalé suit l'équipement d'étape en étape ; « Fait » montre la description saisie.
+    [Fact]
+    public async Task Les_cartes_montrent_la_precision_du_signalement_et_la_description_de_l_intervention()
+    {
+        var det = Detendeur(jours: 400);
+        Assert.True((await _ctx.Signalements.SignalerAsync(new NouveauSignalement(det.Id, null, "Fuite", GraviteSignalement.ASurveiller, "Bulles au premier étage"))).Reussi);
+
+        var signale = await CarteAsync("A10");
+        Assert.Equal((EtapeRevision.APrevoir, "Fuite", "Bulles au premier étage"), (signale.Etape, signale.Controle, signale.Precision));
+        Assert.DoesNotContain("Bulles", signale.Detail, StringComparison.Ordinal); // Plus dans la ligne de détail.
+
+        Assert.True((await _ctx.Revisions.ReparerAuClubAsync(det.Id)).Reussi);
+        Assert.Equal("Bulles au premier étage", (await CarteAsync("A10")).Precision);
+
+        var trop = await _ctx.Revisions.EnregistrerInterventionAsync(new Intervention(det.Id, TypeControle.Revision, ResultatControle.Conforme, Aujourdhui,
+            "Réparation", "Paul", Notes: new string('x', ServiceRevisions.LongueurDescription + 1)));
+        Assert.Equal($"Description trop longue : {ServiceRevisions.LongueurDescription} caractères au plus.", trop.Message);
+
+        Assert.True((await _ctx.Revisions.EnregistrerInterventionAsync(new Intervention(det.Id, TypeControle.Revision, ResultatControle.Conforme, Aujourdhui,
+            "Réparation", "Paul", Notes: " Joint torique du premier étage changé "))).Reussi);
+        var fait = (await _ctx.Revisions.TableauAsync()).Cartes.Single(c => c.Code == "A10");
+        Assert.Equal((EtapeRevision.Fait, "Joint torique du premier étage changé", ""), (fait.Etape, fait.Description, fait.Precision));
+    }
+
+    // Intervention prévue à la main : on voit un problème, il faudra intervenir. Elle entre dans « À prévoir », suit les étapes,
+    // et la prochaine intervention enregistrée la ferme.
+    [Fact]
+    public async Task Une_intervention_prevue_entre_dans_a_prevoir_et_se_ferme_a_l_intervention()
+    {
+        var det = Detendeur("A10", jours: 400); // Rien de dû.
+        Assert.DoesNotContain((await _ctx.Revisions.TableauAsync()).Cartes, c => c.Code == "A10");
+
+        Assert.Equal("Indiquez ce qu'il faudra faire.", (await _ctx.Revisions.PrevoirInterventionAsync(det.Id, " ", null)).Message);
+        Assert.False((await _ctx.Revisions.PrevoirInterventionAsync(det.Id, new string('x', ServiceRevisions.LongueurMotif + 1), null)).Reussi);
+        var r = await _ctx.Revisions.PrevoirInterventionAsync(det.Id, " Changer le joint ", "Petite fuite au premier étage");
+        Assert.Equal("A10 ajouté à « À prévoir ».", r.Message);
+
+        var carte = await CarteAsync("A10");
+        Assert.Equal((EtapeRevision.APrevoir, true, "Changer le joint", "Petite fuite au premier étage", "Prévue"),
+            (carte.Etape, carte.Prevue, carte.Controle, carte.Description, carte.Badge));
+
+        // La prévoir de nouveau la modifie (une seule ouverte).
+        Assert.Equal("A10 : intervention prévue modifiée.", (await _ctx.Revisions.PrevoirInterventionAsync(det.Id, "Changer les joints", "")).Message);
+        Assert.Single((await _ctx.Revisions.TableauAsync()).Cartes, c => c.Code == "A10");
+
+        // Elle suit l'équipement : réparation au club (motif repris), puis l'intervention la ferme.
+        Assert.True((await _ctx.Revisions.ReparerAuClubAsync(det.Id, carte.Controle)).Reussi);
+        Assert.Equal((EtapeRevision.Interne, "Changer le joint", true), ((await CarteAsync("A10")).Etape, (await CarteAsync("A10")).Controle, (await CarteAsync("A10")).Prevue));
+        Assert.False((await _ctx.Revisions.PrevoirInterventionAsync(det.Id, "Autre", null)).Reussi); // Déjà en révision.
+        Assert.True((await _ctx.Revisions.EnregistrerInterventionAsync(new Intervention(det.Id, TypeControle.Revision, ResultatControle.Conforme, Aujourdhui, "Réparation", "Paul"))).Reussi);
+        Assert.Null(await _ctx.DepotRevisions.ObtenirPrevueOuverteAsync(det.Id));
+        Assert.DoesNotContain((await _ctx.Revisions.TableauAsync()).Cartes, c => c.Code == "A10" && c.Etape != EtapeRevision.Fait);
+    }
+
+    [Fact]
+    public async Task Une_intervention_prevue_se_retire_et_rejoint_la_carte_d_une_echeance()
+    {
+        var det = Detendeur("A10", jours: -3); // Révision dépassée : déjà dans « À prévoir ».
+        Assert.True((await _ctx.Revisions.PrevoirInterventionAsync(det.Id, "Changer le joint", "")).Reussi);
+
+        var carte = Assert.Single((await _ctx.Revisions.TableauAsync()).Cartes, c => c.Code == "A10");
+        Assert.True(carte.Prevue);
+        Assert.Equal("Changer le joint", carte.Controle);
+        Assert.Equal(EtatCarte.EnRetard, carte.Etat); // L'échéance garde sa pastille.
+
+        Assert.True((await _ctx.Revisions.RetirerInterventionPrevueAsync(det.Id)).Reussi);
+        Assert.False((await CarteAsync("A10")).Prevue);
+        Assert.False((await _ctx.Revisions.RetirerInterventionPrevueAsync(det.Id)).Reussi);
+
+        // Mode gestion : prévoir demande le code.
+        Assert.True(_ctx.Gestion.DefinirCode(null, "1234", "1234").Reussi);
+        _ctx.Gestion.Verrouiller();
+        Assert.False((await _ctx.Revisions.PrevoirInterventionAsync(det.Id, "Changer le joint", "")).Reussi);
+    }
+
+    // Une carte n'affiche « Au club » (et ne compte au club) que si l'équipement n'est ni en sortie, ni manquant.
+    [Fact]
+    public async Task Un_equipement_en_sortie_n_est_pas_au_club()
+    {
+        Detendeur("A10", jours: -3);
+        await _ctx.SortieEnCoursAsync("Week-end Marseille", "A10");
+
+        var carte = await CarteAsync("A10");
+        Assert.Equal(("En sortie · Week-end Marseille", false), (carte.HorsClub, carte.AuClub));
+        var tableau = await _ctx.Revisions.TableauAsync();
+        Assert.Equal((0, 1), (tableau.AuClub, tableau.EnSortie));
+
+        Detendeur("A11", jours: -3);
+        Assert.Equal(("", true), ((await CarteAsync("A11")).HorsClub, (await CarteAsync("A11")).AuClub));
+    }
 }

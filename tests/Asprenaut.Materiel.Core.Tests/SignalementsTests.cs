@@ -163,7 +163,7 @@ public class SignalementsTests
         var carte = tableau.Cartes.First();
         Assert.Equal((EtapeRevision.APrevoir, a07.Id, "Fuite / bulles", EtatCarte.HorsService, true, true),
             (carte.Etape, carte.EquipementId, carte.Controle, carte.Etat, carte.Bloque, carte.Signalement));
-        Assert.Contains("flexible MP", carte.Detail);
+        Assert.Contains("flexible MP", carte.Precision); // À part, sous la ligne de détail.
         Assert.Equal(ServiceRevisions.FamilleSignalement, tableau.Familles[0]);
     }
 

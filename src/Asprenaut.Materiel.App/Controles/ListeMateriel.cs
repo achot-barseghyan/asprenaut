@@ -44,6 +44,11 @@ public sealed class ListeMateriel : FlowLayoutPanel
         _style = style;
         FlowDirection = FlowDirection.TopDown;
         WrapContents = false;
+        // Défilement vertical seulement : une ligne un instant plus large (mise à l'échelle) faisait apparaître une barre
+        // horizontale, qui volait de la hauteur et ajoutait une barre verticale inutile (fiche d'un moniteur).
+        HorizontalScroll.Maximum = 0;
+        AutoScroll = false;
+        VerticalScroll.Visible = false;
         AutoScroll = true;
         BackColor = Theme.Surface;
         Margin = Padding.Empty;

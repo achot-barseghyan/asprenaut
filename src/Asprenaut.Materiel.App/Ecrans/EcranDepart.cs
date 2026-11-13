@@ -132,7 +132,7 @@ public sealed class EcranDepart : EcranScanBase
                 return;
             }
 
-            _panneau.Afficher(attente, ServiceSortie.AdherentsRecents(lignes), tous);
+            _panneau.Afficher(attente, lignes, resume.UnParCategorie, ServiceSortie.AdherentsRecents(lignes), tous);
             _valider.Enabled = false;
             _valider.Text = $"Attribuez {attente.Code} avant de valider";
             _valider.Icone = Icones.Cadenas;
@@ -304,11 +304,14 @@ public sealed class EcranDepart : EcranScanBase
                 utilisations.Nombre = Math.Clamp(n, TypeDeSortie.UtilisationsMin, TypeDeSortie.UtilisationsMax);
             }
         };
+        // Sortie nominative (la sienne, ou celle du nouveau type) : un équipement par catégorie et par adhérent.
+        var unParCategorie = new OptionUnParCategorie(_garde) { Actif = s.UnParCategorie, Visible = s.Nominatif, Margin = new Padding(0, 0, 0, 14) };
         type.SelectedIndexChanged += (_, _) =>
         {
             if (type.SelectedItem is Choix<long> c && types.FirstOrDefault(t => t.Id == c.Valeur) is { } choisi)
             {
                 utilisations.Nombre = choisi.Id == s.TypeId ? s.Utilisations : choisi.Utilisations;
+                unParCategorie.Visible = choisi.Id == s.TypeId ? s.Nominatif : choisi.Nominatif;
             }
         };
 
@@ -323,9 +326,11 @@ public sealed class EcranDepart : EcranScanBase
                     lieu.Valeur,
                     notes.Valeur,
                     (type.SelectedItem as Choix<long>)?.Valeur,
-                    utilisations.Nombre)));
+                    utilisations.Nombre,
+                    unParCategorie.Actif)));
         fenetre.DeuxChamps("Date", date, "Type", type);
         fenetre.DeuxChamps("Intitulé", intitule, "Utilisations (compteur)", utilisations);
+        fenetre.Ajouter(unParCategorie);
         fenetre.Champ("Responsable", responsable); // Toute la largeur : « Moniteur | Classe » puis la liste.
         fenetre.Champ("Lieu", lieu);
         fenetre.Champ("Notes (facultatif)", notes, 96);

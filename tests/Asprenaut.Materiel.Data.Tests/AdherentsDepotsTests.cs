@@ -146,4 +146,24 @@ public class AdherentsDepotsTests : IAsyncLifetime
         Assert.Equal(julie.Id, await cx.ExecuteScalarAsync<long>("SELECT adherent_id FROM journal WHERE action = 'ManquantDeclare';"));
         Assert.Equal(1L, await cx.ExecuteScalarAsync<long>("SELECT nominatif FROM sortie WHERE id = @id;", new { id }));
     }
+
+    // 017 : « un équipement par catégorie et par adhérent », activé par défaut (sorties existantes comprises), écrit et relu.
+    [Fact]
+    public async Task L_option_un_par_categorie_est_enregistree_et_relue()
+    {
+        var sorties = new SortieRepository(_base.Fabrique);
+        var moniteurs = new MoniteurRepository(_base.Fabrique);
+        var pascal = await moniteurs.AjouterAsync(new Moniteur { Prenom = "Pascal", Nom = "Durand" });
+        var sortie = new Sortie { DateSortie = new DateOnly(2026, 11, 13), Type = TypeSortie.Mer, Intitule = "Marseille", MoniteurId = pascal, Nominatif = true };
+        var id = await sorties.AjouterAsync(sortie);
+        Assert.True((await sorties.ObtenirAsync(id))!.UnParCategorie);
+
+        sortie.UnParCategorie = false;
+        await sorties.MettreAJourAsync(sortie);
+        Assert.False((await sorties.ObtenirAsync(id))!.UnParCategorie);
+        Assert.False((await sorties.ObtenirResumeAsync(id))!.UnParCategorie);
+        await using var cx = await _base.Fabrique.OuvrirAsync();
+        Assert.Equal(0L, await cx.ExecuteScalarAsync<long>("SELECT un_par_categorie FROM sortie WHERE id = @id;", new { id }));
+        Assert.Equal(1L, await cx.ExecuteScalarAsync<long>("SELECT dflt_value FROM pragma_table_info('sortie') WHERE name = 'un_par_categorie';"));
+    }
 }

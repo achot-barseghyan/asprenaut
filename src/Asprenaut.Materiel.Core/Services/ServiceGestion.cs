@@ -31,6 +31,9 @@ public enum ActionProtegee
 
     /// <summary>Sortie clôturée : scanner un manquant qui revient, ou le marquer rendu à la main.</summary>
     RendreManquant,
+
+    /// <summary>Sortie nominative : laisser un adhérent prendre plusieurs équipements d'une même catégorie.</summary>
+    PlusieursParCategorie,
 }
 
 /// <summary>
@@ -234,6 +237,7 @@ public sealed class ServiceGestion
         ActionProtegee.Parametres => "Paramètres",
         ActionProtegee.CompteurSortie => "Utilisations d'une sortie",
         ActionProtegee.RendreManquant => "Rendre un manquant d'une sortie clôturée",
+        ActionProtegee.PlusieursParCategorie => "Plusieurs équipements d'une catégorie par adhérent",
         _ => "Restaurer une sauvegarde",
     };
 

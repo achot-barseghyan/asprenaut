@@ -33,6 +33,10 @@ public sealed class EcranNouvelleSortie : EcranBase
     private readonly Dictionary<long, (string Nom, int Utilisations)> _utilisationsParType = [];
     private int? _utilisationsChoisies;
 
+    // Sortie nominative : un équipement par catégorie et par adhérent (ligne masquée pour les autres types).
+    private readonly OptionUnParCategorie _unParCategorie;
+    private readonly HashSet<long> _typesNominatifs = [];
+
     public EcranNouvelleSortie(ServiceSortie sorties, ServiceMoniteurs moniteurs, INavigation navigation, ServiceTypesSortie typesSortie, GardeGestion garde)
     {
         _sorties = sorties;
@@ -40,6 +44,7 @@ public sealed class EcranNouvelleSortie : EcranBase
         _navigation = navigation;
         _typesSortie = typesSortie;
         _garde = garde;
+        _unParCategorie = new OptionUnParCategorie(garde) { Margin = new Padding(0, 0, 0, 22), Visible = false };
 
         // Type de sortie : une tuile par type proposé (Paramètres › Types de sortie), ajoutées au chargement.
 
@@ -113,6 +118,7 @@ public sealed class EcranNouvelleSortie : EcranBase
         Ligne(_tuiles, SizeType.Absolute, 96 + 26);
         Ligne(grille);
         Ligne(CadreUtilisations(), SizeType.Absolute, 84 + 22);
+        Ligne(_unParCategorie);
         Ligne(Ui.Rangee(true, notes, facultatif));
         Ligne(_notes, SizeType.Absolute, 96 + 22);
         Ligne(_message);
@@ -171,6 +177,11 @@ public sealed class EcranNouvelleSortie : EcranBase
             tuile.Click += (_, _) => ChoisirType(id);
             _types.Add((tuile, id));
             _utilisationsParType[id] = (type.Nom, type.Utilisations);
+            if (type.Nominatif)
+            {
+                _typesNominatifs.Add(id);
+            }
+
             _tuiles.Controls.Add(tuile);
         }
 
@@ -201,6 +212,10 @@ public sealed class EcranNouvelleSortie : EcranBase
 
         _utilisationsChoisies = null; // Nouveau type : on repart de sa valeur.
         AfficherUtilisations();
+
+        // L'option « un équipement par catégorie » ne concerne que les sorties nominatives.
+        var nominatif = _typesNominatifs.Contains(id);
+        _unParCategorie.Visible = nominatif; // Ligne AutoSize : elle disparaît avec la carte.
     }
 
     /// <summary>Cadre « Compteur d'utilisation » : explication à gauche, sélecteur à droite.</summary>
@@ -276,7 +291,8 @@ public sealed class EcranNouvelleSortie : EcranBase
                 _lieu.Valeur,
                 _notes.Valeur,
                 _typeId,
-                _utilisations.Nombre);
+                _utilisations.Nombre,
+                _unParCategorie.Actif);
             var resultat = await _sorties.CreerAsync(demande);
             if (resultat is { Reussi: true, Id: { } id })
             {

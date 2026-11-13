@@ -59,6 +59,71 @@ public class NitroxTests
         Assert.True((await _ctx.Sorties.AttribuerAdherentAsync(sortie, bloc.Id, julie.Id)).Reussi);
     }
 
+    // Un adhérent ne prend qu'un équipement par catégorie dans une sortie nominative : pas deux détendeurs, deux blocs, deux gilets.
+    [Fact]
+    public async Task Un_adherent_ne_prend_pas_deux_equipements_de_la_meme_categorie()
+    {
+        var a12 = _ctx.Equipement("A12", categorie: "Détendeurs");
+        var a13 = _ctx.Equipement("A13", categorie: "Détendeurs");
+        var bloc = _ctx.Equipement("BLOC-031");
+        var julie = await AdherentAsync("Julie", "Martin");
+        var thomas = await AdherentAsync("Thomas", "Bernard");
+        var sortie = await SortieNominativeAsync();
+
+        await _ctx.Scan.ScannerDepartAsync(sortie, "A12");
+        Assert.True((await _ctx.Sorties.AttribuerAdherentAsync(sortie, a12.Id, julie.Id)).Reussi);
+        Assert.True((await _ctx.Sorties.AttribuerAdherentAsync(sortie, a12.Id, julie.Id)).Reussi); // Le même : accepté.
+
+        await _ctx.Scan.ScannerDepartAsync(sortie, "A13");
+        var refus = await _ctx.Sorties.AttribuerAdherentAsync(sortie, a13.Id, julie.Id);
+        Assert.False(refus.Reussi);
+        Assert.Equal("Julie Martin a déjà A12 (Détendeurs) dans cette sortie : un seul équipement par catégorie.", refus.Message);
+        Assert.Null(_ctx.Db.Affectations.Single(x => x.EquipementId == a13.Id).AdherentId); // Toujours en attente.
+        Assert.True((await _ctx.Sorties.AttribuerAdherentAsync(sortie, a13.Id, thomas.Id)).Reussi);
+
+        // Une autre catégorie : accepté.
+        await _ctx.Scan.ScannerDepartAsync(sortie, "BLOC-031");
+        Assert.True((await _ctx.Sorties.AttribuerAdherentAsync(sortie, bloc.Id, julie.Id)).Reussi);
+
+        // Correction : A12 passe à Thomas, qui a déjà A13 → refusé ; motif court pour le panneau.
+        var lignes = await new SortieRepositoryMemoire(_ctx.Db).ListerLignesAsync(sortie);
+        Assert.Equal("A déjà A13", ServiceAdherents.MotifCourt(thomas, lignes.Single(l => l.Code == "A12"), lignes));
+        Assert.False((await _ctx.Sorties.AttribuerAdherentAsync(sortie, a12.Id, thomas.Id)).Reussi);
+    }
+
+    // Option de la sortie : activée par défaut ; la couper (création ou modification) demande le mode gestion.
+    [Fact]
+    public async Task Une_sortie_peut_autoriser_plusieurs_equipements_d_une_categorie_en_mode_gestion()
+    {
+        var a12 = _ctx.Equipement("A12", categorie: "Détendeurs");
+        var a13 = _ctx.Equipement("A13", categorie: "Détendeurs");
+        var julie = await AdherentAsync("Julie", "Martin");
+        var mer = _ctx.Db.TypesSortie.Single(t => t.Nom == "Mer");
+        mer.Nominatif = true;
+        NouvelleSortie Demande(bool? unParCategorie) =>
+            new(_ctx.Horloge.AujourdHui, TypeSortie.Mer, "Marseille", _ctx.Pascal.Id, TypeId: mer.Id, UnParCategorie: unParCategorie);
+
+        Assert.True(_ctx.Gestion.DefinirCode(null, "1234", "1234").Reussi);
+        _ctx.Gestion.Verrouiller();
+        Assert.False((await _ctx.Sorties.CreerAsync(Demande(false))).Reussi); // Code requis.
+        var sortie = (await _ctx.Sorties.CreerAsync(Demande(null))).Id!.Value;
+        Assert.True(_ctx.Db.Sorties.Single(s => s.Id == sortie).UnParCategorie); // Activé par défaut.
+        Assert.False((await _ctx.Sorties.ModifierAsync(sortie, Demande(false))).Reussi);
+
+        Assert.True(_ctx.Gestion.Deverrouiller("1234").Reussi);
+        Assert.True((await _ctx.Sorties.ModifierAsync(sortie, Demande(false))).Reussi);
+        _ctx.Gestion.Verrouiller();
+        Assert.True((await _ctx.Sorties.ModifierAsync(sortie, Demande(null))).Reussi); // Sans valeur : gardée.
+        Assert.False(_ctx.Db.Sorties.Single(s => s.Id == sortie).UnParCategorie);
+
+        await _ctx.Scan.ScannerDepartAsync(sortie, "A12");
+        Assert.True((await _ctx.Sorties.AttribuerAdherentAsync(sortie, a12.Id, julie.Id)).Reussi);
+        await _ctx.Scan.ScannerDepartAsync(sortie, "A13");
+        Assert.True((await _ctx.Sorties.AttribuerAdherentAsync(sortie, a13.Id, julie.Id)).Reussi); // Deux détendeurs : accepté.
+
+        Assert.True((await _ctx.Sorties.ModifierAsync(sortie, Demande(true))).Reussi); // Le remettre est libre.
+    }
+
     [Fact]
     public async Task Un_adherent_desactive_ne_peut_plus_sortir_de_materiel_et_reste_dans_la_liste()
     {

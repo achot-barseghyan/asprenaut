@@ -239,6 +239,37 @@ public sealed class PastilleVerrou : IDisposable
         return new Rectangle(position, _controle.Size);
     }
 
+    /// <summary>
+    /// Partie visible (repère du parent qui peint) des conteneurs défilants situés entre le contrôle et ce parent ;
+    /// null s'il n'y en a pas, vide si le contrôle est hors de leur vue.
+    /// </summary>
+    private Rectangle? VueDefilante(Control hote)
+    {
+        Rectangle? vue = null;
+        for (var p = _controle.Parent; p is not null && p != hote; p = p.Parent)
+        {
+            if (p is not ScrollableControl { AutoScroll: true })
+            {
+                continue;
+            }
+
+            var position = Point.Empty;
+            for (var c = p; c != hote; c = c.Parent)
+            {
+                position.Offset(c.Location);
+                if (c.Parent is null)
+                {
+                    return null;
+                }
+            }
+
+            var visible = new Rectangle(position, p.ClientSize);
+            vue = vue is { } v ? Rectangle.Intersect(v, visible) : visible;
+        }
+
+        return vue;
+    }
+
     private Rectangle Zone(Control hote)
     {
         if (BornesSur(hote) is not { } b)
@@ -259,7 +290,22 @@ public sealed class PastilleVerrou : IDisposable
     {
         if (_visible && sender is Control hote && _controle.Visible && !_controle.IsDisposed && BornesSur(hote) is { } b)
         {
+            // Un conteneur défilant entre le contrôle et ce parent cache ce qui sort de sa vue : la pastille aussi
+            // (sinon le cadenas d'un bouton descendu sous la fiche défilante apparaissait sur la carte autour).
+            var etat = e.Graphics.Save();
+            if (VueDefilante(hote) is { } vue)
+            {
+                if (vue.IsEmpty)
+                {
+                    e.Graphics.Restore(etat);
+                    return;
+                }
+
+                e.Graphics.IntersectClip(vue);
+            }
+
             Dessiner(e.Graphics, _controle, b);
+            e.Graphics.Restore(etat);
 
             // Retenir où elle est réellement peinte : c'est cette zone qu'il faudra effacer.
             var zone = Zone(hote);
@@ -787,6 +833,16 @@ public sealed class CarteModeGestion : Button
         Actualiser();
     }
 
+    /// <summary>Menu réduit : seulement le cadenas, centré.</summary>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public bool Compact { get; set; }
+
+    /// <summary>Texte de la bulle (menu réduit) : « Mode consultation · Déverrouiller pour modifier ».</summary>
+    public string TexteBulle => $"{Textes().Titre} · {Textes().Sous}";
+
+    /// <summary>Changement d'état (le menu réduit met sa bulle à jour).</summary>
+    public event EventHandler? Actualise;
+
     /// <summary>Visibilité, textes et nom accessible selon l'état du mode gestion.</summary>
     public void Actualiser()
     {
@@ -794,6 +850,7 @@ public sealed class CarteModeGestion : Button
         var (titre, sous) = Textes();
         AccessibleName = $"{titre}. {sous}";
         Invalidate();
+        Actualise?.Invoke(this, EventArgs.Empty);
     }
 
     private (string Titre, string Sous) Textes()
@@ -848,7 +905,7 @@ public sealed class CarteModeGestion : Button
         }
 
         var c = E(34);
-        var boite = new RectangleF(E(12), r.Y + ((r.Height - c) / 2), c, c);
+        var boite = new RectangleF(Compact ? r.X + ((r.Width - c) / 2) : E(12), r.Y + ((r.Height - c) / 2), c, c);
         using (var forme = Dessin.Arrondi(boite, E(10)))
         using (var pinceau = new SolidBrush(Theme.Sur(fond, couleur, 0.16f)))
         {
@@ -857,6 +914,10 @@ public sealed class CarteModeGestion : Button
 
         var t = E(18);
         Icones.Dessiner(g, ouvert ? Icones.CadenasOuvert : Icones.Cadenas, new RectangleF(boite.X + ((c - t) / 2), boite.Y + ((c - t) / 2), t, t), couleur, 2f);
+        if (Compact)
+        {
+            return; // Menu réduit : le cadenas seul (fermé en consultation, ouvert en mode gestion) ; le texte est dans la bulle.
+        }
 
         var (titre, sous) = Textes();
         var gauche = (int)(boite.Right + E(12));

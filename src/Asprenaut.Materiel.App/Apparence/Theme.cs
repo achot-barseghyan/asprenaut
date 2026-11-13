@@ -322,6 +322,9 @@ public static class Theme
     public const int RayonZoneScan = 28;
     public const int LargeurMenu = 264;
 
+    /// <summary>Menu réduit aux icônes (bouton « Réduire le menu »).</summary>
+    public const int LargeurMenuReduit = 84;
+
     // --- Polices ---
     private static readonly string FamilleTexte = PremiereDisponible("Segoe UI Variable Text", "Segoe UI");
     private static readonly string FamilleTitre = PremiereDisponible("Segoe UI Variable Display Semib", "Segoe UI Semibold", "Segoe UI");

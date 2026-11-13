@@ -38,9 +38,12 @@ public sealed class EcranRevisions : EcranBase
     private IReadOnlyList<Moniteur> _inspecteurs = [];
     private TableauRevisions? _tableau;
 
+    private readonly ServiceInventaire _inventaire;
+
     public EcranRevisions(ServiceRevisions revisions, ServicePrestataires prestataires, ServiceMoniteurs moniteurs, ServiceReglages reglages,
-        INavigation navigation, GardeGestion garde)
+        INavigation navigation, GardeGestion garde, ServiceInventaire inventaire)
     {
+        _inventaire = inventaire;
         _revisions = revisions;
         _prestataires = prestataires;
         _moniteurs = moniteurs;
@@ -92,6 +95,15 @@ public sealed class EcranRevisions : EcranBase
             new ColonneRevision(4, ServiceRevisions.LibelleEtape(EtapeRevision.ChezPrestataire), "Hors du club. On attend son retour.", Theme.Prestataire),
             new ColonneRevision(5, ServiceRevisions.LibelleEtape(EtapeRevision.Fait), "Intervention enregistrée. Retour en service.", Theme.Retour),
         ];
+        // Colonnes repliables (bouton œil) : pour mieux voir celles sur lesquelles on travaille ; choix retenu.
+        var repliees = _reglages.Actuels.ColonnesRevisionsRepliees;
+        foreach (var (colonne, etape) in _colonnes.Zip(Enum.GetValues<EtapeRevision>()))
+        {
+            colonne.Repliee = repliees.Contains(etape);
+            BulleColonne(colonne);
+            colonne.Basculee += (_, _) => BasculerColonne(colonne);
+        }
+
         var note = new NoteInfo(TexteNote());
         _page.Placer(_panneau, _compteurs, _accolade, _colonnes, note);
 
@@ -118,15 +130,48 @@ public sealed class EcranRevisions : EcranBase
         defilement.ClientSizeChanged += (_, _) => Ajuster();
         _page.SizeChanged += (_, _) => Ajuster();
 
+        // « Ajouter une intervention » : choisir l'équipement (recherche ou médaille), puis le panneau d'intervention.
+        var ajouter = new BoutonArrondi("Ajouter une intervention", StyleBouton.Principal, Icones.Plus) { AfficherPastille = false };
+        _garde.Lier(ajouter, ActionProtegee.Revisions);
+        ajouter.Click += (_, _) => Executer(AjouterInterventionAsync);
+
         var consultation = new BandeauConsultation(_garde, "Consultez librement. Planifier, envoyer chez un prestataire ou enregistrer une intervention demande le code gestionnaire.");
         _garde.Lier(consultation, ActionProtegee.Revisions);
 
         Controls.Add(Ui.Colonne(
-            (Ui.Entete(Ui.Pile(Ui.Titre(Titre), Ui.SousTitre("Chaque équipement avance de gauche à droite, jusqu'à son retour en service.")), registre), SizeType.AutoSize, 0),
+            (Ui.Entete(Ui.Pile(Ui.Titre(Titre), Ui.SousTitre("Chaque équipement avance de gauche à droite, jusqu'à son retour en service.")), ajouter, registre), SizeType.AutoSize, 0),
             (consultation, SizeType.AutoSize, 0),
             (barre, SizeType.Absolute, Theme.HauteurChamp + 18),
             (defilement, SizeType.Percent, 100)));
         barre.Margin = new Padding(0, 0, 0, 18);
+    }
+
+    /// <summary>Replie ou rouvre une colonne ; le choix est enregistré (au moins une colonne reste ouverte).</summary>
+    private void BasculerColonne(ColonneRevision colonne)
+    {
+        var etapes = Enum.GetValues<EtapeRevision>();
+        var repliees = _colonnes.Zip(etapes)
+            .Where(t => t.First == colonne ? !t.First.Repliee : t.First.Repliee)
+            .Select(t => t.Second)
+            .ToList();
+        var resultat = _reglages.ChangerColonnesRevisionsRepliees(repliees);
+        if (!resultat.Reussi)
+        {
+            Dialogues.Information(FindForm(), resultat.Message);
+            return;
+        }
+
+        colonne.Repliee = !colonne.Repliee;
+        BulleColonne(colonne);
+        _page.PerformLayout();
+        colonne.Bascule.Focus();
+    }
+
+    private void BulleColonne(ColonneRevision colonne)
+    {
+        var texte = colonne.Repliee ? $"Afficher « {colonne.Titre} »" : $"Replier « {colonne.Titre} »";
+        _bulle.SetToolTip(colonne.Bascule, texte);
+        _bulle.SetToolTip(colonne, colonne.Repliee ? texte : null);
     }
 
     public override string Titre => "Révisions";
@@ -201,7 +246,16 @@ public sealed class EcranRevisions : EcranBase
         switch (c.Etape)
         {
             case EtapeRevision.APrevoir:
-                if (c.Type == TypeControle.Tiv && !c.Signalement) // Un problème signalé sur un bloc ne se règle pas en séance TIV.
+                if (c.Prevue)
+                {
+                    // Intervention prévue à la main : on peut la retirer si elle n'est plus nécessaire.
+                    var retirer = carte.AjouterCoin(Icones.Croix, $"Retirer l'intervention prévue sur {c.Code}");
+                    _bulle.SetToolTip(retirer, "Retirer l'intervention prévue");
+                    retirer.Click += (_, _) => Executer(() => RetirerPrevueAsync(c));
+                }
+
+                // Un problème signalé ou une intervention prévue sur un bloc ne se règle pas en séance TIV.
+                if (c.Type == TypeControle.Tiv && !c.Signalement && !c.Prevue)
                 {
                     Action("Séance TIV", StyleBouton.Principal, () => SeanceTivAsync(c));
                 }
@@ -257,6 +311,15 @@ public sealed class EcranRevisions : EcranBase
 
         await RechargerAsync();
         return resultat.Reussi;
+    }
+
+    private async Task RetirerPrevueAsync(CarteRevision c)
+    {
+        if (_garde.Exiger(FindForm(), ActionProtegee.Revisions, "Retirer l'intervention prévue")
+            && Dialogues.Confirmer(FindForm(), $"Retirer l'intervention prévue sur {c.Code} ?\n\n« {c.Controle} »"))
+        {
+            await ReussirAsync(_revisions.RetirerInterventionPrevueAsync(c.EquipementId));
+        }
     }
 
     private async Task SeanceTivAsync(CarteRevision c)
@@ -361,6 +424,157 @@ public sealed class EcranRevisions : EcranBase
         _page.PerformLayout();
         _scan.Valeur = "";
         _scan.Champ.Focus();
+    }
+
+    /// <summary>
+    /// Bouton « Ajouter une intervention » : fenêtre de choix de l'équipement (recherche par code, nom, marque… ou médaille
+    /// scannée ; clic, flèches + Entrée), puis le panneau d'intervention comme après un scan.
+    /// </summary>
+    private async Task AjouterInterventionAsync()
+    {
+        if (!_garde.Exiger(FindForm(), ActionProtegee.Revisions, "Ajouter une intervention"))
+        {
+            return;
+        }
+
+        var recherche = new ChampSaisie { Icone = Icones.Recherche, TexteIndicatif = "Code, nom, marque… ou scannez la médaille", IndicatifSiFocus = true };
+        recherche.Champ.AccessibleName = "Rechercher l'équipement";
+        var liste = new ListeChoix { AccessibleName = "Équipements de l'inventaire" };
+        var prefixe = _reglages.Actuels.PrefixeEtiquette;
+
+        async Task RemplirAsync()
+        {
+            var saisie = recherche.Valeur;
+            var lignes = await _inventaire.ListerAsync(saisie.Trim().Length == 0 ? null : saisie.Trim(), null);
+            if (liste.IsDisposed || saisie != recherche.Valeur)
+            {
+                return;
+            }
+
+            liste.Afficher(lignes.Where(l => l.Etat != EtatEquipement.Reforme).Select(l => new ElementChoix(
+                l.Code, l.Code, true, l.Libelle,
+                string.Join(" · ", new[] { l.Categorie, $"{l.Marque} {l.Modele}".Trim(), l.Statut == StatutInventaire.Disponible ? "" : Libelles.De(l.Statut) }
+                    .Where(t => t.Length > 0)))).ToList(), "Aucun équipement ne correspond.");
+        }
+
+        using var attente = new System.Windows.Forms.Timer { Interval = 250 };
+        attente.Tick += (_, _) =>
+        {
+            attente.Stop();
+            Executer(RemplirAsync);
+        };
+        recherche.Champ.TextChanged += (_, _) =>
+        {
+            attente.Stop();
+            attente.Start();
+        };
+
+        // À prévoir (il faudra intervenir : l'équipement entre dans la colonne) ou déjà faite (le panneau d'intervention).
+        var mode = new Bascule("À prévoir", "Déjà faite") { Etirer = true, AccessibleName = "Intervention à prévoir ou déjà faite", Margin = new Padding(0, 0, 0, 14) };
+        var aFaire = new ChampSaisie { TexteIndicatif = "Changer le joint du robinet, vérifier l'inflateur…" };
+        aFaire.Champ.AccessibleName = "Ce qu'il faudra faire";
+        aFaire.Champ.MaxLength = ServiceRevisions.LongueurMotif;
+        var description = new ChampSaisie { TexteIndicatif = "Ce qu'on a vu, pièce à commander…" };
+        description.Champ.AccessibleName = "Description de l'intervention prévue";
+        description.Champ.MaxLength = ServiceRevisions.LongueurDescription;
+        bool APrevoir() => mode.SelectedIndex == 0;
+
+        // « Continuer » (ou Entrée, y compris celle du pistolet) : le code tapé ou scanné s'il est dans l'inventaire, sinon
+        // l'équipement choisi dans la liste, sinon le seul résultat de la recherche. À prévoir : l'intervention est enregistrée ici.
+        string? choisi = null;
+        using var fenetre = new FenetreFormulaire("Ajouter une intervention", "Ajouter à « À prévoir »", async () =>
+        {
+            attente.Stop();
+            var lecture = Core.Saisie.CodeScanne.Lire(recherche.Valeur, prefixe);
+            var code = lecture.Code;
+            if (code.Length > 0)
+            {
+                if (lecture.Type is not null)
+                {
+                    recherche.Valeur = code; // « (Detendeur) A24 Asprenaut… » → A24.
+                    attente.Stop();
+                }
+
+                await RemplirAsync();
+                if (!liste.Choisir(code) && liste.Choix is null && liste.Nombre == 1)
+                {
+                    liste.Deplacer(1);
+                }
+            }
+
+            choisi = liste.Choix?.Cle;
+            if (choisi is null || liste.Choix is not { } element)
+            {
+                return ResultatOperation.Echec("Choisissez l'équipement dans la liste, ou scannez sa médaille.");
+            }
+
+            if (!APrevoir())
+            {
+                return ResultatOperation.Ok("");
+            }
+
+            if (aFaire.Valeur.Trim().Length == 0)
+            {
+                aFaire.Champ.Focus();
+            }
+
+            var equipement = (await _inventaire.ListerAsync(element.Cle, null)).FirstOrDefault(l => l.Code == element.Cle);
+            return equipement is null
+                ? ResultatOperation.Echec("Équipement introuvable.")
+                : await _revisions.PrevoirInterventionAsync(equipement.EquipementId, aFaire.Valeur, description.Valeur);
+        });
+        fenetre.EnTete("Choisissez l'équipement, puis ce qu'il faudra faire.");
+
+        recherche.Champ.KeyDown += (_, e) =>
+        {
+            if (e.KeyCode is Keys.Down or Keys.Up)
+            {
+                liste.Deplacer(e.KeyCode == Keys.Down ? 1 : -1);
+                e.Handled = e.SuppressKeyPress = true;
+            }
+        };
+
+        // Déjà faite : le clic sur l'équipement continue. À prévoir : il le choisit, on passe à « À faire ».
+        liste.ChoixValide += (_, _) =>
+        {
+            if (APrevoir())
+            {
+                aFaire.Champ.Focus();
+            }
+            else
+            {
+                fenetre.Valider.PerformClick();
+            }
+        };
+
+        fenetre.Ajouter(mode);
+        recherche.Margin = new Padding(0, 0, 0, 12);
+        fenetre.Ajouter(recherche, SizeType.Absolute, Theme.HauteurChamp + 12);
+        liste.Margin = new Padding(0, 0, 0, 14);
+        fenetre.Ajouter(liste, SizeType.Absolute, 250);
+        var champsPrevue = fenetre.DeuxChamps("À faire", aFaire, "Description (facultatif)", description);
+        mode.Changement += (_, _) =>
+        {
+            champsPrevue.Visible = APrevoir();
+            fenetre.Valider.Text = APrevoir() ? "Ajouter à « À prévoir »" : "Continuer";
+            fenetre.EnTete(APrevoir() ? "Choisissez l'équipement, puis ce qu'il faudra faire." : "Choisissez l'équipement révisé, réparé ou contrôlé.");
+            recherche.Champ.Focus();
+        };
+        fenetre.Shown += (_, _) => recherche.Champ.Focus();
+        await RemplirAsync();
+        if (fenetre.ShowDialog(FindForm()) != DialogResult.OK || IsDisposed)
+        {
+            return;
+        }
+
+        if (APrevoir())
+        {
+            await RechargerAsync();
+        }
+        else if (choisi is { } cle)
+        {
+            await ScannerAsync(cle);
+        }
     }
 
     /// <summary>Scan : la carte de l'équipement (hors « Fait ») s'il en a une, sinon une intervention « faire maintenant ».</summary>
@@ -565,24 +779,57 @@ public sealed class EcranRevisions : EcranBase
             _compteurs.Bounds = new Rectangle(0, y, largeur, E(CompteursLieu.Hauteur));
             y += _compteurs.Height + E(18);
 
+            // Rangées : 5 colonnes ouvertes côte à côte (2 sous 1050 px) ; les colonnes repliées, étroites, ne comptent pas
+            // dans cette limite et laissent leur place aux colonnes ouvertes de la rangée.
             var nb = largeur >= E(1050) ? 5 : 2;
-            var lc = (largeur - ((nb - 1) * ecart)) / nb;
-            for (var debut = 0; debut < _colonnes.Length; debut += nb)
+            var lr = E(ColonneRevision.LargeurRepliee);
+            var rangees = new List<List<ColonneRevision>>();
+            var courante = new List<ColonneRevision>();
+            var ouvertes = 0;
+            foreach (var c in _colonnes)
             {
-                var rangee = _colonnes.Skip(debut).Take(nb).ToList();
-
-                // L'accolade « Réparation externe » au-dessus des colonnes 3 et 4 (index 2 et 3), quand elles sont côte à côte.
-                if (debut <= 2 && debut + rangee.Count - 1 >= 3)
+                if (!c.Repliee && ouvertes == nb)
                 {
-                    var x = (2 - debut) * (lc + ecart);
-                    _accolade.Bounds = new Rectangle(x, y, (2 * lc) + ecart, E(AccoladeExterne.Hauteur));
-                    y += _accolade.Height + E(6);
+                    rangees.Add(courante);
+                    (courante, ouvertes) = ([], 0);
                 }
 
-                var h = Math.Max(E(360), rangee.Max(c => c.Mesurer(lc)));
-                for (var i = 0; i < rangee.Count; i++)
+                courante.Add(c);
+                ouvertes += c.Repliee ? 0 : 1;
+            }
+
+            rangees.Add(courante);
+            _accolade.Visible = false;
+            foreach (var rangee in rangees)
+            {
+                var nOuvertes = rangee.Count(c => !c.Repliee);
+                var lc = nOuvertes == 0 ? 0 : (largeur - ((rangee.Count - 1) * ecart) - ((rangee.Count - nOuvertes) * lr)) / nOuvertes;
+                var xs = new List<(ColonneRevision Colonne, int X, int L)>();
+                var x = 0;
+                foreach (var c in rangee)
                 {
-                    rangee[i].Bounds = new Rectangle(i * (lc + ecart), y, lc, h);
+                    var l = c.Repliee ? lr : lc;
+                    xs.Add((c, x, l));
+                    x += l + ecart;
+                }
+
+                // L'accolade « Réparation externe » au-dessus des colonnes 3 et 4, quand elles sont côte à côte et assez larges.
+                if (xs.FindIndex(t => t.Colonne == _colonnes[2]) is var i3 and >= 0 && xs.FindIndex(t => t.Colonne == _colonnes[3]) is var i4 and >= 0)
+                {
+                    var gauche = xs[i3].X;
+                    var droite = xs[i4].X + xs[i4].L;
+                    if (droite - gauche >= E(220))
+                    {
+                        _accolade.Bounds = new Rectangle(gauche, y, droite - gauche, E(AccoladeExterne.Hauteur));
+                        _accolade.Visible = true;
+                        y += _accolade.Height + E(6);
+                    }
+                }
+
+                var h = Math.Max(E(360), xs.Max(t => t.Colonne.Mesurer(t.L)));
+                foreach (var (colonne, xc, l) in xs)
+                {
+                    colonne.Bounds = new Rectangle(xc, y, l, h);
                 }
 
                 y += h + ecart;
@@ -609,7 +856,8 @@ public sealed class EcranRevisions : EcranBase
 
         public void Afficher(TableauRevisions t)
         {
-            _club = ($"{t.AuClub} au club, en attente",
+            // En sortie ou manquant : à récupérer, ni au club, ni chez un prestataire (dans le titre : la phrase du dessous est déjà longue).
+            _club = ($"{t.AuClub} au club, en attente{(t.EnSortie == 0 ? "" : $" · {t.EnSortie} en sortie")}",
                 "Rangés au local. " + (t.AEnvoyer == 0 ? "Rien à envoyer." : $"Dont {t.AEnvoyer} à envoyer chez un prestataire."));
             var parPrestataire = string.Join(", ", t.ParPrestataire.Select(p => $"{p.Nombre} chez {p.Prestataire}"));
             _dehors = ($"{t.HorsClub} hors du club, chez un prestataire",
@@ -753,15 +1001,23 @@ public sealed class EcranRevisions : EcranBase
             Dessin.PeindreFondArrondi(this, e.Graphics, BackColor, null, 10);
     }
 
-    /// <summary>Colonne du tableau : bandeau coloré, numéro, titre, nombre de cartes, aide, en-tête optionnel (séance, archivage) et cartes.</summary>
+    /// <summary>
+    /// Colonne du tableau : bandeau coloré, numéro, titre, nombre de cartes, aide, en-tête optionnel (séance, archivage) et cartes.
+    /// Bouton œil en haut à droite : la colonne se replie en bande étroite (numéro, nombre, titre vertical) ; un clic la rouvre.
+    /// </summary>
     private sealed class ColonneRevision : Panel
     {
+        /// <summary>Largeur d'une colonne repliée (pixels logiques).</summary>
+        public const int LargeurRepliee = 56;
+
+        private const int TailleBouton = 30;
         private readonly int _numero;
         private readonly string _titre;
         private readonly string _aide;
         private readonly Color _couleur;
         private Control? _entete;
         private readonly List<CarteEquipement> _cartes = [];
+        private bool _repliee;
 
         public ColonneRevision(int numero, string titre, string aide, Color couleur)
         {
@@ -770,9 +1026,57 @@ public sealed class EcranRevisions : EcranBase
             BackColor = Theme.Surface;
             AccessibleRole = AccessibleRole.Grouping;
             AccessibleName = titre;
+            Bascule = new BoutonArrondi("", StyleBouton.Icone, Icones.OeilBarre) { AutoSize = false, Margin = Padding.Empty, AccessibleName = $"Replier la colonne {titre}" };
+            Bascule.Click += (_, _) => Basculee?.Invoke(this, EventArgs.Empty);
+            Controls.Add(Bascule);
+        }
+
+        /// <summary>Bouton œil : replier / rouvrir la colonne.</summary>
+        public BoutonArrondi Bascule { get; }
+
+        public string Titre => _titre;
+
+        /// <summary>L'utilisateur demande de replier ou de rouvrir la colonne (l'écran enregistre le choix).</summary>
+        public event EventHandler? Basculee;
+
+        /// <summary>Repliée : bande étroite, cartes cachées ; un clic n'importe où la rouvre.</summary>
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public bool Repliee
+        {
+            get => _repliee;
+            set
+            {
+                _repliee = value;
+                foreach (var c in _cartes)
+                {
+                    c.Visible = !value;
+                }
+
+                if (_entete is not null)
+                {
+                    _entete.Visible = !value;
+                }
+
+                Bascule.Icone = value ? Icones.Oeil : Icones.OeilBarre;
+                Bascule.AccessibleName = value ? $"Afficher la colonne {_titre}" : $"Replier la colonne {_titre}";
+                Cursor = value ? Cursors.Hand : Cursors.Default;
+                Invalidate();
+            }
+        }
+
+        protected override void OnClick(EventArgs e)
+        {
+            base.OnClick(e);
+            if (_repliee)
+            {
+                Basculee?.Invoke(this, EventArgs.Empty);
+            }
         }
 
         private float E(float v) => Dessin.Echelle(this, v);
+
+        /// <summary>Bord droit de l'en-tête (nombre de cartes), à gauche du bouton œil.</summary>
+        private float DroiteEntete(int largeur) => largeur - E(12) - E(TailleBouton) - E(6);
 
         private Font PoliceAide => Theme.Police(8.25f);
 
@@ -784,7 +1088,7 @@ public sealed class EcranRevisions : EcranBase
 
         /// <summary>Titre sur une ou deux lignes (« Chez le prestataire » dans une colonne étroite).</summary>
         private int HauteurTitre(int largeur) => Math.Max((int)E(30), TextRenderer.MeasureText(_titre, PoliceTitre,
-            new Size(Math.Max(1, largeur - Gauche - LargeurNombre(_cartes.Count) - (int)E(20)), int.MaxValue), TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix).Height);
+            new Size(Math.Max(1, (int)DroiteEntete(largeur) - Gauche - LargeurNombre(_cartes.Count) - (int)E(8)), int.MaxValue), TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix).Height);
 
         private int HauteurAide(int largeur) =>
             TextRenderer.MeasureText(_aide, PoliceAide, new Size(Math.Max(1, largeur - (int)E(28)), int.MaxValue), TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix).Height;
@@ -809,7 +1113,13 @@ public sealed class EcranRevisions : EcranBase
             _entete = entete;
             if (entete is not null)
             {
+                entete.Visible = !_repliee;
                 Controls.Add(entete);
+            }
+
+            foreach (var c in cartes)
+            {
+                c.Visible = !_repliee;
             }
 
             Controls.AddRange([.. cartes]);
@@ -822,6 +1132,14 @@ public sealed class EcranRevisions : EcranBase
         public int Mesurer(int largeur)
         {
             var marge = (int)E(12);
+            var tb = (int)E(TailleBouton);
+            if (_repliee)
+            {
+                Bascule.Bounds = new Rectangle((largeur - tb) / 2, marge, tb, tb);
+                return (int)E(360);
+            }
+
+            Bascule.Bounds = new Rectangle(largeur - marge - tb + (int)E(4), (int)E(12), tb, tb);
             var interieur = largeur - (2 * marge);
             var y = (int)E(14) + HauteurTitre(largeur) + (int)E(4) + HauteurAide(largeur) + (int)E(12);
             if (_entete is not null)
@@ -877,6 +1195,12 @@ public sealed class EcranRevisions : EcranBase
                 g.Clip = ancien;
             }
 
+            if (_repliee)
+            {
+                PeindreRepliee(g);
+                return;
+            }
+
             var x = E(14);
             var y = E(14);
             var d = E(26);
@@ -888,7 +1212,7 @@ public sealed class EcranRevisions : EcranBase
             Dessin.Texte(g, _numero.ToString(Libelles.Culture), Theme.PoliceGrasse(9.75f), Rectangle.Round(new RectangleF(x, y + E(2), d, d)), Theme.Fond, centre: true);
             var nombre = _cartes.Count.ToString(Libelles.Culture);
             var lNombre = LargeurNombre(_cartes.Count);
-            var rNombre = new RectangleF(Width - E(12) - lNombre, y + E(4), lNombre, E(22));
+            var rNombre = new RectangleF(DroiteEntete(Width) - lNombre, y + E(4), lNombre, E(22));
             using (var chemin = Dessin.Arrondi(rNombre, rNombre.Height / 2))
             using (var fond = new SolidBrush(Theme.Teinte(Theme.AccentClair, 0.12f)))
             {
@@ -908,6 +1232,48 @@ public sealed class EcranRevisions : EcranBase
                 var yVide = _entete is null ? yAide + HauteurAide(Width) + (int)E(20) : _entete.Bottom + (int)E(18);
                 Dessin.Texte(g, "Rien ici", Theme.Police(9.75f), new Rectangle(0, yVide, Width, (int)E(24)), Theme.TexteSecondaire, centre: true);
             }
+        }
+
+        /// <summary>Bande repliée : bouton œil (en haut), numéro, nombre de cartes, titre écrit de haut en bas.</summary>
+        private void PeindreRepliee(Graphics g)
+        {
+            var cx = Width / 2f;
+            // Sous le bouton œil réel (sa taille peut avoir été mise à l'échelle après coup) : sinon, en se repeignant,
+            // le bouton recouvrait le haut du cercle.
+            var y = Math.Max(E(12) + E(TailleBouton), Bascule.Bottom) + E(10);
+            var d = E(26);
+            using (var pastille = new SolidBrush(_couleur))
+            {
+                g.FillEllipse(pastille, cx - (d / 2), y, d, d);
+            }
+
+            Dessin.Texte(g, _numero.ToString(Libelles.Culture), Theme.PoliceGrasse(9.75f), Rectangle.Round(new RectangleF(cx - (d / 2), y, d, d)), Theme.Fond, centre: true);
+            y += d + E(8);
+
+            var lNombre = LargeurNombre(_cartes.Count);
+            var rNombre = new RectangleF(cx - (lNombre / 2f), y, lNombre, E(22));
+            using (var chemin = Dessin.Arrondi(rNombre, rNombre.Height / 2))
+            using (var fond = new SolidBrush(Theme.Teinte(Theme.AccentClair, 0.12f)))
+            {
+                g.FillPath(fond, chemin);
+            }
+
+            Dessin.Texte(g, _cartes.Count.ToString(Libelles.Culture), Theme.PoliceGrasse(9f), Rectangle.Round(rNombre), Theme.TexteDoux, centre: true);
+            y += rNombre.Height + E(14);
+
+            // Titre vertical (GDI+ : TextRenderer ignore les rotations).
+            var etat = g.Save();
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+            var police = PoliceTitre;
+            var taille = g.MeasureString(_titre, police);
+            g.TranslateTransform(cx + (taille.Height / 2), y);
+            g.RotateTransform(90);
+            using (var pinceau = new SolidBrush(Theme.Texte))
+            {
+                g.DrawString(_titre, police, pinceau, 0, 0);
+            }
+
+            g.Restore(etat);
         }
     }
 
@@ -938,10 +1304,10 @@ public sealed class EcranRevisions : EcranBase
             {
                 $"{c.Libelle} {c.Code}, {c.Badge}",
                 c.Signalement ? "Signalé au retour" : "",
-                c.Etape is EtapeRevision.APrevoir or EtapeRevision.Interne ? "Au club" : "",
+                c.HorsClub.Length > 0 ? c.HorsClub : c.Etape is EtapeRevision.APrevoir or EtapeRevision.Interne ? "Au club" : "",
                 c.Etape == EtapeRevision.AEnvoyer ? $"Encore au club, à envoyer chez {c.Prestataire}. {c.NoteEnvoi}" : "",
                 c.Etape == EtapeRevision.ChezPrestataire ? $"Chez {c.Prestataire}. {LigneDepart} {LigneRetour}" : "",
-                c.Controle, c.Detail, c.Bloque ? "Bloqué pour les sorties" : "",
+                c.Controle, c.Detail, c.Precision, c.Description, c.Bloque ? "Bloqué pour les sorties" : "",
             }.Where(t => !string.IsNullOrWhiteSpace(t)));
         }
 
@@ -972,9 +1338,12 @@ public sealed class EcranRevisions : EcranBase
         }
 
         /// <summary>Petit bouton « Archiver A07 » (boîte d'archive, 30 px) en haut à droite d'une carte « Fait ».</summary>
-        public BoutonArrondi AjouterArchive()
+        public BoutonArrondi AjouterArchive() => AjouterCoin(Icones.Archive, $"Archiver {_c.Code}");
+
+        /// <summary>Petit bouton à pictogramme (30 px) en haut à droite : archiver (« Fait »), retirer l'intervention prévue.</summary>
+        public BoutonArrondi AjouterCoin(string icone, string nom)
         {
-            _archive = new BoutonArrondi("", StyleBouton.Icone, Icones.Archive) { AutoSize = false, Margin = Padding.Empty, AccessibleName = $"Archiver {_c.Code}" };
+            _archive = new BoutonArrondi("", StyleBouton.Icone, icone) { AutoSize = false, Margin = Padding.Empty, AccessibleName = nom };
             Controls.Add(_archive);
             return _archive;
         }
@@ -1085,7 +1454,14 @@ public sealed class EcranRevisions : EcranBase
                 y += Ei(22);
             }
 
-            if (_c.Etape is EtapeRevision.APrevoir or EtapeRevision.Interne)
+            if (_c.HorsClub.Length > 0 && _c.Etape != EtapeRevision.Fait)
+            {
+                // En sortie (avec son intitulé) ou manquant : pas au club, il faut d'abord le récupérer.
+                y += Ei(4);
+                Pastille(g, p, y, Icones.Depart, _c.HorsClub, Theme.Depart, largeur);
+                y += Ei(22);
+            }
+            else if (_c.Etape is EtapeRevision.APrevoir or EtapeRevision.Interne)
             {
                 y += Ei(4);
                 Pastille(g, p, y, Icones.Maison, "Au club", Theme.Retour);
@@ -1101,13 +1477,28 @@ public sealed class EcranRevisions : EcranBase
 
             // Contrôle, détail.
             y += Ei(6);
-            Si(g, gr => Dessin.Texte(gr, _c.Controle, PoliceDetail, new Rectangle(p, y, largeur, Ei(18)), Theme.TexteDoux));
-            y += Ei(18);
+            // Deux lignes au plus : le motif d'une intervention prévue ou d'un signalement doit se lire en entier.
+            var hControle = Math.Max(Ei(18), Math.Min(Hauteur(_c.Controle, PoliceDetail, largeur), Ei(34)));
+            Si(g, gr => TextRenderer.DrawText(gr, _c.Controle, PoliceDetail, new Rectangle(p, y, largeur, hControle), Theme.TexteDoux, Paragraphe | TextFormatFlags.EndEllipsis));
+            y += hControle;
             var hDetail = Hauteur(_c.Detail, PoliceDetail, largeur);
             if (hDetail > 0)
             {
                 Si(g, gr => TextRenderer.DrawText(gr, _c.Detail, PoliceDetail, new Rectangle(p, y, largeur, hDetail), Theme.TexteSecondaire, Paragraphe));
                 y += hDetail;
+            }
+
+            // Précision du problème signalé, description de l'intervention : en citation, avec un trait de couleur.
+            if (_c.Precision.Length > 0)
+            {
+                y += Ei(6);
+                y += Citation(g, p, y, largeur, $"« {_c.Precision} »", Theme.Avertissement);
+            }
+
+            if (_c.Description.Length > 0)
+            {
+                y += Ei(6);
+                y += Citation(g, p, y, largeur, _c.Description, _couleur);
             }
 
             if (_c.Usage is { } u && _c.Etape != EtapeRevision.Fait)
@@ -1135,6 +1526,24 @@ public sealed class EcranRevisions : EcranBase
             return y;
         }
 
+        /// <summary>Texte cité (précision d'un signalement, description) : trait vertical de couleur à gauche. Retourne sa hauteur.</summary>
+        private int Citation(Graphics? g, int x, int y, int largeur, string texte, Color couleur)
+        {
+            var retrait = Ei(10);
+            var h = Hauteur(texte, PoliceDetail, largeur - retrait);
+            if (g is not null)
+            {
+                using (var trait = new SolidBrush(Theme.Sur(BackColor, couleur, 0.7f)))
+                {
+                    g.FillRectangle(trait, x, y + E(1), E(3), h - E(2));
+                }
+
+                TextRenderer.DrawText(g, texte, PoliceDetail, new Rectangle(x + retrait, y, largeur - retrait, h), Theme.TexteDoux, Paragraphe);
+            }
+
+            return h;
+        }
+
         private void Badge(Graphics g, float x, float y, int largeur)
         {
             var rb = new RectangleF(x, y, largeur, E(22));
@@ -1144,7 +1553,7 @@ public sealed class EcranRevisions : EcranBase
             Dessin.Texte(g, _c.Badge, Theme.PoliceGrasse(7.5f), Rectangle.Round(rb), _couleur, centre: true);
         }
 
-        private void Pastille(Graphics? g, int x, int y, string icone, string texte, Color couleur)
+        private void Pastille(Graphics? g, int x, int y, string icone, string texte, Color couleur, int largeurMax = int.MaxValue)
         {
             if (g is null)
             {
@@ -1153,7 +1562,9 @@ public sealed class EcranRevisions : EcranBase
 
             var police = Theme.PoliceGrasse(7.5f);
             var t = E(12);
-            var l = TextRenderer.MeasureText(g, texte, police).Width + (int)t + Ei(18);
+            var naturelle = TextRenderer.MeasureText(g, texte, police).Width + (int)t + Ei(18);
+            var coupee = naturelle > largeurMax; // Intitulé de sortie long : coupé à la largeur de la carte.
+            var l = coupee ? largeurMax : naturelle;
             var r = new RectangleF(x, y, l, E(20));
             using (var chemin = Dessin.Arrondi(r, r.Height / 2))
             using (var fond = new SolidBrush(Theme.Sur(BackColor, couleur, 0.14f)))
@@ -1162,7 +1573,8 @@ public sealed class EcranRevisions : EcranBase
             }
 
             Icones.Dessiner(g, icone, new RectangleF(x + E(8), y + ((r.Height - t) / 2), t, t), couleur, 2.4f);
-            Dessin.Texte(g, texte, police, new Rectangle((int)(x + E(8) + t + E(4)), y, l, Ei(20)), couleur);
+            var xTexte = (int)(x + E(8) + t + E(4));
+            Dessin.Texte(g, texte, police, new Rectangle(xTexte, y, coupee ? (int)(x + l - E(6)) - xTexte : l, Ei(20)), couleur);
         }
 
         /// <summary>« Encore au club / À envoyer chez … / note » ou « Chez … / Parti le … / retour ». Retourne sa hauteur.</summary>
@@ -1361,6 +1773,7 @@ public sealed class EcranRevisions : EcranBase
         private readonly ChampSaisie _intervenant = new() { TexteIndicatif = "Magasin, organisme, personne…" };
         private readonly Label _libelleIntervenant = Ui.LibelleChamp("Intervenant");
         private readonly ChampDate _date = new() { AccessibleName = "Date de l'intervention" };
+        private readonly ChampSaisie _description = new() { TexteIndicatif = "Ce qui a été fait : membrane changée, joints, nettoyage…" };
         private readonly List<ChoixResultat> _choix = [];
         private readonly BandeauMessage _consequence = new() { Margin = Padding.Empty };
         private ResultatControle _resultat = ResultatControle.Conforme;
@@ -1382,6 +1795,7 @@ public sealed class EcranRevisions : EcranBase
             _code.Margin = new Padding(0, 0, 0, 2);
             _nom.Margin = Padding.Empty;
             _controle.Margin = new Padding(0, 0, 0, 6);
+            _controle.MaximumSize = new Size(320, 0); // Précision d'un signalement : sur plusieurs lignes.
             var fiche = new BoutonArrondi("Fiche ›", StyleBouton.Lien) { Height = Theme.HauteurCliquable, Margin = Padding.Empty };
             fiche.Click += (_, _) =>
             {
@@ -1451,8 +1865,15 @@ public sealed class EcranRevisions : EcranBase
             Valider.Click += async (_, _) => await EnregistrerAsync();
             var boutons = Ui.Colonnes((annuler, SizeType.Percent, 34), (Valider, SizeType.Percent, 66));
 
+            _description.Champ.AccessibleName = "Description de l'intervention";
+            _description.Champ.MaxLength = ServiceRevisions.LongueurDescription;
+            _description.Margin = new Padding(0, 0, 0, 12);
+            var libelleDescription = Ui.LibelleChamp("Description (facultatif)");
+            libelleDescription.Margin = new Padding(0, 0, 0, 8);
             var droite = Ui.Colonne(
                 (champs, SizeType.Absolute, 34 + Theme.HauteurChamp + 12),
+                (libelleDescription, SizeType.Absolute, 30),
+                (_description, SizeType.Absolute, Theme.HauteurChamp + 12),
                 (Ui.LibelleChamp("Résultat"), SizeType.AutoSize, 0),
                 (resultats, SizeType.Absolute, Theme.HauteurCliquable + 10),
                 (_consequence, SizeType.Absolute, 62),
@@ -1473,7 +1894,7 @@ public sealed class EcranRevisions : EcranBase
 
         public event EventHandler<string>? FicheDemandee;
 
-        public int HauteurPour(int largeur) => (int)Dessin.Echelle(this, 22 + 34 + Theme.HauteurChamp + 12 + 30 + Theme.HauteurCliquable + 10 + 62 + Theme.HauteurBouton + 12 + 22);
+        public int HauteurPour(int largeur) => (int)Dessin.Echelle(this, 22 + 34 + Theme.HauteurChamp + 12 + 30 + Theme.HauteurChamp + 12 + 30 + Theme.HauteurCliquable + 10 + 62 + Theme.HauteurBouton + 12 + 22);
 
         public void PrendreFocus() => _nature.Focus();
 
@@ -1483,7 +1904,8 @@ public sealed class EcranRevisions : EcranBase
             _carte = carte;
             _code.Text = carte.Code;
             _nom.Text = carte.Libelle;
-            _controle.Text = carte.Controle;
+            // Problème signalé : la cause et la précision du moniteur, pour savoir quoi réparer.
+            _controle.Text = carte.Precision.Length > 0 ? $"{carte.Controle} · « {carte.Precision} »" : carte.Controle;
 
             // Bloc : TIV ou requalification ; autre matériel : les natures de révision.
             var natures = ServiceRevisions.EstBloc(carte.Categorie)
@@ -1507,6 +1929,7 @@ public sealed class EcranRevisions : EcranBase
             }
 
             _intervenant.Valeur = carte.Prestataire ?? "";
+            _description.Valeur = "";
             _date.Date = DateOnly.FromDateTime(DateTime.Today);
             _resultat = ResultatControle.Conforme;
             foreach (var b in _choix)
@@ -1577,7 +2000,7 @@ public sealed class EcranRevisions : EcranBase
             {
                 var resultat = await _revisions.EnregistrerInterventionAsync(new Intervention(
                     c.EquipementId, Type, _resultat, date, _nature.SelectedItem as string ?? "",
-                    tiv ? inspecteur?.Texte ?? "" : _intervenant.Valeur, inspecteur?.Valeur, c.PassageAtelierId));
+                    tiv ? inspecteur?.Texte ?? "" : _intervenant.Valeur, inspecteur?.Valeur, c.PassageAtelierId, Notes: _description.Valeur));
                 if (!resultat.Reussi)
                 {
                     _consequence.Afficher(NiveauResultat.Erreur, resultat.Message);

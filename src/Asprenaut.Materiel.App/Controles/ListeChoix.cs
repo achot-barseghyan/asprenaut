@@ -62,6 +62,9 @@ public sealed class ListeChoix : ScrollableControl
         }
     }
 
+    /// <summary>Nombre d'éléments affichés.</summary>
+    public int Nombre => _elements.Count;
+
     /// <summary>Choisit l'élément de cette clé (code scanné) et le fait apparaître ; faux s'il n'est pas dans la liste.</summary>
     public bool Choisir(string cle)
     {

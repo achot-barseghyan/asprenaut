@@ -12,6 +12,37 @@ public class ReglagesTests
 
     // --- Affichage ---
 
+    // Menu réduit aux icônes : confort d'affichage, libre même en mode consultation, retenu dans parametres.json.
+    [Fact]
+    public void Reduire_le_menu_est_libre_et_retenu()
+    {
+        Assert.False(_ctx.Reglages.MenuReduit);
+        Assert.True(_ctx.Gestion.DefinirCode(null, "1234", "1234").Reussi);
+        _ctx.Gestion.Verrouiller();
+        var avant = _ctx.Stockage.Enregistrements;
+
+        Assert.True(_ctx.ServiceReglages.ChangerMenuReduit(true).Reussi);
+        Assert.True(_ctx.Reglages.MenuReduit);
+        Assert.Equal(avant + 1, _ctx.Stockage.Enregistrements);
+        Assert.True(_ctx.ServiceReglages.ChangerMenuReduit(true).Reussi);
+        Assert.Equal(avant + 1, _ctx.Stockage.Enregistrements); // Rien de changé : pas réécrit.
+    }
+
+    // Colonnes repliées du tableau des révisions : libre, retenu, au moins une colonne reste ouverte.
+    [Fact]
+    public void Replier_des_colonnes_des_revisions_est_libre_et_garde_une_colonne_ouverte()
+    {
+        Assert.True(_ctx.Gestion.DefinirCode(null, "1234", "1234").Reussi);
+        _ctx.Gestion.Verrouiller();
+
+        Assert.True(_ctx.ServiceReglages.ChangerColonnesRevisionsRepliees([EtapeRevision.Fait, EtapeRevision.AEnvoyer, EtapeRevision.Fait]).Reussi);
+        Assert.Equal([EtapeRevision.AEnvoyer, EtapeRevision.Fait], _ctx.Reglages.ColonnesRevisionsRepliees);
+
+        var r = _ctx.ServiceReglages.ChangerColonnesRevisionsRepliees(Enum.GetValues<EtapeRevision>());
+        Assert.Equal("Gardez au moins une colonne ouverte.", r.Message);
+        Assert.Equal([EtapeRevision.AEnvoyer, EtapeRevision.Fait], _ctx.Reglages.ColonnesRevisionsRepliees);
+    }
+
     [Fact]
     public void Le_theme_est_sombre_par_defaut_et_le_choix_est_enregistre()
     {

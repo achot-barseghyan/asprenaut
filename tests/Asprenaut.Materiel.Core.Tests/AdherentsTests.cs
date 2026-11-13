@@ -223,11 +223,14 @@ public class AdherentsTests
         var sortie = await SortieAsync();
         var julie = await AdherentAsync("Julie", "Martin");
         var thomas = await AdherentAsync("Thomas", "Bernard");
-        string[] codes = ["BLOC-031", "S01", "A01", "BLOC-032"];
+        _ctx.Db.Categories.Add(new Categorie { Id = _ctx.Db.ProchainId(), Nom = "Gilets" });
+        _ctx.Db.Categories.Add(new Categorie { Id = _ctx.Db.ProchainId(), Nom = "Masques" });
+        string[] codes = ["BLOC-031", "S01", "A01", "MASQ-01"];
+        string[] categories = ["Blocs", "Gilets", "Détendeurs", "Masques"]; // Un seul équipement par catégorie et par adhérent.
         Adherent[] qui = [julie, julie, thomas, julie];
         for (var i = 0; i < codes.Length; i++)
         {
-            var e = _ctx.Equipement(codes[i]);
+            var e = _ctx.Equipement(codes[i], categorie: categories[i]);
             _ctx.Horloge.MaintenantUtc = _ctx.Horloge.MaintenantUtc.AddMinutes(1);
             await _ctx.Scan.ScannerDepartAsync(sortie, codes[i]);
             await AttribuerAsync(sortie, e, qui[i]);

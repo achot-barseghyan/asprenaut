@@ -4,7 +4,10 @@ using Asprenaut.Materiel.Core.Resultats;
 
 namespace Asprenaut.Materiel.Core.Services;
 
-/// <summary>Données saisies sur l'écran "Nouvelle sortie".</summary>
+/// <summary>
+/// Données saisies sur l'écran "Nouvelle sortie". <see cref="UnParCategorie"/> : null = activé à la création, inchangé en
+/// modification ; false (plusieurs équipements d'une catégorie par adhérent) demande le mode gestion.
+/// </summary>
 public sealed record NouvelleSortie(
     DateOnly Date,
     TypeSortie Type,
@@ -13,7 +16,8 @@ public sealed record NouvelleSortie(
     string Lieu = "",
     string Notes = "",
     long? TypeId = null,
-    int? Utilisations = null);
+    int? Utilisations = null,
+    bool? UnParCategorie = null);
 
 /// <summary>Cycle de vie d'une sortie : création, validation du départ, clôture.</summary>
 public sealed class ServiceSortie(
@@ -123,6 +127,13 @@ public sealed class ServiceSortie(
             return refusCompteur;
         }
 
+        // Un seul équipement par catégorie et par adhérent : activé par défaut, le couper demande le mode gestion.
+        var unParCategorie = demande.UnParCategorie ?? true;
+        if (!unParCategorie && gestion?.Exiger(ActionProtegee.PlusieursParCategorie) is { Reussi: false } refusCategorie)
+        {
+            return refusCategorie;
+        }
+
         var sortie = new Sortie
         {
             DateSortie = demande.Date,
@@ -135,6 +146,7 @@ public sealed class ServiceSortie(
             Notes = demande.Notes.Trim(),
             Statut = StatutSortie.EnPreparation,
             Nominatif = nominatif,
+            UnParCategorie = unParCategorie,
         };
         var id = await sorties.AjouterAsync(sortie, ct);
         await JournaliserAsync(ActionsJournal.SortieCreee, $"Sortie {id} « {intitule} » du {Libelles.Date(demande.Date)} ({moniteur.NomComplet})", ct, sortieId: id);
@@ -191,6 +203,15 @@ public sealed class ServiceSortie(
         {
             return refusCompteur;
         }
+
+        // Couper « un seul équipement par catégorie » demande le mode gestion ; le remettre est libre.
+        var unParCategorie = demande.UnParCategorie ?? sortie.UnParCategorie;
+        if (!unParCategorie && sortie.UnParCategorie && gestion?.Exiger(ActionProtegee.PlusieursParCategorie) is { Reussi: false } refusCategorie)
+        {
+            return refusCategorie;
+        }
+
+        sortie.UnParCategorie = unParCategorie;
 
         // Nominative : reprise du nouveau type s'il change ; sinon la sortie garde la sienne (réglage du type changé depuis).
         if (typeId != sortie.TypeId)
@@ -379,8 +400,8 @@ public sealed class ServiceSortie(
             .ToList();
 
     /// <summary>
-    /// Sortie nominative : l'équipement scanné est pris par cet adhérent (actif). Possible tant qu'il est dehors,
-    /// pour corriger aussi une attribution.
+    /// Sortie nominative : l'équipement scanné est pris par cet adhérent (actif, certifié nitrox si besoin, sans autre
+    /// équipement de la même catégorie dehors dans la sortie). Possible tant qu'il est dehors, pour corriger aussi une attribution.
     /// </summary>
     public async Task<ResultatOperation> AttribuerAdherentAsync(long sortieId, long equipementId, long adherentId, CancellationToken ct = default)
     {
@@ -411,10 +432,13 @@ public sealed class ServiceSortie(
             return ResultatOperation.Echec("Cet adhérent n'existe plus.");
         }
 
-        // Règles : un adhérent désactivé ne prend pas de matériel ; un bloc ou un détendeur nitrox ne part qu'avec un certifié nitrox.
-        var ligne = (await sorties.ListerLignesAsync(sortieId, ct)).FirstOrDefault(l => l.EquipementId == equipementId);
+        // Règles : un adhérent désactivé ne prend pas de matériel ; un bloc ou un détendeur nitrox ne part qu'avec un certifié nitrox ;
+        // un seul équipement par catégorie et par adhérent dans la sortie (pas deux détendeurs, deux blocs, deux gilets),
+        // sauf si la sortie l'autorise (Sortie.UnParCategorie coupé en mode gestion).
+        var lignes = await sorties.ListerLignesAsync(sortieId, ct);
+        var ligne = lignes.FirstOrDefault(l => l.EquipementId == equipementId);
         var code = ligne?.Code ?? "";
-        if (ServiceAdherents.RefusPour(adherent, ligne?.Nitrox ?? false, code) is { } refus)
+        if ((ligne is null ? ServiceAdherents.RefusPour(adherent, false, code) : ServiceAdherents.RefusPour(adherent, ligne, lignes, sortie.UnParCategorie)) is { } refus)
         {
             return ResultatOperation.Echec(refus);
         }

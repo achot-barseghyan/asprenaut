@@ -244,6 +244,66 @@ public sealed class RevisionRepository(FabriqueConnexion fabrique) : IRevisionRe
             new { ids, archive = archive ? 1 : 0, le = FormatIso.Ecrire(archive ? le : null) }, cancellationToken: ct));
     }
 
+    // ---------------------------------------------------------------- Interventions prévues (migration 018)
+
+    private const string ColonnesPrevue = "id, equipement_id, motif, description, prevue_le, close_le, annulee";
+
+    public async Task<long> AjouterPrevueAsync(InterventionPrevue prevue, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        prevue.Id = await cx.ExecuteScalarAsync<long>(new CommandDefinition(
+            """
+            INSERT INTO intervention_prevue (equipement_id, motif, description, prevue_le, close_le, annulee)
+            VALUES (@EquipementId, @Motif, @Description, @PrevueLe, @CloseLe, @Annulee)
+            RETURNING id;
+            """,
+            Parametres(prevue), cancellationToken: ct));
+        return prevue.Id;
+    }
+
+    public async Task MettreAJourPrevueAsync(InterventionPrevue prevue, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        await cx.ExecuteAsync(new CommandDefinition(
+            "UPDATE intervention_prevue SET motif = @Motif, description = @Description WHERE id = @Id AND close_le IS NULL;",
+            Parametres(prevue), cancellationToken: ct));
+    }
+
+    public async Task<InterventionPrevue?> ObtenirPrevueOuverteAsync(long equipementId, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        return await cx.QuerySingleOrDefaultAsync<InterventionPrevue>(new CommandDefinition(
+            $"SELECT {ColonnesPrevue} FROM intervention_prevue WHERE equipement_id = @equipementId AND close_le IS NULL;",
+            new { equipementId }, cancellationToken: ct));
+    }
+
+    public async Task<IReadOnlyList<InterventionPrevue>> ListerPrevuesOuvertesAsync(CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        var lignes = await cx.QueryAsync<InterventionPrevue>(new CommandDefinition(
+            $"SELECT {ColonnesPrevue} FROM intervention_prevue WHERE close_le IS NULL ORDER BY prevue_le, id;", cancellationToken: ct));
+        return lignes.AsList();
+    }
+
+    public async Task<int> FermerPrevueAsync(long equipementId, DateTime le, bool annulee, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        return await cx.ExecuteAsync(new CommandDefinition(
+            "UPDATE intervention_prevue SET close_le = @le, annulee = @annulee WHERE equipement_id = @equipementId AND close_le IS NULL;",
+            new { equipementId, le = FormatIso.Ecrire(le), annulee = annulee ? 1 : 0 }, cancellationToken: ct));
+    }
+
+    private static object Parametres(InterventionPrevue p) => new
+    {
+        p.Id,
+        p.EquipementId,
+        p.Motif,
+        p.Description,
+        PrevueLe = FormatIso.Ecrire(p.PrevueLe),
+        CloseLe = FormatIso.Ecrire(p.CloseLe),
+        Annulee = p.Annulee ? 1 : 0,
+    };
+
     private static object Parametres(SuiviRevision s) => new
     {
         s.Id,

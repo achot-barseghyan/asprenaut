@@ -25,4 +25,10 @@ public sealed class Sortie
     /// (ou au changement de type en préparation) : changer le réglage du type ensuite ne touche pas la sortie.
     /// </summary>
     public bool Nominatif { get; set; }
+
+    /// <summary>
+    /// Sortie nominative : un adhérent ne prend qu'un équipement par catégorie (pas deux détendeurs). Activé par défaut ;
+    /// le couper demande le mode gestion (<see cref="Services.ActionProtegee.PlusieursParCategorie"/>).
+    /// </summary>
+    public bool UnParCategorie { get; set; } = true;
 }

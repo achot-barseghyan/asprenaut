@@ -215,6 +215,7 @@ public sealed class SortieRepositoryMemoire(BaseMemoire db) : ISortieRepository
                     EquipementId = e.Id,
                     Code = e.Code,
                     Libelle = e.Libelle,
+                    Categorie = db.Categories.FirstOrDefault(c => c.Id == e.CategorieId)?.Nom ?? "",
                     Taille = e.Taille,
                     DateProchaineRevision = e.DateProchaineRevision,
                     DateRequalification = e.DateRequalification,
@@ -346,6 +347,7 @@ public sealed class SortieRepositoryMemoire(BaseMemoire db) : ISortieRepository
             NbRendus = lignes.Count(a => a.Statut == StatutSortieEquipement.Rendu),
             NbManquants = lignes.Count(a => a.Statut == StatutSortieEquipement.Manquant),
             Nominatif = s.Nominatif,
+            UnParCategorie = s.UnParCategorie,
         };
     }
 }

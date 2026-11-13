@@ -61,6 +61,9 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   `AppliquerAsync(jusqua)` s'arrête à une version (tests de reprise de données, voir `HistoriqueDepotsTests`).
 - **Data/Connexion** : `FabriqueConnexion` (une connexion par appel, `Foreign Keys=True`), `ConfigurationDapper`, `FormatIso`.
 - **App** : `Program.cs` → `Demarrage` (DI, sauvegarde, migrations, démo en DEBUG) → `MainForm` (menu latéral + zone de contenu).
+  Menu réductible : bouton « Réduire le menu » / « Agrandir le menu » en bas (`Reglages.MenuReduit`, `ServiceReglages.ChangerMenuReduit`,
+  libre) ; réduit = `Theme.LargeurMenuReduit` (84), entrées `BoutonArrondi.IconeSeule` (trait turquoise sur l'entrée active),
+  `CarteModeGestion.Compact` (cadenas seul), `CarteScanner.Compact` (point seul), noms en bulles ; `RefaireMenu` recrée le menu.
   `INavigation.AllerA<TEcran>(parametre)` crée l'écran via `ActivatorUtilities` (non retenu par le conteneur), le met à l'échelle
   de l'écran et dispose le précédent (masqué puis disposé, jamais `Controls.Remove` : le retrait déplace tout l'arbre de
   fenêtres vers la « parking window » de WinForms, 1,4 s pour Paramètres). Écrans dans `Ecrans/` (héritent d'`EcranBase` ; Départ/Retour héritent d'`EcranScanBase`
@@ -90,8 +93,16 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
 - **Révisions** (`EcranRevisions`) : compteurs « au club » / « hors du club » (`CompteursLieu`), accolade « Réparation externe »
   (`AccoladeExterne`) au-dessus des colonnes 3 et 4, tableau à 5 colonnes dessinées (`ColonneRevision`, 2 par rangée sous 1050 px logiques) et cartes
   (`CarteEquipement`, vrais `BoutonArrondi` liés à `ActionProtegee.Revisions`), filtre par famille, champ de scan qui ouvre
-  le panneau « Ajouter une intervention » en haut de page ; « Fiche › » mène à Historique (vie de l'équipement).
+  le panneau « Ajouter une intervention » en haut de page, comme le bouton « Ajouter une intervention » de l'en-tête (fenêtre de
+  choix : onglets « À prévoir » (règle 35) / « Déjà faite », recherche `ServiceInventaire.ListerAsync` ou médaille, `ListeChoix`,
+  réformés exclus) ; « Fiche › » mène à Historique.
+  Panneau : champ « Description (facultatif) » (controle.notes). Cartes : précision du signalement ouvert (`CarteRevision.Precision`,
+  trait doré) et description de l'intervention dans « Fait » (`CarteRevision.Description`), en citation sous le détail.
   `PageRevisions.OnLayout` recommence le placement si la hauteur posée a fait apparaître la barre (mise en page imbriquée ignorée).
+  Colonnes repliables : bouton œil de chaque en-tête → bande de `ColonneRevision.LargeurRepliee` (56) avec numéro, nombre et titre
+  vertical (cercle placé sous `Bascule.Bottom`), un clic la rouvre ; les colonnes ouvertes se partagent la place (les repliées ne comptent pas dans les 5 / 2 par rangée),
+  accolade seulement si assez large. Choix retenu : `Reglages.ColonnesRevisionsRepliees`, `ChangerColonnesRevisionsRepliees` (libre,
+  une colonne reste ouverte).
 - **Paramètres** (`EcranParametres`) : deux onglets (`Bascule`). « Paramètres » (fonctionnement de l'app) : Sécurité, Pistolet,
   Règles des sorties, Données et sauvegardes, Affichage, À propos. « Configuration du club » : Club, Types de sortie, Compteur
   d'utilisation, Prestataires, Problèmes signalés — construit et rempli seulement à sa première ouverture (`AfficherOngletAsync`,
@@ -162,7 +173,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     `CompteurSortie` : utilisations d'une sortie différentes de celles de son type, à la création comme en modification,
     et clôturer avec des manquants si `CodePourCloturerAvecManquants`, `RendreManquant` : scan ou « Marquer rendu » dans une
     sortie clôturée) sont refusées par les services tant que le mode gestion n'est
-    pas ouvert. Tous les paramètres (thème compris) sont protégés. Libres : créer/modifier une sortie en préparation (avec les
+    pas ouvert. Tous les paramètres (thème compris) sont protégés, sauf réduire le menu et replier des colonnes des révisions (confort d'affichage). Libres : créer/modifier une sortie en préparation (avec les
     utilisations de son type), scanner,
     valider, clôturer sans manquant, consulter, tester le pistolet, faire une sauvegarde.
     Retour en consultation après `MinutesDeverrouillage` (5/15/30/60) sans activité ; `VerrouillerALaFermeture` coupé → le mode
@@ -230,7 +241,8 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     Un contrôle enregistré retire l'équipement des séances.
     « Bloqué pour les sorties » suit les réglages (`DepartSiRevisionDepassee`, `BloquerAuSeuil`), sans les changer.
     Intervention (`EnregistrerInterventionAsync`) : contrôle avec nature (`NaturesPour`) et intervenant (controle.nature /
-    intervenant) ; depuis l'atelier, ferme le passage et remet en service, sauf refusé (reste HorsService).
+    intervenant) et description facultative (`Intervention.Notes` → controle.notes, `LongueurDescription` = 200) ; depuis l'atelier,
+    ferme le passage et remet en service, sauf refusé (reste HorsService).
 24. Moniteurs et classes (migration 008, maquette « Moniteurs et classes ») : une classe (Niveau 1 à 4 créées par la migration)
     est responsable d'une sortie comme un moniteur. Rangée dans la table moniteur (`Moniteur.Genre` = `GenreResponsable.Classe`,
     colonne moniteur.genre) : sortie.moniteur_id reste l'unique responsable. Classe : nom obligatoire (dans `Nom`, prénom vide),
@@ -332,7 +344,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     (`ServiceInventaire.PeutEtreNitrox`, vidée pour les autres catégories, journal « nitrox » / « plus nitrox ») ; « Certifié nitrox »
     sur l'adhérent (formulaire, pastille NITROX, colonne « Nitrox » oui / non de l'import : absente ou case vide = inchangé). Au départ d'une sortie
     nominative, `ServiceAdherents.RefusPour` (utilisé par `AttribuerAdherentAsync`) refuse un adhérent désactivé et un équipement nitrox
-    pour un adhérent non certifié : l'équipement reste en attente. Le panneau l'annonce (« nitrox : adhérent certifié nitrox »),
+    pour un adhérent non certifié, et un deuxième équipement de la même catégorie (deux détendeurs, deux blocs, deux gilets… : `DejaPris`, ceux déjà rendus ne comptent pas) : l'équipement reste en attente, le panneau marque l'adhérent « A déjà A12 » (`MotifCourt`). Ce contrôle est une option de la sortie (`Sortie.UnParCategorie`, `NouvelleSortie.UnParCategorie`, migration 017) : activée par défaut, carte « Un équipement par catégorie et par adhérent » (`Ecrans/OptionUnParCategorie`, interrupteur) dans Nouvelle sortie (types nominatifs) et Modifier la sortie ; la couper demande `ActionProtegee.PlusieursParCategorie` (cadenas sur l'interrupteur), la remettre est libre. Le panneau l'annonce (« nitrox : adhérent certifié nitrox »),
     met les certifiés en premier et marque les autres « pas certifié nitrox ». Fiche adhérent : « Désactiver » (confirmation) /
     « Réactiver » (`ChangerActifAsync`, action Moniteurs) ; désactivé : ne sort plus de matériel, gardé dans la liste (à la fin)
     pour être réactivé. Sortie non nominative : pas de contrôle nitrox.
@@ -359,7 +371,9 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     prestataire » = le panneau d'intervention ; toute intervention (`EnregistrerControleAsync`) passe la révision en cours en Fait
     (ou crée une ligne Fait), et `EnregistrerInterventionAsync` ferme le passage en atelier de la révision ; Refusé → hors service.
     Retour en retard : `RetourEnRetard` (ChezPrestataire et retour prévu passé). Compteurs (`TableauRevisions`) : `AuClub` =
-    équipements en À prévoir, Interne ou À envoyer ; `HorsClub` = ChezPrestataire, `ParPrestataire`, `RetoursEnRetard`.
+    équipements en À prévoir, Interne ou À envoyer, sauf en sortie ou manquant (`CarteRevision.HorsClub` : « En sortie · intitulé »
+    / « Manquant », pastille à la place de « Au club » ; `EnSortie`, « · 1 en sortie » dans le titre du compteur) ; `HorsClub` =
+    ChezPrestataire, `ParPrestataire`, `RetoursEnRetard`.
     « Bloqué pour les sorties » à toutes les étapes sauf Fait (réglages, ou signalement Hors service). Fait : « Archiver tout » et
     bouton par carte (`ArchiverAsync` / `DesarchiverAsync`, sans code : archive = 1 seulement à l'étape Fait, rien n'est supprimé ;
     « Annuler » tant qu'on reste sur la page) ; au-delà de 30 jours, la carte quitte la colonne. `EnvoyerEnAtelierAsync` (ancien
@@ -378,6 +392,16 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     lignes (des contrôles par ligne ralentissaient l'ouverture de Paramètres) : monter / descendre / modifier / supprimer et case
     « Précision obligatoire » retrouvés par calcul, clavier (flèches, Ctrl + flèches, Espace, Entrée, Suppr) ; sa hauteur est posée
     (un TableLayoutPanel en Dock Fill garde la hauteur du contrôle) et la carte suit.
+
+35. Interventions prévues (migration 018, `EtapesRevisionsTests`) : on voit un problème, il faudra intervenir.
+    `ServiceRevisions.PrevoirInterventionAsync(equipement, « à faire » 60 car. obligatoire, description 200 car.)`, action Révisions :
+    une seule ouverte par équipement (`ux_intervention_prevue_ouverte` ; la prévoir de nouveau la modifie), refusée si réformé ou
+    déjà engagé dans une révision. Elle met l'équipement dans « À prévoir » (`CarteRevision.Prevue`, badge « Prévue », juste après
+    les signalements) ; s'il y a déjà une carte, elle s'y ajoute (échéance : le motif devient le titre ; signalement : « Prévu : … »
+    en description). Elle suit l'équipement aux étapes suivantes (description sur la carte) ; la prochaine intervention enregistrée
+    la ferme (`FermerPrevueAsync`) ; croix de la carte → `RetirerInterventionPrevueAsync` (annulee = 1, rien n'est supprimé).
+    Journal `RevisionEtape`. App : bouton « Ajouter une intervention » de Révisions, onglets « À prévoir » (choix de l'équipement,
+    « À faire », description) / « Déjà faite » (panneau d'intervention). Export : interventions_prevues.csv.
 
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
@@ -419,11 +443,14 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   note_envoi, date_envoi, date_retour_prevue, intervenant_interne, seance_tiv, atelier_id, controle_id, date_fait, archive,
   date_archive) ; reprise : séance TIV à venir → Interne, atelier en cours → ChezPrestataire (prestataires repris des noms),
   contrôles des 30 derniers jours → Fait.
+  017 : sortie.un_par_categorie (0/1, 1 par défaut, sorties existantes comprises).
+  018 : intervention_prevue (equipement_id, motif, description, prevue_le, close_le, annulee 0/1 ; une ouverte par équipement
+  `ux_intervention_prevue_ouverte`).
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/017_xxx.sql`, sans jamais modifier un script déjà livré
+- Nouvelle migration : ajouter `Migrations/019_xxx.sql`, sans jamais modifier un script déjà livré
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.

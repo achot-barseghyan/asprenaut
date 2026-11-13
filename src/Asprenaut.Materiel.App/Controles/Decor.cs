@@ -138,7 +138,7 @@ public sealed class CarteScanner : ControleDessine
         Height = 66;
         AccessibleName = "Prêt à scanner";
         AccessibleDescription = "Le pistolet tape le code de l'étiquette puis Entrée.";
-        _pulsation.Tick += (_, _) => Invalidate(new Rectangle(0, 0, (int)E(44), Height));
+        _pulsation.Tick += (_, _) => Invalidate(Compact ? ClientRectangle : new Rectangle(0, 0, (int)E(44), Height));
     }
 
     protected override void OnHandleCreated(EventArgs e)
@@ -157,6 +157,10 @@ public sealed class CarteScanner : ControleDessine
         base.Dispose(disposing);
     }
 
+    /// <summary>Menu réduit : seulement le point qui pulse, centré (le texte reste le nom accessible et la bulle).</summary>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public bool Compact { get; set; }
+
     protected override void Peindre(Graphics g)
     {
         var r = new RectangleF(0.5f, 0.5f, Width - 2, Height - 2);
@@ -173,7 +177,7 @@ public sealed class CarteScanner : ControleDessine
         var phase = (Environment.TickCount64 % 2400) / 2400f;
         var halo = (float)Math.Sin(phase * Math.PI);
         var d = E(10);
-        var cx = E(16) + (d / 2);
+        var cx = Compact ? Width / 2f : E(16) + (d / 2);
         var cy = Height / 2f;
         var rayonHalo = (d / 2) + (E(6) * halo);
         using (var lueur = new SolidBrush(Theme.Alpha(Theme.Retour, 0.55f * (1 - halo))))
@@ -184,6 +188,11 @@ public sealed class CarteScanner : ControleDessine
         using (var point = new SolidBrush(Theme.Retour))
         {
             g.FillEllipse(point, cx - (d / 2), cy - (d / 2), d, d);
+        }
+
+        if (Compact)
+        {
+            return;
         }
 
         var gauche = (int)(cx + E(17));

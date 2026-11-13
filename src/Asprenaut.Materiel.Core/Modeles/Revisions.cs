@@ -140,6 +140,7 @@ public sealed record RegistreControles(DateOnly Edition, IReadOnlyList<FicheRegi
 /// Colonne du tableau des révisions : l'équipement avance de gauche à droite jusqu'à son retour en service.
 /// Stockée par son nom dans revision.etape (sauf <see cref="APrevoir"/>, calculée) : ne jamais renommer un membre sans migration.
 /// </summary>
+[System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<EtapeRevision>))]
 public enum EtapeRevision
 {
     /// <summary>Au club. Échéance dans les 90 jours ou dépassée, 90 % du seuil d'utilisations, ou problème signalé (calculé).</summary>
@@ -182,8 +183,30 @@ public sealed class Prestataire
 }
 
 /// <summary>
+/// Intervention prévue à la main (table intervention_prevue, migration 018) : « il faudra changer le joint ». Ouverte tant que
+/// <see cref="CloseLe"/> est vide : l'équipement est dans « À prévoir » ; fermée par la prochaine intervention enregistrée, ou
+/// retirée (<see cref="Annulee"/>).
+/// </summary>
+public sealed class InterventionPrevue
+{
+    public long Id { get; set; }
+    public long EquipementId { get; set; }
+
+    /// <summary>Ce qu'il faudra faire (« Changer le joint du robinet »).</summary>
+    public string Motif { get; set; } = "";
+
+    /// <summary>Précisions (facultatif).</summary>
+    public string Description { get; set; } = "";
+
+    public DateTime PrevueLe { get; set; }
+    public DateTime? CloseLe { get; set; }
+    public bool Annulee { get; set; }
+}
+
+/// <summary>
 /// Étape d'un équipement dans le tableau des révisions, une fois qu'on a décidé quoi faire (table revision, migration 016).
-/// Une seule ligne hors « Fait » par équipement. « À prévoir » n'est pas stocké : il est calculé d'après les échéances.
+/// Une seule ligne hors « Fait » par équipement. « À prévoir » n'est pas stocké : il est calculé d'après les échéances,
+/// les problèmes signalés et les interventions prévues (<see cref="InterventionPrevue"/>).
 /// </summary>
 public sealed class SuiviRevision
 {
@@ -245,7 +268,10 @@ public enum EtatCarte
 /// <summary>
 /// Une carte du tableau des révisions. <paramref name="Signalement"/> : un problème signalé est ouvert (badge « Signalé au
 /// retour »). <paramref name="SuiviId"/> : ligne de la table revision (null pour « À prévoir »). <paramref name="JoursDehors"/>
-/// et <paramref name="RetourEnRetard"/> : chez le prestataire seulement.
+/// et <paramref name="RetourEnRetard"/> : chez le prestataire seulement. <paramref name="Precision"/> : précision du problème
+/// signalé ouvert (la cause est dans <paramref name="Controle"/>). <paramref name="Description"/> : ce qui a été fait (« Fait »,
+/// description saisie avec l'intervention ; ailleurs, celle de l'intervention prévue). <paramref name="Prevue"/> : une intervention
+/// a été prévue à la main (<see cref="InterventionPrevue"/>, son motif est dans <paramref name="Controle"/>).
 /// </summary>
 public sealed record CarteRevision(
     EtapeRevision Etape,
@@ -270,10 +296,17 @@ public sealed record CarteRevision(
     DateOnly? DateRetourPrevue = null,
     int? JoursDehors = null,
     bool RetourEnRetard = false,
-    bool SeanceTiv = false)
+    bool SeanceTiv = false,
+    string Precision = "",
+    string Description = "",
+    bool Prevue = false,
+    string HorsClub = "")
 {
-    /// <summary>Encore au club (À prévoir, Réparation interne, À envoyer) : tout sauf « Chez le prestataire » et « Fait ».</summary>
-    public bool AuClub => Etape is EtapeRevision.APrevoir or EtapeRevision.Interne or EtapeRevision.AEnvoyer;
+    /// <summary>
+    /// Encore au club (À prévoir, Réparation interne, À envoyer : tout sauf « Chez le prestataire » et « Fait »), sauf s'il est
+    /// en sortie ou manquant (<see cref="HorsClub"/>).
+    /// </summary>
+    public bool AuClub => (Etape is EtapeRevision.APrevoir or EtapeRevision.Interne or EtapeRevision.AEnvoyer) && HorsClub.Length == 0;
 }
 
 /// <summary>Tableau des révisions : la prochaine séance TIV et toutes les cartes.</summary>
@@ -283,6 +316,9 @@ public sealed record TableauRevisions(ProchaineSeance? Seance, IReadOnlyList<Car
 
     /// <summary>Équipements au club, en attente : À prévoir, Réparation interne et À envoyer.</summary>
     public int AuClub => Equipements(c => c.AuClub);
+
+    /// <summary>Dans le tableau (hors « Fait ») mais en sortie ou manquant : ni au club, ni chez un prestataire.</summary>
+    public int EnSortie => Equipements(c => c.Etape != EtapeRevision.Fait && c.HorsClub.Length > 0);
 
     /// <summary>Dont à envoyer chez un prestataire.</summary>
     public int AEnvoyer => Equipements(c => c.Etape == EtapeRevision.AEnvoyer);

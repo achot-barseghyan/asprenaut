@@ -58,6 +58,32 @@ public sealed class ServiceAdherents(
         : equipementNitrox && !a.Nitrox ? $"{code} est un équipement nitrox : {a.NomComplet} n'a pas la certification nitrox."
         : null;
 
+    /// <summary>
+    /// Équipement de la même catégorie (majuscules ignorées) que l'adhérent a déjà dehors dans cette sortie, ou null :
+    /// un adhérent ne prend qu'un détendeur, un bloc, un gilet… L'équipement lui-même ne compte pas (correction d'une attribution),
+    /// ni un équipement déjà rendu.
+    /// </summary>
+    public static LigneSortie? DejaPris(long adherentId, LigneSortie ligne, IEnumerable<LigneSortie> lignesSortie) =>
+        lignesSortie.FirstOrDefault(l => l.AdherentId == adherentId && l.EquipementId != ligne.EquipementId
+            && l.Statut == StatutSortieEquipement.Dehors && string.Equals(l.Categorie.Trim(), ligne.Categorie.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Pourquoi cet adhérent ne peut pas prendre cet équipement dans cette sortie, ou null : désactivé, nitrox sans certification,
+    /// ou déjà un équipement de la même catégorie (<see cref="DejaPris"/>, si la sortie le demande : <see cref="Sortie.UnParCategorie"/>).
+    /// </summary>
+    public static string? RefusPour(Adherent a, LigneSortie ligne, IEnumerable<LigneSortie> lignesSortie, bool unParCategorie = true) =>
+        RefusPour(a, ligne.Nitrox, ligne.Code)
+        ?? (unParCategorie && DejaPris(a.Id, ligne, lignesSortie) is { } deja
+            ? $"{a.NomComplet} a déjà {deja.Code} ({deja.Categorie}) dans cette sortie : un seul équipement par catégorie."
+            : null);
+
+    /// <summary>Motif court affiché sous le nom dans le panneau du départ (« Pas certifié nitrox », « A déjà A12 »), ou null.</summary>
+    public static string? MotifCourt(Adherent a, LigneSortie ligne, IEnumerable<LigneSortie> lignesSortie, bool unParCategorie = true) =>
+        !a.Actif ? "Désactivé"
+        : ligne.Nitrox && !a.Nitrox ? "Pas certifié nitrox"
+        : unParCategorie && DejaPris(a.Id, ligne, lignesSortie) is { } deja ? $"A déjà {deja.Code}"
+        : null;
+
     // ---------------------------------------------------------------- Lecture
 
     /// <summary>Adhérents actifs (départ d'une sortie nominative), triés par nom, filtrés par nom ou prénom.</summary>

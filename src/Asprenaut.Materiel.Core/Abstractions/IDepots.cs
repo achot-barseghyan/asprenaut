@@ -171,6 +171,22 @@ public interface IRevisionRepository
     /// Retourne le nombre de lignes changées.
     /// </summary>
     Task<int> ArchiverSuivisAsync(IReadOnlyList<long> ids, bool archive, DateOnly? le, CancellationToken ct = default);
+
+    // --- Interventions prévues à la main (table intervention_prevue, migration 018) ---
+
+    Task<long> AjouterPrevueAsync(InterventionPrevue prevue, CancellationToken ct = default);
+
+    /// <summary>Change le motif et la description de l'intervention prévue ouverte.</summary>
+    Task MettreAJourPrevueAsync(InterventionPrevue prevue, CancellationToken ct = default);
+
+    /// <summary>Intervention prévue encore ouverte de l'équipement, ou null.</summary>
+    Task<InterventionPrevue?> ObtenirPrevueOuverteAsync(long equipementId, CancellationToken ct = default);
+
+    /// <summary>Toutes les interventions prévues ouvertes, de la plus ancienne à la plus récente.</summary>
+    Task<IReadOnlyList<InterventionPrevue>> ListerPrevuesOuvertesAsync(CancellationToken ct = default);
+
+    /// <summary>Ferme l'intervention prévue ouverte de l'équipement (faite, ou retirée si <paramref name="annulee"/>) ; retourne le nombre fermé.</summary>
+    Task<int> FermerPrevueAsync(long equipementId, DateTime le, bool annulee, CancellationToken ct = default);
 }
 
 /// <summary>Magasins et organismes (table prestataire, migration 016).</summary>

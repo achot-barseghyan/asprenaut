@@ -190,6 +190,42 @@ public sealed class ServiceReglages(Reglages reglages, IStockageReglages stockag
         return ResultatOperation.Ok(mode == ModeAffichage.Clair ? "Thème clair." : "Thème sombre.");
     }
 
+    /// <summary>
+    /// Menu latéral réduit aux icônes ou complet. Simple confort d'affichage (pas un paramètre du club) : libre, même en
+    /// mode consultation.
+    /// </summary>
+    public ResultatOperation ChangerMenuReduit(bool reduit)
+    {
+        if (reglages.MenuReduit != reduit)
+        {
+            reglages.MenuReduit = reduit;
+            stockage.Enregistrer(reglages);
+        }
+
+        return ResultatOperation.Ok(reduit ? "Menu réduit." : "Menu complet.");
+    }
+
+    /// <summary>
+    /// Colonnes du tableau des révisions repliées : confort d'affichage, libre comme le menu réduit. Au moins une colonne
+    /// reste ouverte.
+    /// </summary>
+    public ResultatOperation ChangerColonnesRevisionsRepliees(IEnumerable<EtapeRevision> repliees)
+    {
+        var liste = repliees.Where(Enum.IsDefined).Distinct().Order().ToList();
+        if (liste.Count >= Enum.GetValues<EtapeRevision>().Length)
+        {
+            return ResultatOperation.Echec("Gardez au moins une colonne ouverte.");
+        }
+
+        if (!liste.SequenceEqual(reglages.ColonnesRevisionsRepliees.Order()))
+        {
+            reglages.ColonnesRevisionsRepliees = liste;
+            stockage.Enregistrer(reglages);
+        }
+
+        return ResultatOperation.Ok(liste.Count == 0 ? "Toutes les colonnes sont ouvertes." : $"{liste.Count} colonne{(liste.Count > 1 ? "s" : "")} repliée{(liste.Count > 1 ? "s" : "")}.");
+    }
+
     /// <summary>Préfixe des étiquettes : sans espaces, en majuscules, 8 caractères au plus (vide = aucun).</summary>
     public ResultatOperation ChangerPrefixe(string? prefixe)
     {

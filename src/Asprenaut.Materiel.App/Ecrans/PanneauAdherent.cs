@@ -39,6 +39,9 @@ public sealed class PanneauAdherent : Carte
     private IReadOnlyList<Adherent> _tous = [];
     private string _code = "";
     private bool _nitrox;
+    private LigneSortie? _ligne;
+    private IReadOnlyList<LigneSortie> _lignesSortie = [];
+    private bool _unParCategorie = true;
     private bool _effacement;
 
     public PanneauAdherent()
@@ -108,10 +111,13 @@ public sealed class PanneauAdherent : Carte
     /// Équipement à attribuer (« À qui est ce détendeur ? »), raccourcis de la sortie et adhérents actifs.
     /// Garde la recherche si c'est le même équipement (rechargement après un refus).
     /// </summary>
-    public void Afficher(LigneSortie ligne, IReadOnlyList<AdherentRecent> recents, IReadOnlyList<Adherent> tous)
+    public void Afficher(LigneSortie ligne, IReadOnlyList<LigneSortie> lignesSortie, bool unParCategorie, IReadOnlyList<AdherentRecent> recents, IReadOnlyList<Adherent> tous)
     {
         var nouveau = ligne.Code != _code;
         _code = ligne.Code;
+        _ligne = ligne;
+        _lignesSortie = lignesSortie;
+        _unParCategorie = unParCategorie;
         _tous = tous;
         _nitrox = ligne.Nitrox;
         var question = $"À qui est {Article(ligne.Categorie)} ?";
@@ -130,8 +136,9 @@ public sealed class PanneauAdherent : Carte
         for (var i = 0; i < recents.Count; i++)
         {
             var r = recents[i];
-            var refuse = _tous.FirstOrDefault(a => a.Id == r.AdherentId) is not { } adherent || ServiceAdherents.RefusPour(adherent, _nitrox, _code) is not null;
-            var detail = refuse ? (_nitrox ? "Pas certifié nitrox" : "Désactivé") : (i == 0 ? "Dernier scan · " : "") + $"{r.NbEquipements} équip.";
+            var motif = _tous.FirstOrDefault(a => a.Id == r.AdherentId) is not { } adherent ? "Désactivé" : Motif(adherent);
+            var refuse = motif is not null;
+            var detail = motif ?? (i == 0 ? "Dernier scan · " : "") + $"{r.NbEquipements} équip.";
             var tuile = new TuileAdherent(r.AdherentId, r.Nom, detail, enAvant: i == 0 && !refuse, refuse) { TabIndex = i };
             tuile.Click += (_, _) => Choisir(r.AdherentId);
             _tuiles.Add(tuile);
@@ -373,18 +380,20 @@ public sealed class PanneauAdherent : Carte
         _effacement = false;
     }
 
+    /// <summary>Pourquoi cet adhérent ne peut pas prendre l'équipement en attente (« A déjà A12 »), ou null.</summary>
+    private string? Motif(Adherent a) => _ligne is null ? null : ServiceAdherents.MotifCourt(a, _ligne, _lignesSortie, _unParCategorie);
+
     private void Filtrer()
     {
-        // Équipement nitrox : les certifiés d'abord ; les autres restent visibles, marqués (le service refuse leur choix).
+        // Ceux qui peuvent le prendre d'abord ; les autres (pas certifié nitrox, déjà un équipement de cette catégorie)
+        // restent visibles, marqués (le service refuse leur choix).
         var trouves = ServiceAdherents.Filtrer(_tous, _recherche.Valeur)
-            .Select(a => (Adherent: a, Refus: ServiceAdherents.RefusPour(a, _nitrox, _code) is not null))
-            .OrderBy(t => t.Refus)
+            .Select(a => (Adherent: a, Motif: Motif(a)))
+            .OrderBy(t => t.Motif is not null)
             .ToList();
         _liste.Afficher(trouves.Select(t => new LigneAdherent(t.Adherent.Id, t.Adherent.Initiales, t.Adherent.NomComplet,
-                t.Refus
-                    ? (_nitrox ? "Pas certifié nitrox" : "Désactivé")
-                    : string.Join(" · ", new[] { t.Adherent.Niveau, _nitrox ? "nitrox" : null }.Where(s => !string.IsNullOrEmpty(s))),
-                t.Refus)).ToList(),
+                t.Motif ?? string.Join(" · ", new[] { t.Adherent.Niveau, _nitrox ? "nitrox" : null }.Where(s => !string.IsNullOrEmpty(s))),
+                t.Motif is not null)).ToList(),
             _tous.Count == 0 ? "Aucun adhérent : ajoutez-les dans Membres › Adhérents." : "Aucun adhérent ne correspond.");
     }
 

@@ -107,6 +107,15 @@ public sealed class ExportRepository(FabriqueConnexion fabrique) : IExportReposi
             """,
             [new("Signalé le", GenreColonne.Horodatage), new("Code"), new("Équipement"), new("Problème"),
              new("Gravité", GenreColonne.GraviteSignalement), new("Précision"), new("Sortie"), new("Traité le", GenreColonne.Horodatage)]),
+        ("interventions_prevues.csv",
+            """
+            SELECT ip.prevue_le, e.code, e.libelle, ip.motif, ip.description, ip.close_le, ip.annulee
+            FROM intervention_prevue ip
+            JOIN equipement e ON e.id = ip.equipement_id
+            ORDER BY ip.prevue_le, ip.id
+            """,
+            [new("Prévue le", GenreColonne.Horodatage), new("Code"), new("Équipement"), new("À faire"), new("Description"),
+             new("Close le", GenreColonne.Horodatage), new("Retirée", GenreColonne.OuiNon)]),
         ("prestataires.csv",
             "SELECT nom, type, telephone, adresse, actif FROM prestataire ORDER BY actif DESC, nom COLLATE NOCASE",
             [new("Nom"), new("Type", GenreColonne.TypePrestataire), new("Téléphone"), new("Adresse"), new("Actif", GenreColonne.OuiNon)]),

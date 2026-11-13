@@ -133,6 +133,12 @@ public sealed class Reglages
     /// <summary>Thème de l'interface : sombre (par défaut) ou clair.</summary>
     public ModeAffichage Affichage { get; set; } = ModeAffichage.Sombre;
 
+    /// <summary>Menu latéral réduit aux icônes (retenu d'un lancement à l'autre).</summary>
+    public bool MenuReduit { get; set; }
+
+    /// <summary>Colonnes du tableau des révisions repliées (bande étroite), retenues d'un lancement à l'autre.</summary>
+    public List<EtapeRevision> ColonnesRevisionsRepliees { get; set; } = [];
+
     // --- Club ---
 
     public string NomClub { get; set; } = "Asprenaut";

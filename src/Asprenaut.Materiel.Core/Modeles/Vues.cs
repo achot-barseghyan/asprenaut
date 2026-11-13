@@ -51,6 +51,9 @@ public sealed class SortieResume
     /// <summary>Sortie nominative : chaque équipement est attribué à un adhérent.</summary>
     public bool Nominatif { get; set; }
 
+    /// <summary>Sortie nominative : un seul équipement par catégorie et par adhérent (<see cref="Sortie.UnParCategorie"/>).</summary>
+    public bool UnParCategorie { get; set; } = true;
+
     public int NbDehors => NbTotal - NbRendus - NbManquants;
 
     /// <summary>Part rendue, entre 0 et 1.</summary>

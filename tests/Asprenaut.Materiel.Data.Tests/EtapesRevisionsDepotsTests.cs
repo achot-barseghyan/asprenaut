@@ -52,7 +52,7 @@ public class EtapesRevisionsDepotsTests : IAsyncLifetime
                 """);
         }
 
-        Assert.Equal(16, await migrations.AppliquerAsync());
+        Assert.Equal(GestionnaireMigrations.VersionCible, await migrations.AppliquerAsync());
 
         await using var lecture = await fabrique.OuvrirAsync();
         Assert.Equal(["Aqua Service", "Bureau Veritas"], await lecture.QueryAsync<string>("SELECT nom FROM prestataire ORDER BY nom COLLATE NOCASE;"));
@@ -184,5 +184,33 @@ public class EtapesRevisionsDepotsTests : IAsyncLifetime
 
         Assert.Equal("Aqua Service", tables.Single(t => t.Fichier == "prestataires.csv").Lignes.Single()[0]);
         Assert.Equal(["A10", "A10", "Interne"], tables.Single(t => t.Fichier == "revisions.csv").Lignes.Single()[..3].Select(v => v ?? ""));
+    }
+
+    // 018 : interventions prévues — une seule ouverte par équipement (index partiel), formats stockés, fermeture.
+    [Fact]
+    public async Task Les_interventions_prevues_sont_enregistrees_relues_et_fermees()
+    {
+        var depot = new RevisionRepository(_base.Fabrique);
+        var a10 = await EquipementAsync("A10");
+        var a11 = await EquipementAsync("A11");
+        var le = new DateTime(2026, 11, 14, 9, 30, 0, DateTimeKind.Utc);
+        var prevue = new InterventionPrevue { EquipementId = a10, Motif = "Changer le joint", Description = "Fuite légère", PrevueLe = le };
+        await depot.AjouterPrevueAsync(prevue);
+        await depot.AjouterPrevueAsync(new InterventionPrevue { EquipementId = a11, Motif = "Vérifier l'inflateur", PrevueLe = le.AddMinutes(1) });
+        await Assert.ThrowsAsync<SqliteException>(() => depot.AjouterPrevueAsync(new InterventionPrevue { EquipementId = a10, Motif = "Doublon", PrevueLe = le }));
+
+        prevue.Motif = "Changer les joints";
+        await depot.MettreAJourPrevueAsync(prevue);
+        var relue = (await depot.ObtenirPrevueOuverteAsync(a10))!;
+        Assert.Equal(("Changer les joints", "Fuite légère", le), (relue.Motif, relue.Description, relue.PrevueLe));
+        Assert.Equal(["A10", "A11"], (await depot.ListerPrevuesOuvertesAsync()).Select(p => p.EquipementId == a10 ? "A10" : "A11"));
+
+        Assert.Equal(1, await depot.FermerPrevueAsync(a10, le.AddDays(1), annulee: true));
+        Assert.Null(await depot.ObtenirPrevueOuverteAsync(a10));
+        Assert.Equal(0, await depot.FermerPrevueAsync(a10, le.AddDays(1), annulee: false));
+        await using var cx = await _base.Fabrique.OuvrirAsync();
+        Assert.Equal(("2026-11-14T09:30:00.000Z", "2026-11-15T09:30:00.000Z", 1L), await cx.QuerySingleAsync<(string, string, long)>(
+            "SELECT prevue_le, close_le, annulee FROM intervention_prevue WHERE equipement_id = @a10;", new { a10 }));
+        await depot.AjouterPrevueAsync(new InterventionPrevue { EquipementId = a10, Motif = "De nouveau", PrevueLe = le }); // Une fois fermée, une autre.
     }
 }

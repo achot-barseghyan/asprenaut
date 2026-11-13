@@ -143,6 +143,43 @@ public sealed class RevisionRepositoryMemoire(BaseMemoire db) : IRevisionReposit
 
         return Task.FromResult(n);
     }
+
+    // --- Interventions prévues ---
+
+    public List<InterventionPrevue> Prevues { get; } = [];
+
+    public Task<long> AjouterPrevueAsync(InterventionPrevue prevue, CancellationToken ct = default)
+    {
+        if (prevue.CloseLe is null && Prevues.Any(p => p.EquipementId == prevue.EquipementId && p.CloseLe is null))
+        {
+            throw new InvalidOperationException("Une seule intervention prévue ouverte par équipement (ux_intervention_prevue_ouverte).");
+        }
+
+        prevue.Id = db.ProchainId();
+        Prevues.Add(prevue);
+        return Task.FromResult(prevue.Id);
+    }
+
+    public Task MettreAJourPrevueAsync(InterventionPrevue prevue, CancellationToken ct = default) => Task.CompletedTask; // Même objet.
+
+    public Task<InterventionPrevue?> ObtenirPrevueOuverteAsync(long equipementId, CancellationToken ct = default) =>
+        Task.FromResult(Prevues.SingleOrDefault(p => p.EquipementId == equipementId && p.CloseLe is null));
+
+    public Task<IReadOnlyList<InterventionPrevue>> ListerPrevuesOuvertesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<InterventionPrevue>>(Prevues.Where(p => p.CloseLe is null).OrderBy(p => p.PrevueLe).ThenBy(p => p.Id).ToList());
+
+    public Task<int> FermerPrevueAsync(long equipementId, DateTime le, bool annulee, CancellationToken ct = default)
+    {
+        var n = 0;
+        foreach (var p in Prevues.Where(p => p.EquipementId == equipementId && p.CloseLe is null))
+        {
+            p.CloseLe = le;
+            p.Annulee = annulee;
+            n++;
+        }
+
+        return Task.FromResult(n);
+    }
 }
 
 /// <summary>Prestataires en mémoire (partagés avec le dépôt des révisions pour le nom lu).</summary>

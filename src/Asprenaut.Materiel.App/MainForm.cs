@@ -18,12 +18,15 @@ public sealed class MainForm : Form
     private readonly FiltreActivite _activite;
     private readonly System.Windows.Forms.Timer _minuterie = new() { Interval = 5000 };
     private CarteModeGestion _carteGestion = null!;
+    private readonly ServiceReglages _reglages;
+    private BoutonArrondi? _basculer;
 
-    public MainForm(ServiceNavigation navigation, ServiceGestion gestion, GardeGestion garde)
+    public MainForm(ServiceNavigation navigation, ServiceGestion gestion, GardeGestion garde, ServiceReglages reglages)
     {
         _navigation = navigation;
         _gestion = gestion;
         _garde = garde;
+        _reglages = reglages;
         _activite = new FiltreActivite(gestion);
 
         AutoScaleDimensions = new SizeF(96F, 96F);
@@ -104,7 +107,18 @@ public sealed class MainForm : Form
     /// Nouveau thème : fond, barre de titre et menu refaits tout de suite. L'écran courant est recréé par
     /// celui qui a changé le thème (Paramètres), qui sait où se replacer.
     /// </summary>
-    private void ChangerTheme(object? sender, EventArgs e)
+    private void ChangerTheme(object? sender, EventArgs e) => RefaireMenu();
+
+    /// <summary>Menu complet ↔ menu réduit aux icônes ; le choix est retenu pour le prochain lancement.</summary>
+    private void BasculerMenu()
+    {
+        _reglages.ChangerMenuReduit(!_reglages.Actuels.MenuReduit);
+        RefaireMenu();
+        _basculer?.Focus(); // Le clavier reste sur le bouton qu'on vient d'utiliser.
+    }
+
+    /// <summary>Recrée le menu (thème changé, menu réduit ou complet) ; l'écran courant ne bouge pas, il prend la place libérée.</summary>
+    private void RefaireMenu()
     {
         Natif.Geler(this);
         try
@@ -159,18 +173,38 @@ public sealed class MainForm : Form
         _minuterie.Start();
     }
 
+    /// <summary>
+    /// Menu latéral. Réduit (<see cref="Reglages.MenuReduit"/>) : icônes seules, sans texte, le nom de chaque entrée en
+    /// bulle ; logo seul, cadenas seul, point « prêt à scanner » seul.
+    /// </summary>
     private Panel CreerMenu()
     {
-        var panneau = new PanneauMenu { Dock = DockStyle.Left, Width = Theme.LargeurMenu, BackColor = Theme.FondMenu, Padding = new Padding(18, 28, 18, 18) };
+        var reduit = _reglages.Actuels.MenuReduit;
+        var largeurMenu = reduit ? Theme.LargeurMenuReduit : Theme.LargeurMenu;
+        var marge = reduit ? 14 : 18;
+        var interieur = largeurMenu - (2 * marge);
+        var panneau = new PanneauMenu { Dock = DockStyle.Left, Width = largeurMenu, BackColor = Theme.FondMenu, Padding = new Padding(marge, 28, marge, 18) };
+        var bulle = new ToolTip { InitialDelay = 200 };
+        panneau.Disposed += (_, _) => bulle.Dispose();
 
-        // Marque : pastille ronde du logo, nom du club.
-        var nom = Ui.Pile(
-            Ui.Libelle("Asprenaut", Theme.PoliceGrasse(13.5f)),
-            Ui.Libelle("Matériel du club", Theme.Police(9f), Theme.TexteSecondaire));
+        // Marque : pastille ronde du logo, nom du club (logo seul en menu réduit).
         var logo = new Logo { Margin = Padding.Empty };
-        var marque = Ui.Rangee(true, logo, nom);
-        marque.Margin = new Padding(6, 0, 0, 34);
-        nom.Margin = new Padding(12, (46 - nom.PreferredSize.Height) / 2, 0, 0);
+        Control marque;
+        if (reduit)
+        {
+            marque = logo;
+            logo.Margin = new Padding((interieur - 46) / 2, 0, 0, 34);
+            bulle.SetToolTip(logo, "Asprenaut · Matériel du club");
+        }
+        else
+        {
+            var nom = Ui.Pile(
+                Ui.Libelle("Asprenaut", Theme.PoliceGrasse(13.5f)),
+                Ui.Libelle("Matériel du club", Theme.Police(9f), Theme.TexteSecondaire));
+            marque = Ui.Rangee(true, logo, nom);
+            marque.Margin = new Padding(6, 0, 0, 34);
+            nom.Margin = new Padding(12, (46 - nom.PreferredSize.Height) / 2, 0, 0);
+        }
 
         var entrees = new FlowLayoutPanel
         {
@@ -186,9 +220,16 @@ public sealed class MainForm : Form
         {
             var bouton = new BoutonArrondi(texte, StyleBouton.Menu, icone)
             {
-                Width = Theme.LargeurMenu - 36,
+                Width = interieur,
                 Margin = new Padding(0, 0, 0, 4),
+                IconeSeule = reduit,
+                AccessibleName = texte,
             };
+            if (reduit)
+            {
+                bulle.SetToolTip(bouton, texte);
+            }
+
             bouton.Click += (_, _) => _navigation.AllerA<TEcran>();
             _menu[entree] = bouton;
             entrees.Controls.Add(bouton);
@@ -203,13 +244,40 @@ public sealed class MainForm : Form
         Ajouter<EcranRevisions>(EntreeMenu.Revisions, "Révisions", Icones.Revisions);
         Ajouter<EcranParametres>(EntreeMenu.Parametres, "Paramètres", Icones.Parametres);
 
-        var scanner = new CarteScanner { Dock = DockStyle.Bottom };
-        var version = Ui.Libelle($"Version {Application.ProductVersion.Split('+')[0]}", Theme.Police(8.25f), Theme.TexteSecondaire);
+        var scanner = new CarteScanner { Dock = DockStyle.Bottom, Compact = reduit };
+        if (reduit)
+        {
+            scanner.Height = 48;
+            bulle.SetToolTip(scanner, "Prêt à scanner · Visez l'étiquette QR");
+        }
+
+        var numero = Application.ProductVersion.Split('+')[0];
+        var version = Ui.Libelle(reduit ? $"v{numero}" : $"Version {numero}", Theme.Police(8.25f), Theme.TexteSecondaire);
         version.Dock = DockStyle.Bottom;
-        version.Padding = new Padding(6, 10, 0, 0);
+        version.Padding = new Padding(reduit ? 0 : 6, 10, 0, 0);
+        version.TextAlign = reduit ? ContentAlignment.MiddleCenter : ContentAlignment.MiddleLeft;
+
+        // Réduire / agrandir le menu : juste au-dessus des cartes du bas.
+        var basculer = new BoutonArrondi(reduit ? "Agrandir le menu" : "Réduire le menu", StyleBouton.Menu, reduit ? Icones.ChevronDroite : Icones.ChevronGauche)
+        {
+            Dock = DockStyle.Bottom,
+            IconeSeule = reduit,
+            AccessibleName = reduit ? "Agrandir le menu" : "Réduire le menu",
+        };
+        bulle.SetToolTip(basculer, reduit ? "Agrandir le menu" : "Réduire le menu (icônes seules)");
+        basculer.Click += (_, _) => BasculerMenu();
+        _basculer = basculer;
+        var ecart = new Panel { Dock = DockStyle.Bottom, Height = 10, BackColor = Theme.FondMenu };
 
         // Mode consultation / mode gestion, juste au-dessus de la carte du pistolet.
-        _carteGestion = new CarteModeGestion(_gestion) { Dock = DockStyle.Bottom };
+        _carteGestion = new CarteModeGestion(_gestion) { Dock = DockStyle.Bottom, Compact = reduit };
+        if (reduit)
+        {
+            void Bulle(object? sender, EventArgs e) => bulle.SetToolTip(_carteGestion, _carteGestion.TexteBulle);
+            var carte = _carteGestion;
+            carte.Actualise += Bulle;
+            Bulle(null, EventArgs.Empty);
+        }
         _carteGestion.Click += (_, _) =>
         {
             if (_gestion.ModeGestion)
@@ -222,8 +290,10 @@ public sealed class MainForm : Form
             }
         };
 
-        // Ancrées en bas dans l'ordre inverse de leur ajout : version tout en bas, puis pistolet, puis mode gestion.
+        // Ancrées en bas dans l'ordre inverse de leur ajout : version tout en bas, puis pistolet, mode gestion, réduire le menu.
         panneau.Controls.Add(entrees);
+        panneau.Controls.Add(basculer);
+        panneau.Controls.Add(ecart);
         panneau.Controls.Add(_carteGestion);
         panneau.Controls.Add(scanner);
         panneau.Controls.Add(version);

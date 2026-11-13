@@ -257,6 +257,11 @@ public sealed class ServiceRevisions(
             return ResultatOperation.Echec("La date du contrôle ne peut pas être dans le futur.");
         }
 
+        if ((notes ?? "").Trim().Length > LongueurDescription)
+        {
+            return ResultatOperation.Echec($"Description trop longue : {LongueurDescription} caractères au plus.");
+        }
+
         var categorie = (await categories.ListerAsync(ct)).FirstOrDefault(c => c.Id == equipement.CategorieId)?.Nom;
         if (!TypesPour(categorie).Contains(type))
         {
@@ -311,9 +316,11 @@ public sealed class ServiceRevisions(
         };
         await revisions.AjouterControleAsync(controle, ct);
 
-        // Intervention faite : l'équipement quitte la séance TIV où il était prévu, et sa révision passe dans « Fait ».
+        // Intervention faite : l'équipement quitte la séance TIV où il était prévu, sa révision passe dans « Fait »
+        // et l'intervention prévue à la main est close.
         await revisions.RetirerDesSeancesAsync(equipement.Id, ct);
         await TerminerSuiviAsync(equipement.Id, controle.Id, date, ct);
+        await revisions.FermerPrevueAsync(equipement.Id, horloge.MaintenantUtc, annulee: false, ct);
 
         // Et le problème signalé est traité. S'il avait mis l'équipement hors service, une intervention non refusée
         // le remet en service (hors atelier : c'est le retour d'atelier qui s'en charge).
@@ -439,16 +446,43 @@ public sealed class ServiceRevisions(
                 {
                     $"Signalé le {DateOnly.FromDateTime(s.SignaleLe.ToLocalTime()).ToString("dd/MM", Libelles.Culture)}",
                     sortie?.Intitule ?? "inventaire",
-                    s.Precision,
                 }.Where(t => !string.IsNullOrWhiteSpace(t)));
                 var horsService = s.Gravite == GraviteSignalement.HorsService;
                 signales.Add(new CarteRevision(EtapeRevision.APrevoir, e.EquipementId, e.Code, e.Libelle, e.Categorie, FamilleSignalement,
                     TypesPour(e.Categorie)[0], s.Cause, detail,
                     horsService ? EtatCarte.HorsService : EtatCarte.ASurveiller, ServiceSignalements.Libelle(s.Gravite),
-                    horsService, null, Signalement: true));
+                    horsService, null, Signalement: true, Precision: s.Precision.Trim()));
             }
 
             cartes.InsertRange(0, signales);
+        }
+
+        // Interventions prévues à la main : sur la carte déjà là (signalement, échéance), sinon une carte à elles.
+        // Les nouvelles cartes viennent juste après les problèmes signalés (en tête de colonne : on les voit tout de suite).
+        var prevues = (await revisions.ListerPrevuesOuvertesAsync(ct)).GroupBy(p => p.EquipementId).ToDictionary(g => g.Key, g => g.First());
+        var rang = cartes.Count(c => c.Signalement);
+        foreach (var p in prevues.Values.Where(p => !engages.Contains(p.EquipementId)).OrderByDescending(p => p.PrevueLe))
+        {
+            if (!parId.TryGetValue(p.EquipementId, out var e) || e.Etat == EtatEquipement.Reforme)
+            {
+                continue;
+            }
+
+            var prevueLe = $"Prévue le {DateOnly.FromDateTime(p.PrevueLe.ToLocalTime()).ToString("dd/MM", Libelles.Culture)}";
+            var index = cartes.FindIndex(c => c.EquipementId == p.EquipementId && c.Etape == EtapeRevision.APrevoir);
+            if (index < 0)
+            {
+                cartes.Insert(rang++, new CarteRevision(EtapeRevision.APrevoir, e.EquipementId, e.Code, e.Libelle, e.Categorie, e.Categorie,
+                    TypesPour(e.Categorie)[0], p.Motif, prevueLe, EtatCarte.APlanifier, "Prévue", false, null,
+                    Description: p.Description, Prevue: true));
+                continue;
+            }
+
+            // Signalement : la cause reste le titre, l'intervention prévue s'ajoute dessous. Échéance : le motif devient le titre.
+            var carte = cartes[index];
+            cartes[index] = carte.Signalement
+                ? carte with { Prevue = true, Description = string.Join(" · ", new[] { $"Prévu : {p.Motif}", p.Description }.Where(t => t.Length > 0)) }
+                : carte with { Prevue = true, Controle = p.Motif, Detail = $"{carte.Controle} · {carte.Detail}", Description = p.Description };
         }
 
         // Révisions en cours : réparation interne, à envoyer, chez le prestataire.
@@ -456,7 +490,8 @@ public sealed class ServiceRevisions(
         {
             if (parId.TryGetValue(s.EquipementId, out var e))
             {
-                cartes.Add(CarteSuivi(s, e, echeances, usages.GetValueOrDefault(s.EquipementId), ouverts.GetValueOrDefault(s.EquipementId), seance));
+                var carte = CarteSuivi(s, e, echeances, usages.GetValueOrDefault(s.EquipementId), ouverts.GetValueOrDefault(s.EquipementId), seance);
+                cartes.Add(prevues.TryGetValue(s.EquipementId, out var prevue) ? carte with { Prevue = true, Description = prevue.Description } : carte);
             }
         }
 
@@ -482,8 +517,17 @@ public sealed class ServiceRevisions(
                 _ => (EtatCarte.HorsService, "Hors service"),
             };
             cartes.Add(new CarteRevision(EtapeRevision.Fait, e.EquipementId, e.Code, e.Libelle, e.Categorie, Famille(c.Type, e.Categorie), c.Type,
-                c.Nature.Length > 0 ? c.Nature : LibelleControle(c.Type, e.Categorie), detail, etat, badge, false, null, SuiviId: s.Id));
+                c.Nature.Length > 0 ? c.Nature : LibelleControle(c.Type, e.Categorie), detail, etat, badge, false, null, SuiviId: s.Id,
+                Description: c.Notes.Trim()));
         }
+
+        // Pas « au club » s'il est parti en sortie, ou manquant depuis une sortie clôturée.
+        string HorsClub(LigneInventaire e) => e.SortieEnCoursId is not null
+            ? $"En sortie{(string.IsNullOrWhiteSpace(e.SortieEnCoursIntitule) ? "" : $" · {e.SortieEnCoursIntitule}")}"
+            : e.EstManquant ? "Manquant" : "";
+        cartes = cartes.Select(c => c.Etape != EtapeRevision.Fait && parId.TryGetValue(c.EquipementId, out var e) && HorsClub(e) is { Length: > 0 } ou
+            ? c with { HorsClub = ou }
+            : c).ToList();
 
         return new TableauRevisions(seance, cartes);
     }
@@ -523,6 +567,7 @@ public sealed class ServiceRevisions(
             Detail = detail,
             Bloque = baseCarte.Bloque || horsService,
             Signalement = signalement is not null,
+            Precision = signalement?.Precision.Trim() ?? "",
             SuiviId = s.Id,
             PassageAtelierId = s.AtelierId,
             Prestataire = s.Prestataire.Length > 0 ? s.Prestataire : null,
@@ -652,6 +697,98 @@ public sealed class ServiceRevisions(
 
     /// <summary>Note d'envoi : longueur maximale.</summary>
     public const int LongueurNoteEnvoi = 120;
+
+    /// <summary>Description d'une intervention (ce qui a été fait, ou à faire) : longueur maximale.</summary>
+    public const int LongueurDescription = 200;
+
+    /// <summary>« À faire » d'une intervention prévue : longueur maximale.</summary>
+    public const int LongueurMotif = 60;
+
+    /// <summary>
+    /// Prévoir une intervention (on voit un problème, il faudra intervenir) : l'équipement entre dans « À prévoir » avec ce
+    /// qu'il faudra faire et une description, jusqu'à la prochaine intervention enregistrée. Une seule ouverte par équipement :
+    /// la prévoir de nouveau la modifie. Refusé pour un équipement réformé ou déjà engagé dans une révision.
+    /// </summary>
+    public async Task<ResultatOperation> PrevoirInterventionAsync(long equipementId, string? motif, string? description, CancellationToken ct = default)
+    {
+        if (gestion?.Exiger(ActionProtegee.Revisions) is { Reussi: false } refus)
+        {
+            return refus;
+        }
+
+        if (await equipements.ObtenirAsync(equipementId, ct) is not { } equipement)
+        {
+            return ResultatOperation.Echec("Équipement introuvable.");
+        }
+
+        if (equipement.Etat == EtatEquipement.Reforme)
+        {
+            return ResultatOperation.Echec($"{equipement.Code} est réformé.");
+        }
+
+        var aFaire = (motif ?? "").Trim();
+        var details = (description ?? "").Trim();
+        if (aFaire.Length == 0)
+        {
+            return ResultatOperation.Echec("Indiquez ce qu'il faudra faire.");
+        }
+
+        if (aFaire.Length > LongueurMotif)
+        {
+            return ResultatOperation.Echec($"« À faire » : {LongueurMotif} caractères au plus.");
+        }
+
+        if (details.Length > LongueurDescription)
+        {
+            return ResultatOperation.Echec($"Description trop longue : {LongueurDescription} caractères au plus.");
+        }
+
+        if (await revisions.ObtenirSuiviEnCoursAsync(equipementId, ct) is { } suivi)
+        {
+            return ResultatOperation.Echec($"{equipement.Code} est déjà en révision ({LibelleEtape(suivi.Etape).ToLower(Libelles.Culture)}).");
+        }
+
+        if (await revisions.ObtenirPrevueOuverteAsync(equipementId, ct) is { } existante)
+        {
+            existante.Motif = aFaire;
+            existante.Description = details;
+            await revisions.MettreAJourPrevueAsync(existante, ct);
+            await JournaliserAsync(ActionsJournal.RevisionEtape, $"{equipement.Code} : intervention prévue modifiée ({aFaire})", ct, equipement.Id);
+            return ResultatOperation.Ok($"{equipement.Code} : intervention prévue modifiée.", existante.Id);
+        }
+
+        var id = await revisions.AjouterPrevueAsync(new InterventionPrevue
+        {
+            EquipementId = equipementId,
+            Motif = aFaire,
+            Description = details,
+            PrevueLe = horloge.MaintenantUtc,
+        }, ct);
+        await JournaliserAsync(ActionsJournal.RevisionEtape, $"{equipement.Code} : intervention prévue ({aFaire})", ct, equipement.Id);
+        return ResultatOperation.Ok($"{equipement.Code} ajouté à « À prévoir ».", id);
+    }
+
+    /// <summary>Retire l'intervention prévue de l'équipement (plus nécessaire) : gardée, notée retirée.</summary>
+    public async Task<ResultatOperation> RetirerInterventionPrevueAsync(long equipementId, CancellationToken ct = default)
+    {
+        if (gestion?.Exiger(ActionProtegee.Revisions) is { Reussi: false } refus)
+        {
+            return refus;
+        }
+
+        if (await equipements.ObtenirAsync(equipementId, ct) is not { } equipement)
+        {
+            return ResultatOperation.Echec("Équipement introuvable.");
+        }
+
+        if (await revisions.FermerPrevueAsync(equipementId, horloge.MaintenantUtc, annulee: true, ct) == 0)
+        {
+            return ResultatOperation.Echec($"Aucune intervention prévue pour {equipement.Code}.");
+        }
+
+        await JournaliserAsync(ActionsJournal.RevisionEtape, $"{equipement.Code} : intervention prévue retirée", ct, equipement.Id);
+        return ResultatOperation.Ok($"{equipement.Code} : intervention prévue retirée.");
+    }
 
     /// <summary>
     /// « Marquer comme parti » : d'À envoyer à Chez le prestataire. Date d'envoi = aujourd'hui, retour prévu facultatif (pas passé).
