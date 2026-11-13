@@ -39,7 +39,7 @@ public class TableauRevisionsDepotsTests : IAsyncLifetime
         Assert.True((await revisions.AjouterASeanceAsync(bloc.Id)).Reussi); // Sans doublon.
         var seance = (await depot.ProchaineSeanceAsync(horloge.AujourdHui))!;
         Assert.Equal([bloc.Id], await depot.ListerPlanifiesAsync(seance.Id));
-        Assert.Equal(EtapeRevision.Planifie, (await revisions.TableauAsync()).Cartes.Single(c => c.Code == "BLOC-033").Etape);
+        Assert.Equal(EtapeRevision.Interne, (await revisions.TableauAsync()).Cartes.Single(c => c.Code == "BLOC-033").Etape);
 
         var r = await revisions.EnregistrerInterventionAsync(new Intervention(
             bloc.Id, TypeControle.Tiv, ResultatControle.Conforme, horloge.AujourdHui, "TIV", "Pascal Durand", pascal.Id));

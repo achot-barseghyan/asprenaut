@@ -147,6 +147,24 @@ public class BilanTests
         Assert.Equal(67, tension[1].Pourcentage);
     }
 
+    // Règle : les détendeurs enfant (médaille E, ou « enfant » dans le nom) ont leur propre stock, à part des adultes.
+    [Fact]
+    public async Task La_tension_separe_les_detendeurs_adultes_et_enfants()
+    {
+        _ctx.Equipement("A01", categorie: "Détendeurs");
+        _ctx.Equipement("A02", categorie: "Détendeurs");
+        _ctx.Equipement("A03", categorie: "Détendeurs");
+        _ctx.Equipement("E01", categorie: "Détendeurs");
+        _ctx.Equipement("D99", categorie: "Détendeurs").Libelle = "Détendeur enfant";
+        await SortieAsync(new DateOnly(2026, 10, 3), TypeSortie.Piscine, ["A01", "E01", "D99"], ["A01", "E01", "D99"]);
+
+        var tension = (await _ctx.Bilan.ObtenirAsync(2026)).Tension;
+
+        Assert.Equal([new TensionBilan("Détendeurs enfants", 2, 2, 1), new TensionBilan("Détendeurs adultes", 3, 1, 0)], tension);
+        Assert.True(Core.Services.ServiceBilan.EstDetendeurEnfant("e03", null));
+        Assert.False(Core.Services.ServiceBilan.EstDetendeurEnfant("A24", "Détendeur adulte"));
+    }
+
     [Fact]
     public async Task Le_classement_donne_les_plus_utilises_et_les_peu_sortis()
     {

@@ -144,6 +144,41 @@ public interface IRevisionRepository
 
     /// <summary>Première séance à partir de cette date, ou null.</summary>
     Task<SeanceTiv?> ProchaineSeanceAsync(DateOnly aPartirDu, CancellationToken ct = default);
+
+    // --- Étapes du tableau des révisions (table revision, migration 016) ---
+
+    /// <summary>Révisions en cours (toutes étapes sauf Fait) et faites depuis <paramref name="faitDepuis"/>, non archivées.</summary>
+    Task<IReadOnlyList<SuiviRevision>> ListerSuivisAsync(DateOnly faitDepuis, CancellationToken ct = default);
+
+    /// <summary>Révision en cours (étape autre que Fait) de cet équipement, ou null.</summary>
+    Task<SuiviRevision?> ObtenirSuiviEnCoursAsync(long equipementId, CancellationToken ct = default);
+
+    Task<SuiviRevision?> ObtenirSuiviAsync(long id, CancellationToken ct = default);
+
+    Task<long> AjouterSuiviAsync(SuiviRevision suivi, CancellationToken ct = default);
+
+    Task MettreAJourSuiviAsync(SuiviRevision suivi, CancellationToken ct = default);
+
+    Task SupprimerSuiviAsync(long id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Archive (ou désarchive) ces révisions, seulement à l'étape Fait (la requête re-vérifie) ; aucune ligne supprimée.
+    /// Retourne le nombre de lignes changées.
+    /// </summary>
+    Task<int> ArchiverSuivisAsync(IReadOnlyList<long> ids, bool archive, DateOnly? le, CancellationToken ct = default);
+}
+
+/// <summary>Magasins et organismes (table prestataire, migration 016).</summary>
+public interface IPrestataireRepository
+{
+    /// <summary>Tous les prestataires (actifs d'abord), par nom.</summary>
+    Task<IReadOnlyList<Prestataire>> ListerAsync(CancellationToken ct = default);
+
+    Task<Prestataire?> ObtenirAsync(long id, CancellationToken ct = default);
+
+    Task<long> AjouterAsync(Prestataire prestataire, CancellationToken ct = default);
+
+    Task MettreAJourAsync(Prestataire prestataire, CancellationToken ct = default);
 }
 
 /// <summary>Problèmes signalés (table signalement, migration 013) : au plus un ouvert par équipement.</summary>
@@ -250,6 +285,9 @@ public interface IJournalRepository
     Task AjouterAsync(EntreeJournal entree, CancellationToken ct = default);
 
     Task<IReadOnlyList<EntreeJournal>> ListerRecentsAsync(int nombre, CancellationToken ct = default);
+
+    /// <summary>Entrées de ces actions pour cet équipement, de la plus ancienne à la plus récente (fiche EPI).</summary>
+    Task<IReadOnlyList<EntreeJournal>> ListerPourEquipementAsync(long equipementId, IReadOnlyList<string> actions, CancellationToken ct = default);
 
     /// <summary>
     /// Entrées depuis <paramref name="depuisUtc"/> (tout si null), les plus récentes d'abord, au plus <paramref name="nombreMax"/>,

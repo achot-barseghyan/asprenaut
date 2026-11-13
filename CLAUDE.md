@@ -46,7 +46,8 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   (échéancier, contrôles, atelier, séances TIV), `ServiceReglages`, `ServiceHistorique` (journal lisible, période, regroupement,
   export CSV, vie d'un équipement, utilisations d'un équipement), `ServiceGestion` (mode consultation / mode gestion, code gestionnaire),
   `ServiceBilan` (bilan de saison pour l'AG), `ServiceManuels` (notices des fabricants), `ServiceSignalements` (problèmes
-  signalés au retour ou depuis l'inventaire), `ServiceAdherents` (adhérents : liste, filtres, fiche, ajout, import Excel). Toutes les règles métier sont ici.
+  signalés au retour ou depuis l'inventaire), `ServiceAdherents` (adhérents : liste, filtres, fiche, ajout, import Excel),
+  `ServicePrestataires` (magasins et organismes, Paramètres). Toutes les règles métier sont ici.
 - **Core/Resultats** : `ResultatScan` (Niveau Succes/Avertissement/Erreur, Message, Equipement, `ActionProposee`, Code, AutreSortieId),
   `ResultatOperation`, `ApercuCloture`. Les cas métier ne lèvent pas d'exception : ils retournent un résultat.
 - **Core/Saisie** : `CodeScanne.Lire` / `Nettoyer` et `AntiRebond` — logique pure, testée. Médailles QR du club :
@@ -68,7 +69,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   Moniteurs (page « Membres du club »), Historique, Bilan de saison, Révisions, Paramètres, Déverrouillage, Utilisations d'un équipement). Polices Sora/Manrope remplacées par Segoe UI Variable ; pas de fond dégradé ni de bulles animées.
 - **Briques d'interface** (`Controles/`) : `Carte`, `ControleDessine` (base des contrôles peints), `AnneauProgression`,
   `IndicateurEtapes`, `PastilleDate`, `Pastille`, `Picto`, `GrilleAdaptative` (colonnes auto, ajuste sa ligne de TableLayoutPanel),
-  `Tuile`, `FilAriane`, `BarreRecherche`, `ChampSaisie` (`Icone` et `ADroite` optionnels), `ChampDate` (remplace le DateTimePicker, blanc et en anglais),
+  `Tuile`, `FilAriane`, `BarreRecherche`, `ChampSaisie` (`Icone`, `ADroite` et `IndicatifSiFocus` optionnels), `ChampDate` (remplace le DateTimePicker, blanc et en anglais),
   `ListeDeroulante` (cadre et bouton repeints par-dessus Windows dans `WndProc`), `ListeMateriel` (styles Depart / ARendre / Rendu),
   `ScanInput` + `BandeauMessage` (scan réussi : `Ressources/Sons/ScanReussi.wav`, ressource `Sons.ScanReussi.wav`, PCM 16 bits mono
   car `SoundPlayer` ne lit pas tous les WAV ; avertissement / erreur : sons de Windows ; réglage `SonsActifs`), `BandeauAccueil`, `Logo`, `CarteScanner`, `Tableaux` (pastilles et pictogrammes dans les DataGridView),
@@ -86,7 +87,8 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
 - **Exports CSV** : `Core/Saisie/Csv` (séparateur « ; », guillemets, apostrophe devant = + - @). Inventaire : lignes affichées
   (`ServiceInventaire.ExporterCsv`). Paramètres › Exporter CSV : toutes les tables dans « Export Asprenaut AAAA-MM-JJ »
   (`ServiceExport` met en forme les valeurs brutes de `ExportRepository` selon `GenreColonne` : dates, états en français).
-- **Révisions** (`EcranRevisions`) : tableau à 4 colonnes dessinées (`ColonneRevision`, 2 sous 1000 px logiques) et cartes
+- **Révisions** (`EcranRevisions`) : compteurs « au club » / « hors du club » (`CompteursLieu`), accolade « Réparation externe »
+  (`AccoladeExterne`) au-dessus des colonnes 3 et 4, tableau à 5 colonnes dessinées (`ColonneRevision`, 2 par rangée sous 1050 px logiques) et cartes
   (`CarteEquipement`, vrais `BoutonArrondi` liés à `ActionProtegee.Revisions`), filtre par famille, champ de scan qui ouvre
   le panneau « Ajouter une intervention » en haut de page ; « Fiche › » mène à Historique (vie de l'équipement).
   `PageRevisions.OnLayout` recommence le placement si la hauteur posée a fait apparaître la barre (mise en page imbriquée ignorée).
@@ -128,7 +130,8 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
    re-vérifie, journal `SortieSupprimee`). Écran Départ : boutons « Modifier la sortie » et « Supprimer » (sortie vide) en haut à droite.
 7. Clôture : Dehors → Manquant, confirmation avec le nombre (`ApercuClotureAsync`) s'il reste du matériel dehors
    (`ApercuCloture.ConfirmationNecessaire`, réglage `ConfirmerCloture`).
-8. Un Manquant scanné plus tard au retour (dans sa sortie ou depuis une autre) → Rendu + journal `ManquantRetrouve`.
+8. Un Manquant scanné plus tard au retour (dans sa sortie ou depuis une autre) ou au départ d'une autre sortie → Rendu + journal
+   `ManquantRetrouve` (règle 32).
 9. Révision (ou TIV) ou requalification dépassée → part quand même, avec avertissement (refusée si le réglage
    `DepartSiRevisionDepassee` est coupé). `Equipement.RevisionDepassee` / `EcheanceDepassee` tiennent compte des deux dates.
 10. Sortie en cours avec du matériel dehors depuis `JoursAvantAlerteRetour` jours → en retard (`ServiceSortie.EstEnRetard`, carte orange).
@@ -140,7 +143,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     refusé → HorsService (impossible si l'équipement est dehors). TIV : inspecteur habilité obligatoire. Pas de date future.
     Délais dans `Reglages` (`MoisEntreTiv`, `AnneesEntreRequalifications`, `MoisEntreRevisions…`, `MoisSiASurveiller`).
 13. Échéancier : en retard / ce mois-ci / sous `JoursAPlanifier` (90) jours / à jour (`ServiceRevisions.EtatDe`). Matériel réformé exclu.
-14. Atelier : l'envoi passe l'équipement HorsService (refusé s'il est dehors, déjà en atelier, ou sans prestataire) ; le retour le remet EnService.
+14. Atelier (passage = départ chez un prestataire, historique des envois) : l'envoi passe l'équipement HorsService (refusé s'il est dehors, déjà en atelier, ou sans prestataire) ; le retour le remet EnService.
     Séance TIV : date à venir ; blocs à préparer = TIV due au plus tard 30 jours après la séance.
 15. Historique (`ServiceHistorique`) : chaque entrée du journal est reliée à son équipement et à sa sortie (`EntreeJournal.EquipementId /
     SortieId`, à renseigner pour toute nouvelle action journalisée). Type d'événement d'après l'action (`TypeDe`) ; titre et détail
@@ -152,7 +155,8 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     Avec un code (4 à 6 chiffres, haché PBKDF2-SHA256 salé dans `Reglages.CodeGestionnaire`), l'appli démarre en consultation ;
     les `ActionProtegee` (matériel, moniteurs, supprimer une sortie, révisions/atelier/séances, paramètres, restaurer une sauvegarde,
     `CompteurSortie` : utilisations d'une sortie différentes de celles de son type, à la création comme en modification,
-    et clôturer avec des manquants si `CodePourCloturerAvecManquants`) sont refusées par les services tant que le mode gestion n'est
+    et clôturer avec des manquants si `CodePourCloturerAvecManquants`, `RendreManquant` : scan ou « Marquer rendu » dans une
+    sortie clôturée) sont refusées par les services tant que le mode gestion n'est
     pas ouvert. Tous les paramètres (thème compris) sont protégés. Libres : créer/modifier une sortie en préparation (avec les
     utilisations de son type), scanner,
     valider, clôturer sans manquant, consulter, tester le pistolet, faire une sauvegarde.
@@ -171,7 +175,8 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
 17. Bilan de saison (`ServiceBilan`, consultation libre) : saison précédente ou en cours (1er septembre → 31 août), seules les
     sorties parties comptent (en cours ou clôturées, datées dans la saison). Mois de septembre à juin, juillet/août seulement s'il
     y a eu des sorties. Manquant à la clôture : perdu s'il l'est encore, retrouvé s'il a été rendu après la clôture.
-    Tension = part du stock d'un groupe (catégorie + taille, hors réformé, au moins `StockMinTension` = 2) sortie lors de la sortie
+    Tension = part du stock d'un groupe (catégorie + taille, hors réformé, au moins `StockMinTension` = 2 ; détendeurs séparés en
+    « adultes » / « enfants » : médaille E + numéro ou « enfant » dans le nom, `ServiceBilan.EstDetendeurEnfant`) sortie lors de la sortie
     la plus chargée ; rupture = tout le groupe dehors. Peu sortis : en service, moins de `SeuilPeuSorti` (3) sorties.
     Contrôles par famille : TIV, requalifications, puis catégorie pour les révisions. Requêtes : `ListerPassagesPeriodeAsync`,
     `ListerControlesPeriodeAsync`.
@@ -213,10 +218,11 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     Inventaire : colonnes selon la catégorie choisie (générales, Gilets, Détendeurs en largeur fixe avec défilement horizontal),
     matériel réformé barré et grisé. `FenetreFormulaire` défile quand elle dépasse la hauteur de l'écran ; `DeuxChamps` retourne
     sa rangée (masquable, libellés via `FenetreFormulaire.Libelles`).
-23. Tableau des révisions (`ServiceRevisions.TableauAsync`, migration 007) : À prévoir (échéance non à jour ou 90 % du seuil
-    d'utilisations, équipement EnService, ni en atelier ni déjà planifié) → Planifié (blocs ajoutés à la prochaine séance TIV,
-    table seance_equipement ; `AjouterASeanceAsync` refusé sans séance ou pour un non-bloc) → En atelier (passages ouverts) →
-    Fait (contrôles des `JoursFait` = 30 derniers jours, 12 au plus). Un contrôle enregistré retire l'équipement des séances.
+23. Tableau des révisions (`ServiceRevisions.TableauAsync`, migrations 007 et 016, voir règle 33) : À prévoir (calculé : échéance
+    non à jour ou 90 % du seuil d'utilisations, équipement EnService, ou problème signalé ; pas s'il a déjà une révision en cours)
+    → Réparation interne (séance TIV : `AjouterASeanceAsync`, refusé sans séance ou pour un non-bloc, table seance_equipement)
+    → À envoyer → Chez le prestataire → Fait (révisions faites des `JoursFait` = 30 derniers jours, non archivées).
+    Un contrôle enregistré retire l'équipement des séances.
     « Bloqué pour les sorties » suit les réglages (`DepartSiRevisionDepassee`, `BloquerAuSeuil`), sans les changer.
     Intervention (`EnregistrerInterventionAsync`) : contrôle avec nature (`NaturesPour`) et intervenant (controle.nature /
     intervenant) ; depuis l'atelier, ferme le passage et remet en service, sauf refusé (reste HorsService).
@@ -304,7 +310,10 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     obligatoire à chaque scan » ; chaque scan attend son adhérent (`ServiceSortie.AAttribuer`) : le scan suivant est refusé
     (`ServiceScan`), la validation aussi (« Attribuez A07 à un adhérent… »). Départ : `PanneauAdherent` remplace la zone de scan
     (« À qui est ce détendeur ? », 3 derniers adhérents de la sortie `AdherentsRecents`, liste des actifs filtrée sans accents,
-    flèches + Entrée ; un code tapé par le pistolet dans la recherche est refusé), puis le focus revient au champ de scan ; liste
+    flèches + Entrée ; maquette : panneau en haut de sa zone (Dock Top, hauteur d'après le contenu, placement à la main),
+    tuiles à la ligne, pastilles rondes de la couleur de l'adhérent (`PeindreAvatar`, d'après son numéro), liste dessinée
+    `ListeAdherents` ouverte sous le champ par la frappe, les flèches, un clic ou le chevron, posée dans la zone parente
+    pour déborder de la carte, jamais focusable ; Échap la referme ; un code tapé par le pistolet dans la recherche est refusé), puis le focus revient au champ de scan ; liste
     « À attribuer » / nom de l'adhérent, vue « Par adhérent ». « Annuler ce scan » retire l'équipement en attente (aussi après la
     validation). Retour : nom de l'adhérent sur le matériel dehors. Clôture : `ManquantDeclare` garde `AdherentId` (« pris par … »
     dans l'historique). Adhérents (onglet de `EcranMoniteurs`, menu « Membres ») : jamais responsables de sortie, jamais supprimés
@@ -322,6 +331,32 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     met les certifiés en premier et marque les autres « pas certifié nitrox ». Fiche adhérent : « Désactiver » (confirmation) /
     « Réactiver » (`ChangerActifAsync`, action Moniteurs) ; désactivé : ne sort plus de matériel, gardé dans la liste (à la fin)
     pour être réactivé. Sortie non nominative : pas de contrôle nitrox.
+
+32. Manquants retrouvés (`ManquantsTests`) : un équipement Manquant scanné au départ d'une sortie est d'abord noté Rendu dans
+    chaque sortie où il manquait (journal `ManquantRetrouve` relié à l'ancienne sortie, message « A01 était manquant (sortie
+    « … » du 06/11) : noté retrouvé. » devant le résultat du départ), même si son départ est ensuite refusé ; l'inventaire ne le
+    montre plus manquant. Sortie clôturée (ouverte d'un simple clic depuis Sorties) : scanner au retour ou « Marquer rendu »
+    (bouton ✓ des lignes manquantes, confirmation, `ServiceScan.RendreManquantAsync`) demandent `ActionProtegee.RendreManquant`.
+33. Révisions en 5 étapes et prestataires (migration 016, `EtapesRevisionsTests`, maquette « Révisions ») : `EtapeRevision` APrevoir
+    (calculée) → Interne → AEnvoyer → ChezPrestataire → Fait, notées dans `SuiviRevision` (table revision, une seule en cours par
+    équipement). Toutes les transitions demandent `ActionProtegee.Revisions` et écrivent `ActionsJournal.RevisionEtape` (lignes
+    « Étape » de la fiche EPI, `TypeInterventionSuivie.Etape`). À prévoir : « Séance TIV » (bloc dont la TIV est due, pas un
+    signalement) ou « Réparer au club » (`ReparerAuClubAsync` → Interne, par `Reglages.ResponsableMateriel`) ; « Envoyer chez un
+    prestataire » (`EnvoyerChezPrestataireAsync` → AEnvoyer : prestataire actif obligatoire, note d'envoi 120 car. facultative ;
+    refusé pour un bloc prévu à la séance TIV ; l'équipement reste au club). AEnvoyer : « Marquer comme parti » (`MarquerPartiAsync`
+    → ChezPrestataire : `DateEnvoi` = aujourd'hui, retour prévu facultatif et pas passé, ouvre un passage en atelier → HorsService,
+    refusé s'il est dehors) ou « Réparer au club ». Interne et ChezPrestataire : « Enregistrer le résultat » / « Retour du
+    prestataire » = le panneau d'intervention ; toute intervention (`EnregistrerControleAsync`) passe la révision en cours en Fait
+    (ou crée une ligne Fait), et `EnregistrerInterventionAsync` ferme le passage en atelier de la révision ; Refusé → hors service.
+    Retour en retard : `RetourEnRetard` (ChezPrestataire et retour prévu passé). Compteurs (`TableauRevisions`) : `AuClub` =
+    équipements en À prévoir, Interne ou À envoyer ; `HorsClub` = ChezPrestataire, `ParPrestataire`, `RetoursEnRetard`.
+    « Bloqué pour les sorties » à toutes les étapes sauf Fait (réglages, ou signalement Hors service). Fait : « Archiver tout » et
+    bouton par carte (`ArchiverAsync` / `DesarchiverAsync`, sans code : archive = 1 seulement à l'étape Fait, rien n'est supprimé ;
+    « Annuler » tant qu'on reste sur la page) ; au-delà de 30 jours, la carte quitte la colonne. `EnvoyerEnAtelierAsync` (ancien
+    chemin, texte libre) crée aussi la révision ChezPrestataire ; `RetourAtelierAsync` sans intervention l'abandonne.
+    Prestataires (`ServicePrestataires`, Paramètres › Prestataires, action Paramètres) : nom obligatoire, unique sans les majuscules,
+    60 car. ; jamais supprimés, désactivés (plus proposés). Couleurs `Theme.Prestataire` / `PrestataireClair` /
+    `TexteSurPrestataire`, boutons `StyleBouton.Prestataire` et `PrestataireContour`. Export : prestataires.csv, revisions.csv.
 
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
@@ -354,11 +389,16 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   014 : adherent (nom, prenom, niveau, licence unique si renseignée `ux_adherent_licence`, telephone, actif), type_sortie.nominatif
   (Mer et Lac à 1), sortie.nominatif (0 pour les sorties existantes), sortie_equipement.adherent_id, journal.adherent_id.
   015 : equipement.nitrox et adherent.nitrox (0/1).
+  016 : prestataire (nom unique NOCASE `ux_prestataire_nom`, type CHECK Magasin/Organisme, actif) et revision (étape CHECK
+  Interne/AEnvoyer/ChezPrestataire/Fait, une seule hors Fait par équipement `ux_revision_en_cours`, prestataire_id, motif,
+  note_envoi, date_envoi, date_retour_prevue, intervenant_interne, seance_tiv, atelier_id, controle_id, date_fait, archive,
+  date_archive) ; reprise : séance TIV à venir → Interne, atelier en cours → ChezPrestataire (prestataires repris des noms),
+  contrôles des 30 derniers jours → Fait.
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/016_xxx.sql`, sans jamais modifier un script déjà livré
+- Nouvelle migration : ajouter `Migrations/017_xxx.sql`, sans jamais modifier un script déjà livré
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.

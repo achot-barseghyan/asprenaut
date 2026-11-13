@@ -28,6 +28,9 @@ public enum ActionProtegee
 
     /// <summary>Changer les utilisations comptées d'une sortie (autre valeur que celle de son type).</summary>
     CompteurSortie,
+
+    /// <summary>Sortie clôturée : scanner un manquant qui revient, ou le marquer rendu à la main.</summary>
+    RendreManquant,
 }
 
 /// <summary>
@@ -230,6 +233,7 @@ public sealed class ServiceGestion
         ActionProtegee.Revisions => "Enregistrer une révision",
         ActionProtegee.Parametres => "Paramètres",
         ActionProtegee.CompteurSortie => "Utilisations d'une sortie",
+        ActionProtegee.RendreManquant => "Rendre un manquant d'une sortie clôturée",
         _ => "Restaurer une sauvegarde",
     };
 

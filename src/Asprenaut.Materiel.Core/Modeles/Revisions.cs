@@ -136,20 +136,98 @@ public sealed record RegistreControles(DateOnly Edition, IReadOnlyList<FicheRegi
     public int NombreControles => Blocs.Concat(Autres).Sum(f => f.Controles.Count);
 }
 
-/// <summary>Colonne du tableau des révisions : l'équipement avance de gauche à droite jusqu'à son retour en service.</summary>
+/// <summary>
+/// Colonne du tableau des révisions : l'équipement avance de gauche à droite jusqu'à son retour en service.
+/// Stockée par son nom dans revision.etape (sauf <see cref="APrevoir"/>, calculée) : ne jamais renommer un membre sans migration.
+/// </summary>
 public enum EtapeRevision
 {
-    /// <summary>Échéance dans les 90 jours ou dépassée, ou 90 % du seuil d'utilisations.</summary>
+    /// <summary>Au club. Échéance dans les 90 jours ou dépassée, 90 % du seuil d'utilisations, ou problème signalé (calculé).</summary>
     APrevoir,
 
-    /// <summary>Ajouté à la prochaine séance TIV.</summary>
-    Planifie,
+    /// <summary>Au club : séance TIV ou petite réparation par le responsable matériel (ancien « Planifié »).</summary>
+    Interne,
 
-    /// <summary>Chez un magasin ou un organisme.</summary>
-    EnAtelier,
+    /// <summary>Au club, mais décidé pour partir chez un prestataire : à déposer ou expédier.</summary>
+    AEnvoyer,
 
-    /// <summary>Intervention enregistrée ces 30 derniers jours.</summary>
+    /// <summary>Hors du club, chez un magasin ou un organisme (ancien « En atelier »).</summary>
+    ChezPrestataire,
+
+    /// <summary>Intervention enregistrée : remis en service (ou hors service si refusé).</summary>
     Fait,
+}
+
+/// <summary>Genre de prestataire.</summary>
+public enum TypePrestataire
+{
+    /// <summary>Magasin de plongée (révisions, réparations).</summary>
+    Magasin,
+
+    /// <summary>Organisme (requalification des blocs).</summary>
+    Organisme,
+}
+
+/// <summary>Magasin ou organisme qui révise le matériel du club (table prestataire, migration 016), géré dans Paramètres.</summary>
+public sealed class Prestataire
+{
+    public long Id { get; set; }
+    public string Nom { get; set; } = "";
+    public TypePrestataire Type { get; set; }
+    public string Telephone { get; set; } = "";
+    public string Adresse { get; set; } = "";
+
+    /// <summary>Inactif : plus proposé pour un envoi, gardé par les révisions passées.</summary>
+    public bool Actif { get; set; } = true;
+}
+
+/// <summary>
+/// Étape d'un équipement dans le tableau des révisions, une fois qu'on a décidé quoi faire (table revision, migration 016).
+/// Une seule ligne hors « Fait » par équipement. « À prévoir » n'est pas stocké : il est calculé d'après les échéances.
+/// </summary>
+public sealed class SuiviRevision
+{
+    public long Id { get; set; }
+    public long EquipementId { get; set; }
+    public EtapeRevision Etape { get; set; }
+
+    /// <summary>Prestataire choisi (À envoyer, Chez le prestataire), ou null.</summary>
+    public long? PrestataireId { get; set; }
+
+    /// <summary>Nom du prestataire (lu avec la ligne ; celui du passage en atelier si l'envoi n'a pas de prestataire enregistré).</summary>
+    public string Prestataire { get; set; } = "";
+
+    /// <summary>Ce qu'il y a à faire (« Révision · 200 utilisations », « Requalification »...).</summary>
+    public string Motif { get; set; } = "";
+
+    /// <summary>Organisation du dépôt (« Dépôt prévu le 15/11 », « Envoi groupé avec 2 autres blocs »).</summary>
+    public string NoteEnvoi { get; set; } = "";
+
+    /// <summary>Jour du départ chez le prestataire.</summary>
+    public DateOnly? DateEnvoi { get; set; }
+
+    public DateOnly? DateRetourPrevue { get; set; }
+
+    /// <summary>Qui répare au club (responsable matériel, « Séance TIV »...).</summary>
+    public string IntervenantInterne { get; set; } = "";
+
+    /// <summary>Bloc rattaché à la prochaine séance TIV.</summary>
+    public bool SeanceTiv { get; set; }
+
+    /// <summary>Passage en atelier ouvert au départ chez le prestataire.</summary>
+    public long? AtelierId { get; set; }
+
+    /// <summary>Intervention qui a terminé la révision (étape Fait).</summary>
+    public long? ControleId { get; set; }
+
+    public DateTime CreeLe { get; set; }
+
+    public DateOnly? DateFait { get; set; }
+
+    /// <summary>Retirée de la colonne « Fait » (rien n'est supprimé : Historique et fiche EPI la gardent).</summary>
+    public bool Archive { get; set; }
+
+    public DateOnly? DateArchive { get; set; }
 }
 
 /// <summary>Pastille d'une carte du tableau.</summary>
@@ -164,7 +242,11 @@ public enum EtatCarte
     HorsService,
 }
 
-/// <summary>Une carte du tableau des révisions.</summary>
+/// <summary>
+/// Une carte du tableau des révisions. <paramref name="Signalement"/> : un problème signalé est ouvert (badge « Signalé au
+/// retour »). <paramref name="SuiviId"/> : ligne de la table revision (null pour « À prévoir »). <paramref name="JoursDehors"/>
+/// et <paramref name="RetourEnRetard"/> : chez le prestataire seulement.
+/// </summary>
 public sealed record CarteRevision(
     EtapeRevision Etape,
     long EquipementId,
@@ -181,11 +263,44 @@ public sealed record CarteRevision(
     UsageEquipement? Usage,
     long? PassageAtelierId = null,
     string? Prestataire = null,
-    bool Signalement = false);
+    bool Signalement = false,
+    long? SuiviId = null,
+    string NoteEnvoi = "",
+    DateOnly? DateEnvoi = null,
+    DateOnly? DateRetourPrevue = null,
+    int? JoursDehors = null,
+    bool RetourEnRetard = false,
+    bool SeanceTiv = false)
+{
+    /// <summary>Encore au club (À prévoir, Réparation interne, À envoyer) : tout sauf « Chez le prestataire » et « Fait ».</summary>
+    public bool AuClub => Etape is EtapeRevision.APrevoir or EtapeRevision.Interne or EtapeRevision.AEnvoyer;
+}
 
 /// <summary>Tableau des révisions : la prochaine séance TIV et toutes les cartes.</summary>
 public sealed record TableauRevisions(ProchaineSeance? Seance, IReadOnlyList<CarteRevision> Cartes)
 {
+    private int Equipements(Func<CarteRevision, bool> filtre) => Cartes.Where(filtre).Select(c => c.EquipementId).Distinct().Count();
+
+    /// <summary>Équipements au club, en attente : À prévoir, Réparation interne et À envoyer.</summary>
+    public int AuClub => Equipements(c => c.AuClub);
+
+    /// <summary>Dont à envoyer chez un prestataire.</summary>
+    public int AEnvoyer => Equipements(c => c.Etape == EtapeRevision.AEnvoyer);
+
+    /// <summary>Équipements hors du club, chez un prestataire.</summary>
+    public int HorsClub => Equipements(c => c.Etape == EtapeRevision.ChezPrestataire);
+
+    /// <summary>Retours attendus dont la date prévue est passée.</summary>
+    public int RetoursEnRetard => Equipements(c => c.Etape == EtapeRevision.ChezPrestataire && c.RetourEnRetard);
+
+    /// <summary>« 2 chez Aqua Service, 1 chez Bureau Veritas » (le plus chargé d'abord).</summary>
+    public IReadOnlyList<(string Prestataire, int Nombre)> ParPrestataire => Cartes
+        .Where(c => c.Etape == EtapeRevision.ChezPrestataire)
+        .GroupBy(c => string.IsNullOrWhiteSpace(c.Prestataire) ? "prestataire inconnu" : c.Prestataire!)
+        .Select(g => (g.Key, g.Select(c => c.EquipementId).Distinct().Count()))
+        .OrderByDescending(p => p.Item2).ThenBy(p => p.Key, StringComparer.Create(Libelles.Culture, true))
+        .ToList();
+
     /// <summary>Familles du filtre, dans l'ordre : Signalé, TIV, Requalification, Utilisation, puis les catégories.</summary>
     public IReadOnlyList<string> Familles
     {

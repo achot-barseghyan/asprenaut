@@ -19,7 +19,7 @@ public class SchemaTests : IAsyncLifetime
         var tables = (await cx.QueryAsync<string>("SELECT name FROM sqlite_master WHERE type = 'table';")).ToHashSet();
 
         Assert.Superset(
-            new HashSet<string> { "categorie", "equipement", "moniteur", "sortie", "sortie_equipement", "journal", "schema_version", "controle", "atelier", "seance_tiv", "type_sortie", "seance_equipement", "manuel", "composant", "signalement", "adherent" },
+            new HashSet<string> { "categorie", "equipement", "moniteur", "sortie", "sortie_equipement", "journal", "schema_version", "controle", "atelier", "seance_tiv", "type_sortie", "seance_equipement", "manuel", "composant", "signalement", "adherent", "prestataire", "revision" },
             tables);
         Assert.Equal(GestionnaireMigrations.VersionCible, await cx.ExecuteScalarAsync<int>("SELECT MAX(version) FROM schema_version;"));
     }
@@ -36,9 +36,9 @@ public class SchemaTests : IAsyncLifetime
     }
 
     [Fact]
-    public void Scripts_001_a_015_sont_embarques()
+    public void Scripts_001_a_016_sont_embarques()
     {
-        Assert.Equal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
+        Assert.Equal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
     }
 
     // 010 : les anciens codes DET-/GIL- deviennent ceux des médailles (A07, S12), sorties et journal compris.

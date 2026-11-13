@@ -107,6 +107,22 @@ public sealed class ExportRepository(FabriqueConnexion fabrique) : IExportReposi
             """,
             [new("Signalé le", GenreColonne.Horodatage), new("Code"), new("Équipement"), new("Problème"),
              new("Gravité", GenreColonne.GraviteSignalement), new("Précision"), new("Sortie"), new("Traité le", GenreColonne.Horodatage)]),
+        ("prestataires.csv",
+            "SELECT nom, type, telephone, adresse, actif FROM prestataire ORDER BY actif DESC, nom COLLATE NOCASE",
+            [new("Nom"), new("Type", GenreColonne.TypePrestataire), new("Téléphone"), new("Adresse"), new("Actif", GenreColonne.OuiNon)]),
+        ("revisions.csv",
+            """
+            SELECT e.code, e.libelle, r.etape, COALESCE(p.nom, a.prestataire, ''), r.motif, r.note_envoi, r.intervenant_interne,
+                   r.date_envoi, r.date_retour_prevue, r.date_fait, r.archive
+            FROM revision r
+            JOIN equipement e ON e.id = r.equipement_id
+            LEFT JOIN prestataire p ON p.id = r.prestataire_id
+            LEFT JOIN atelier a ON a.id = r.atelier_id
+            ORDER BY r.cree_le, r.id
+            """,
+            [new("Code"), new("Équipement"), new("Étape", GenreColonne.EtapeRevision), new("Prestataire"), new("Motif"), new("Note d'envoi"),
+             new("Réparé au club par"), new("Parti le", GenreColonne.Date), new("Retour prévu", GenreColonne.Date), new("Fait le", GenreColonne.Date),
+             new("Archivée", GenreColonne.OuiNon)]),
     ];
 
     public async Task<IReadOnlyList<TableExport>> ListerTablesAsync(CancellationToken ct = default)

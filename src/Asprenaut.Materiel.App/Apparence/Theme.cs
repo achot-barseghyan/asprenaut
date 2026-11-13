@@ -40,6 +40,11 @@ public sealed class Palette
     public required Color Erreur { get; init; }
     public required Color Materiel { get; init; }
 
+    /// <summary>Réparation externe, chez un prestataire (violet de la maquette Révisions), sa variante texte et le texte sur son aplat.</summary>
+    public required Color Prestataire { get; init; }
+    public required Color PrestataireClair { get; init; }
+    public required Color TexteSurPrestataire { get; init; }
+
     /// <summary>Sorties en fosse (violet de la maquette).</summary>
     public required Color Profondeur { get; init; }
 
@@ -138,6 +143,11 @@ public static class Theme
     public static Color TexteSurAvertissement => _p.TexteSurAvertissement;
     public static Color Erreur => _p.Erreur;
     public static Color Materiel => _p.Materiel;
+
+    // --- Réparation externe (Révisions : à envoyer, chez le prestataire) ---
+    public static Color Prestataire => _p.Prestataire;
+    public static Color PrestataireClair => _p.PrestataireClair;
+    public static Color TexteSurPrestataire => _p.TexteSurPrestataire;
     public static Color Profondeur => _p.Profondeur;
 
     /// <summary>Couleur d'un type de sortie (point du filtre, pastille du tableau « Utilisations »), d'après sa famille.</summary>
@@ -229,6 +239,9 @@ public static class Theme
             TexteSurAvertissement = Hex("#2A1F04"),
             Erreur = erreur,
             Materiel = Hex("#B7C8FF"),
+            Prestataire = Hex("#B39DFF"),
+            PrestataireClair = Hex("#CBBCFF"),
+            TexteSurPrestataire = Hex("#1D1240"),
             Profondeur = Hex("#C9A8FF"),
             Bordure = Melanger(surface, accentClair, 0.14f),
             BordureForte = Melanger(surface, accentClair, 0.26f),
@@ -280,6 +293,9 @@ public static class Theme
             TexteSurAvertissement = Color.White,
             Erreur = erreur,
             Materiel = Hex("#4338CA"),
+            Prestataire = Hex("#6D28D9"),
+            PrestataireClair = Hex("#5B21B6"),
+            TexteSurPrestataire = Color.White,
             Profondeur = Hex("#7E22CE"),
             Bordure = Hex("#D5E1EA"),
             BordureForte = Hex("#B4C7D7"),

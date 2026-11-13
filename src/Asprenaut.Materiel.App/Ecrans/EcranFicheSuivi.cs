@@ -17,11 +17,12 @@ namespace Asprenaut.Materiel.App.Ecrans;
 /// </summary>
 public sealed class EcranFicheSuivi : EcranBase
 {
-    /// <summary>Colonne « Type » des interventions : Contrôle, Atelier ou Signalement (aussi dans le PDF de la fiche).</summary>
+    /// <summary>Colonne « Type » des interventions : Contrôle, Atelier, Signalement ou Étape (aussi dans le PDF de la fiche).</summary>
     public static string LibelleType(TypeInterventionSuivie type) => type switch
     {
         TypeInterventionSuivie.Atelier => "Atelier",
         TypeInterventionSuivie.Signalement => "Signalement",
+        TypeInterventionSuivie.Etape => "Étape",
         _ => "Contrôle",
     };
 
@@ -745,6 +746,7 @@ public sealed class EcranFicheSuivi : EcranBase
                 {
                     TypeInterventionSuivie.Atelier => Theme.Materiel,
                     TypeInterventionSuivie.Signalement => Theme.Avertissement,
+                    TypeInterventionSuivie.Etape => Theme.PrestataireClair,
                     _ => Theme.AccentClair,
                 };
                 Pilule(g, LibelleType(ligne.Type), Colonne(4), y, h, Largeur(4), type);

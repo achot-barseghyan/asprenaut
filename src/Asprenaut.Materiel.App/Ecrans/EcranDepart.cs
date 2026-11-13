@@ -32,7 +32,7 @@ public sealed class EcranDepart : EcranScanBase
 
     // Sortie nominative : panneau « À qui est ce détendeur ? » à la place de la zone de scan, vue « Par adhérent ».
     private readonly ServiceAdherents _adherents;
-    private readonly PanneauAdherent _panneau = new() { Visible = false, Dock = DockStyle.Fill };
+    private readonly PanneauAdherent _panneau = new() { Visible = false, Dock = DockStyle.Top }; // Hauteur d'après son contenu.
     private readonly Bascule _vue = new("Par équipement", "Par adhérent") { Margin = new Padding(0, 0, 0, 10) };
     private readonly ListeMateriel _listePersonnes = new(StyleListe.Personne, "Aucun équipement attribué pour l'instant.") { Visible = false };
     private readonly TableLayoutPanel _carteListe;

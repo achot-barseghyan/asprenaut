@@ -351,6 +351,11 @@ public sealed class JournalRepositoryMemoire(BaseMemoire db) : IJournalRepositor
     public Task<IReadOnlyList<EntreeJournal>> ListerRecentsAsync(int nombre, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<EntreeJournal>>(db.Journal.OrderByDescending(j => j.Id).Take(nombre).ToList());
 
+    public Task<IReadOnlyList<EntreeJournal>> ListerPourEquipementAsync(long equipementId, IReadOnlyList<string> actions, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<EntreeJournal>>(db.Journal
+            .Where(j => j.EquipementId == equipementId && actions.Contains(j.Action))
+            .OrderBy(j => j.Horodatage).ThenBy(j => j.Id).ToList());
+
     public Task<IReadOnlyList<LigneJournal>> ListerAsync(DateTime? depuisUtc, int nombreMax, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<LigneJournal>>(db.Journal
             .Where(j => depuisUtc is null || j.Horodatage >= depuisUtc)

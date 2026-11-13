@@ -167,6 +167,103 @@ public sealed class RevisionRepository(FabriqueConnexion fabrique) : IRevisionRe
             new { debut = FormatIso.Ecrire(aPartirDu) }, cancellationToken: ct));
     }
 
+    // ---------------------------------------------------------------- Étapes (table revision, migration 016)
+
+    /// <summary>Nom du prestataire : celui de la liste, sinon celui du passage en atelier (envoi sans prestataire enregistré).</summary>
+    private const string SelectSuivi = """
+        SELECT r.id, r.equipement_id, r.etape, r.prestataire_id,
+               COALESCE(p.nom, a.prestataire, '') AS prestataire,
+               r.motif, r.note_envoi, r.date_envoi, r.date_retour_prevue, r.intervenant_interne, r.seance_tiv,
+               r.atelier_id, r.controle_id, r.cree_le, r.date_fait, r.archive, r.date_archive
+        FROM revision r
+        LEFT JOIN prestataire p ON p.id = r.prestataire_id
+        LEFT JOIN atelier a ON a.id = r.atelier_id
+        """;
+
+    public async Task<IReadOnlyList<SuiviRevision>> ListerSuivisAsync(DateOnly faitDepuis, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        var lignes = await cx.QueryAsync<SuiviRevision>(new CommandDefinition(
+            $"{SelectSuivi} WHERE r.etape <> 'Fait' OR (r.archive = 0 AND r.date_fait >= @depuis) ORDER BY r.id;",
+            new { depuis = FormatIso.Ecrire(faitDepuis) }, cancellationToken: ct));
+        return lignes.AsList();
+    }
+
+    public async Task<SuiviRevision?> ObtenirSuiviEnCoursAsync(long equipementId, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        return await cx.QuerySingleOrDefaultAsync<SuiviRevision>(new CommandDefinition(
+            $"{SelectSuivi} WHERE r.equipement_id = @equipementId AND r.etape <> 'Fait';", new { equipementId }, cancellationToken: ct));
+    }
+
+    public async Task<SuiviRevision?> ObtenirSuiviAsync(long id, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        return await cx.QuerySingleOrDefaultAsync<SuiviRevision>(new CommandDefinition(
+            $"{SelectSuivi} WHERE r.id = @id;", new { id }, cancellationToken: ct));
+    }
+
+    public async Task<long> AjouterSuiviAsync(SuiviRevision suivi, CancellationToken ct = default)
+    {
+        const string sql = """
+            INSERT INTO revision (equipement_id, etape, prestataire_id, motif, note_envoi, date_envoi, date_retour_prevue,
+                                  intervenant_interne, seance_tiv, atelier_id, controle_id, cree_le, date_fait, archive, date_archive)
+            VALUES (@EquipementId, @Etape, @PrestataireId, @Motif, @NoteEnvoi, @DateEnvoi, @DateRetourPrevue,
+                    @IntervenantInterne, @SeanceTiv, @AtelierId, @ControleId, @CreeLe, @DateFait, @Archive, @DateArchive)
+            RETURNING id;
+            """;
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        suivi.Id = await cx.ExecuteScalarAsync<long>(new CommandDefinition(sql, Parametres(suivi), cancellationToken: ct));
+        return suivi.Id;
+    }
+
+    public async Task MettreAJourSuiviAsync(SuiviRevision suivi, CancellationToken ct = default)
+    {
+        const string sql = """
+            UPDATE revision SET etape = @Etape, prestataire_id = @PrestataireId, motif = @Motif, note_envoi = @NoteEnvoi,
+                                date_envoi = @DateEnvoi, date_retour_prevue = @DateRetourPrevue, intervenant_interne = @IntervenantInterne,
+                                seance_tiv = @SeanceTiv, atelier_id = @AtelierId, controle_id = @ControleId, date_fait = @DateFait,
+                                archive = @Archive, date_archive = @DateArchive
+            WHERE id = @Id;
+            """;
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        await cx.ExecuteAsync(new CommandDefinition(sql, Parametres(suivi), cancellationToken: ct));
+    }
+
+    public async Task SupprimerSuiviAsync(long id, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        await cx.ExecuteAsync(new CommandDefinition("DELETE FROM revision WHERE id = @id AND etape <> 'Fait';", new { id }, cancellationToken: ct));
+    }
+
+    public async Task<int> ArchiverSuivisAsync(IReadOnlyList<long> ids, bool archive, DateOnly? le, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        return await cx.ExecuteAsync(new CommandDefinition(
+            "UPDATE revision SET archive = @archive, date_archive = @le WHERE id IN @ids AND etape = 'Fait';",
+            new { ids, archive = archive ? 1 : 0, le = FormatIso.Ecrire(archive ? le : null) }, cancellationToken: ct));
+    }
+
+    private static object Parametres(SuiviRevision s) => new
+    {
+        s.Id,
+        s.EquipementId,
+        Etape = s.Etape.ToString(),
+        s.PrestataireId,
+        s.Motif,
+        s.NoteEnvoi,
+        DateEnvoi = FormatIso.Ecrire(s.DateEnvoi),
+        DateRetourPrevue = FormatIso.Ecrire(s.DateRetourPrevue),
+        s.IntervenantInterne,
+        SeanceTiv = s.SeanceTiv ? 1 : 0,
+        s.AtelierId,
+        s.ControleId,
+        CreeLe = FormatIso.Ecrire(s.CreeLe),
+        DateFait = FormatIso.Ecrire(s.DateFait),
+        Archive = s.Archive ? 1 : 0,
+        DateArchive = FormatIso.Ecrire(s.DateArchive),
+    };
+
     private static object Parametres(PassageAtelier p) => new
     {
         p.Id,

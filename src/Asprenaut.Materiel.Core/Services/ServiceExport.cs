@@ -40,6 +40,8 @@ public sealed class ServiceExport(IExportRepository depot, IHorloge horloge)
             GenreColonne.OuiNon => brut == "1" ? "Oui" : brut == "0" ? "Non" : brut,
             GenreColonne.EtatEquipement when Enum.TryParse<EtatEquipement>(brut, out var e) => Libelles.De(e),
             GenreColonne.GraviteSignalement when Enum.TryParse<GraviteSignalement>(brut, out var g) => ServiceSignalements.Libelle(g),
+            GenreColonne.EtapeRevision when Enum.TryParse<EtapeRevision>(brut, out var er) => ServiceRevisions.LibelleEtape(er),
+            GenreColonne.TypePrestataire when Enum.TryParse<TypePrestataire>(brut, out var tp) => tp == TypePrestataire.Magasin ? "Magasin" : "Organisme",
             GenreColonne.TypeSortie when Enum.TryParse<TypeSortie>(brut, out var t) => Libelles.De(t),
             GenreColonne.StatutSortie when Enum.TryParse<StatutSortie>(brut, out var s) => Libelles.De(s),
             GenreColonne.StatutSortieEquipement when Enum.TryParse<StatutSortieEquipement>(brut, out var se) => se switch

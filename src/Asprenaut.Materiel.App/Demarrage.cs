@@ -54,6 +54,7 @@ internal static class Demarrage
         services.AddSingleton<IManuelRepository, ManuelRepository>();
         services.AddSingleton<ISignalementRepository, SignalementRepository>();
         services.AddSingleton<IAdherentRepository, AdherentRepository>();
+        services.AddSingleton<IPrestataireRepository, PrestataireRepository>();
         services.AddSingleton<IStockageManuels>(_ => new StockageManuels(StockageManuels.DossierParDefaut(parametres.CheminBase)));
 
         // Services métier (Core)
@@ -72,6 +73,7 @@ internal static class Demarrage
         services.AddSingleton<ServiceManuels>();
         services.AddSingleton<ServiceSignalements>();
         services.AddSingleton<ServiceAdherents>();
+        services.AddSingleton<ServicePrestataires>();
 
         // Interface. Les écrans ne sont pas enregistrés : ServiceNavigation les crée à la demande.
         services.AddSingleton<ServiceNavigation>();

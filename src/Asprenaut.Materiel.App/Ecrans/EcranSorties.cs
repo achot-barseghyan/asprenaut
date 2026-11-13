@@ -31,13 +31,23 @@ public sealed class EcranSorties : EcranBase
         Tableaux.AjouterColonne(_cloturees, "materiel", "Matériel", 90);
         Tableaux.AjouterColonne(_cloturees, "bilan", "Bilan", 90);
         _cloturees.AccessibleName = "Sorties clôturées";
-        _cloturees.CellDoubleClick += (_, e) =>
+        // Un clic (ou Entrée) sur une sortie clôturée l'ouvre : on y voit ses manquants, et en mode gestion on peut les rendre.
+        _cloturees.CellClick += (_, e) =>
         {
             if (e.RowIndex >= 0 && _cloturees.Rows[e.RowIndex].Tag is SortieResume s)
             {
                 _navigation.AllerA<EcranRetour>(s.Id);
             }
         };
+        _cloturees.KeyDown += (_, e) =>
+        {
+            if (e.KeyCode == Keys.Enter && _cloturees.CurrentRow?.Tag is SortieResume s)
+            {
+                e.SuppressKeyPress = true;
+                _navigation.AllerA<EcranRetour>(s.Id);
+            }
+        };
+        _cloturees.CellMouseEnter += (_, e) => _cloturees.Cursor = e.RowIndex >= 0 ? Cursors.Hand : Cursors.Default;
         _cloturees.CellFormatting += (_, e) =>
         {
             if (e.ColumnIndex == _cloturees.Columns["intitule"]!.Index && e.CellStyle is not null)

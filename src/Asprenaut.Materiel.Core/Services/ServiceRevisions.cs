@@ -20,7 +20,8 @@ public sealed class ServiceRevisions(
     Reglages reglages,
     ServiceGestion? gestion = null,
     ServiceCompteur? compteur = null,
-    ISignalementRepository? signalements = null)
+    ISignalementRepository? signalements = null,
+    IPrestataireRepository? prestataires = null)
 {
     /// <summary>Une séance TIV prépare les blocs dont la TIV tombe au plus tard ce nombre de jours après elle.</summary>
     public const int JoursPreparationSeance = 30;
@@ -295,7 +296,7 @@ public sealed class ServiceRevisions(
             return ResultatOperation.Echec($"{equipement.Code} est dehors dans une sortie. Scannez son retour avant de le déclarer refusé.");
         }
 
-        await revisions.AjouterControleAsync(new Controle
+        var controle = new Controle
         {
             EquipementId = equipement.Id,
             Type = type,
@@ -307,10 +308,12 @@ public sealed class ServiceRevisions(
             Intervenant = (intervenant ?? "").Trim(),
             Composant = composantVise,
             Notes = (notes ?? "").Trim(),
-        }, ct);
+        };
+        await revisions.AjouterControleAsync(controle, ct);
 
-        // Intervention faite : l'équipement quitte la séance TIV où il était prévu.
+        // Intervention faite : l'équipement quitte la séance TIV où il était prévu, et sa révision passe dans « Fait ».
         await revisions.RetirerDesSeancesAsync(equipement.Id, ct);
+        await TerminerSuiviAsync(equipement.Id, controle.Id, date, ct);
 
         // Et le problème signalé est traité. S'il avait mis l'équipement hors service, une intervention non refusée
         // le remet en service (hors atelier : c'est le retour d'atelier qui s'en charge).
@@ -359,7 +362,26 @@ public sealed class ServiceRevisions(
         _ => "Refusé",
     };
 
-    // ---------------------------------------------------------------- Tableau (À prévoir → Planifié → En atelier → Fait)
+    /// <summary>La révision en cours de l'équipement passe dans « Fait » (sinon une ligne « Fait » est créée pour cette intervention).</summary>
+    private async Task TerminerSuiviAsync(long equipementId, long controleId, DateOnly date, CancellationToken ct)
+    {
+        var suivi = await revisions.ObtenirSuiviEnCoursAsync(equipementId, ct);
+        var nouveau = suivi is null;
+        suivi ??= new SuiviRevision { EquipementId = equipementId, CreeLe = horloge.MaintenantUtc };
+        suivi.Etape = EtapeRevision.Fait;
+        suivi.ControleId = controleId;
+        suivi.DateFait = date;
+        if (nouveau)
+        {
+            await revisions.AjouterSuiviAsync(suivi, ct);
+        }
+        else
+        {
+            await revisions.MettreAJourSuiviAsync(suivi, ct);
+        }
+    }
+
+    // ---------------------------------------------------------------- Tableau (À prévoir → Interne → À envoyer → Chez le prestataire → Fait)
 
     /// <summary>Interventions récentes montrées dans « Fait ».</summary>
     public const int JoursFait = 30;
@@ -373,9 +395,10 @@ public sealed class ServiceRevisions(
     };
 
     /// <summary>
-    /// Tableau des révisions. À prévoir : échéances à 90 jours ou dépassées, et 90 % du seuil d'utilisations (hors atelier,
-    /// et hors TIV déjà prévues à la séance). Planifié : blocs ajoutés à la prochaine séance TIV. En atelier : passages en cours.
-    /// Fait : interventions des 30 derniers jours. « Bloqué pour les sorties » suit les réglages (révision dépassée, seuil atteint).
+    /// Tableau des révisions. À prévoir (calculé) : échéances à 90 jours ou dépassées, 90 % du seuil d'utilisations, problèmes
+    /// signalés, sauf pour le matériel déjà engagé dans une révision. Réparation interne, À envoyer, Chez le prestataire : la
+    /// révision en cours de l'équipement (table revision). Fait : interventions des 30 derniers jours, non archivées.
+    /// « Bloqué pour les sorties » suit les réglages (révision dépassée, seuil atteint) ou un signalement « Hors service ».
     /// </summary>
     public async Task<TableauRevisions> TableauAsync(CancellationToken ct = default)
     {
@@ -384,27 +407,29 @@ public sealed class ServiceRevisions(
         var parId = inventaire.ToDictionary(e => e.EquipementId);
         var echeances = await ListerEcheancesAsync(ct);
         var usages = compteur is null ? new Dictionary<long, UsageEquipement>() : await compteur.ListerUsagesAsync(inventaire, ct);
-        var atelier = await revisions.ListerAtelierEnCoursAsync(ct);
         var seance = await ProchaineSeanceAsync(ct);
-        var planifies = seance is null ? [] : (await revisions.ListerPlanifiesAsync(seance.Seance.Id, ct)).ToHashSet();
-        var enAtelier = atelier.Select(a => a.EquipementId).ToHashSet();
+        var suivis = await revisions.ListerSuivisAsync(aujourdHui.AddDays(-JoursFait), ct);
+        var enCours = suivis.Where(s => s.Etape != EtapeRevision.Fait).GroupBy(s => s.EquipementId).ToDictionary(g => g.Key, g => g.First());
+        var ouverts = signalements is null ? [] : (await signalements.ListerOuvertsAsync(ct)).GroupBy(s => s.EquipementId).ToDictionary(g => g.Key, g => g.First());
+
+        // Déjà engagé dans une révision (ou en atelier sans révision enregistrée) : plus dans « À prévoir ».
+        var engages = enCours.Keys.Concat((await revisions.ListerAtelierEnCoursAsync(ct)).Select(a => a.EquipementId)).ToHashSet();
 
         var cartes = new List<CarteRevision>();
         // Hors service (refusé) : il ne sortira plus, rien à prévoir ; il reste visible dans « Fait ».
-        foreach (var l in echeances.Where(l => l.Etat != EtatEcheance.AJour && !enAtelier.Contains(l.EquipementId)
-                     && parId.TryGetValue(l.EquipementId, out var eq) && eq.Etat == EtatEquipement.EnService
-                     && !(l.Type == TypeControle.Tiv && !l.ParUsage && planifies.Contains(l.EquipementId))))
+        foreach (var l in echeances.Where(l => l.Etat != EtatEcheance.AJour && !engages.Contains(l.EquipementId)
+                     && parId.TryGetValue(l.EquipementId, out var eq) && eq.Etat == EtatEquipement.EnService))
         {
             cartes.Add(Carte(EtapeRevision.APrevoir, l, usages.GetValueOrDefault(l.EquipementId)));
         }
 
-        // Problèmes signalés par les moniteurs : en tête de « À prévoir » (même hors service), sauf en atelier.
+        // Problèmes signalés par les moniteurs : en tête de « À prévoir » (même hors service), sauf déjà engagés.
         if (signalements is not null)
         {
             var signales = new List<CarteRevision>();
-            foreach (var s in await signalements.ListerOuvertsAsync(ct))
+            foreach (var s in ouverts.Values)
             {
-                if (!parId.TryGetValue(s.EquipementId, out var e) || e.Etat == EtatEquipement.Reforme || enAtelier.Contains(s.EquipementId))
+                if (!parId.TryGetValue(s.EquipementId, out var e) || e.Etat == EtatEquipement.Reforme || engages.Contains(s.EquipementId))
                 {
                     continue;
                 }
@@ -426,41 +451,19 @@ public sealed class ServiceRevisions(
             cartes.InsertRange(0, signales);
         }
 
-        foreach (var id in planifies.Where(id => parId.ContainsKey(id) && !enAtelier.Contains(id)))
+        // Révisions en cours : réparation interne, à envoyer, chez le prestataire.
+        foreach (var s in enCours.Values.OrderBy(s => s.DateEnvoi ?? DateOnly.MaxValue).ThenBy(s => s.CreeLe).ThenBy(s => s.Id))
         {
-            var e = parId[id];
-            var tiv = echeances.FirstOrDefault(l => l.EquipementId == id && l.Type == TypeControle.Tiv && !l.ParUsage);
-            cartes.Add(tiv is not null
-                ? Carte(EtapeRevision.Planifie, tiv, null)
-                : new CarteRevision(EtapeRevision.Planifie, id, e.Code, e.Libelle, e.Categorie, "TIV", TypeControle.Tiv, LibelleControle(TypeControle.Tiv, e.Categorie),
-                    e.DateProchaineRevision is { } d ? $"Échéance {Mois(d)}" : "Pas d'échéance connue", EtatCarte.APlanifier, "Planifié", false, null));
-        }
-
-        foreach (var a in atelier)
-        {
-            var e = parId.GetValueOrDefault(a.EquipementId);
-            var categorie = e?.Categorie ?? "";
-            var pire = echeances.Where(l => l.EquipementId == a.EquipementId).OrderBy(l => l.Etat).FirstOrDefault();
-            var type = pire?.Type ?? (EstBloc(categorie) ? TypeControle.Requalification : TypeControle.Revision);
-            var detail = $"{a.Prestataire} · envoyé le {a.EnvoyeLe.ToString("dd/MM", Libelles.Culture)}"
-                + (a.RetourPrevu is { } r ? $" · retour prévu {r.ToString("dd/MM", Libelles.Culture)}" : "");
-            var (etat, badge) = pire?.Etat switch
+            if (parId.TryGetValue(s.EquipementId, out var e))
             {
-                EtatEcheance.EnRetard => (EtatCarte.EnRetard, "En retard"),
-                EtatEcheance.CeMois => (EtatCarte.CeMois, "Ce mois-ci"),
-                _ => (EtatCarte.EnAtelier, "En atelier"),
-            };
-            cartes.Add(new CarteRevision(EtapeRevision.EnAtelier, a.EquipementId, a.Code, a.Libelle, categorie,
-                pire is null ? Famille(type, categorie) : FamilleDe(pire), type,
-                string.IsNullOrWhiteSpace(a.Motif) ? pire?.Controle ?? LibelleControle(type, categorie) : a.Motif,
-                detail, etat, badge, false, null, a.PassageId, a.Prestataire));
+                cartes.Add(CarteSuivi(s, e, echeances, usages.GetValueOrDefault(s.EquipementId), ouverts.GetValueOrDefault(s.EquipementId), seance));
+            }
         }
 
-        var faits = (await revisions.ListerControlesPeriodeAsync(aujourdHui.AddDays(-JoursFait), aujourdHui, ct))
-            .OrderByDescending(c => c.DateControle).ThenByDescending(c => c.Id).Take(12);
-        foreach (var c in faits)
+        var controles = (await revisions.ListerControlesPeriodeAsync(aujourdHui.AddDays(-JoursFait), aujourdHui, ct)).ToDictionary(c => c.Id);
+        foreach (var s in suivis.Where(s => s.Etape == EtapeRevision.Fait).OrderByDescending(s => s.DateFait).ThenByDescending(s => s.Id))
         {
-            if (!parId.TryGetValue(c.EquipementId, out var e))
+            if (!parId.TryGetValue(s.EquipementId, out var e) || s.ControleId is not { } controleId || !controles.TryGetValue(controleId, out var c))
             {
                 continue;
             }
@@ -479,10 +482,243 @@ public sealed class ServiceRevisions(
                 _ => (EtatCarte.HorsService, "Hors service"),
             };
             cartes.Add(new CarteRevision(EtapeRevision.Fait, e.EquipementId, e.Code, e.Libelle, e.Categorie, Famille(c.Type, e.Categorie), c.Type,
-                c.Nature.Length > 0 ? c.Nature : LibelleControle(c.Type, e.Categorie), detail, etat, badge, false, null));
+                c.Nature.Length > 0 ? c.Nature : LibelleControle(c.Type, e.Categorie), detail, etat, badge, false, null, SuiviId: s.Id));
         }
 
         return new TableauRevisions(seance, cartes);
+    }
+
+    /// <summary>
+    /// Carte d'une révision en cours : l'échéance la plus urgente de l'équipement donne la pastille, la barre d'utilisations et
+    /// le blocage ; la révision donne le motif, le prestataire, la note d'envoi et les dates.
+    /// </summary>
+    private CarteRevision CarteSuivi(SuiviRevision s, LigneInventaire e, IReadOnlyList<LigneEcheance> echeances, UsageEquipement? usage,
+        Signalement? signalement, ProchaineSeance? seance)
+    {
+        var aujourdHui = horloge.AujourdHui;
+        var pire = echeances.Where(l => l.EquipementId == e.EquipementId && l.Etat != EtatEcheance.AJour).OrderBy(l => l.Etat).FirstOrDefault();
+        var type = pire?.Type ?? TypesPour(e.Categorie)[0];
+        var horsService = signalement?.Gravite == GraviteSignalement.HorsService;
+        var baseCarte = pire is not null
+            ? Carte(s.Etape, pire, usage)
+            : new CarteRevision(s.Etape, e.EquipementId, e.Code, e.Libelle, e.Categorie,
+                signalement is not null ? FamilleSignalement : Famille(type, e.Categorie), type,
+                signalement?.Cause ?? LibelleControle(type, e.Categorie), "",
+                signalement is null ? EtatCarte.EnAtelier : horsService ? EtatCarte.HorsService : EtatCarte.ASurveiller,
+                signalement is null ? "" : ServiceSignalements.Libelle(signalement.Gravite), false, null);
+
+        var detail = s.Etape switch
+        {
+            EtapeRevision.Interne when s.SeanceTiv => seance is { } prochaine
+                ? $"Séance TIV du {prochaine.Seance.DateSeance.ToString("dd/MM", Libelles.Culture)}"
+                : "Séance TIV à planifier",
+            EtapeRevision.Interne => string.Join(" · ", new[] { s.IntervenantInterne.Length > 0 ? $"Par {s.IntervenantInterne}" : "", baseCarte.Detail }
+                .Where(t => t.Length > 0)),
+            _ => baseCarte.Detail,
+        };
+
+        return baseCarte with
+        {
+            Controle = s.Motif.Length > 0 ? s.Motif : baseCarte.Controle,
+            Detail = detail,
+            Bloque = baseCarte.Bloque || horsService,
+            Signalement = signalement is not null,
+            SuiviId = s.Id,
+            PassageAtelierId = s.AtelierId,
+            Prestataire = s.Prestataire.Length > 0 ? s.Prestataire : null,
+            NoteEnvoi = s.NoteEnvoi,
+            DateEnvoi = s.DateEnvoi,
+            DateRetourPrevue = s.DateRetourPrevue,
+            JoursDehors = s.DateEnvoi is { } envoi ? Math.Max(0, aujourdHui.DayNumber - envoi.DayNumber) : null,
+            RetourEnRetard = RetourEnRetard(s.Etape, s.DateRetourPrevue, aujourdHui),
+            SeanceTiv = s.SeanceTiv,
+        };
+    }
+
+    /// <summary>Nom de la colonne : « À prévoir », « Réparation interne », « À envoyer », « Chez le prestataire », « Fait ».</summary>
+    public static string LibelleEtape(EtapeRevision etape) => etape switch
+    {
+        EtapeRevision.APrevoir => "À prévoir",
+        EtapeRevision.Interne => "Réparation interne",
+        EtapeRevision.AEnvoyer => "À envoyer",
+        EtapeRevision.ChezPrestataire => "Chez le prestataire",
+        _ => "Fait",
+    };
+
+    /// <summary>Retour en retard : toujours chez le prestataire alors que la date de retour prévue est passée.</summary>
+    public static bool RetourEnRetard(EtapeRevision etape, DateOnly? retourPrevu, DateOnly aujourdHui) =>
+        etape == EtapeRevision.ChezPrestataire && retourPrevu is { } prevu && prevu < aujourdHui;
+
+    // ---------------------------------------------------------------- Transitions
+
+    /// <summary>« Réparer au club » : depuis À prévoir ou À envoyer, la révision passe en réparation interne (responsable matériel).</summary>
+    public async Task<ResultatOperation> ReparerAuClubAsync(long equipementId, string? motif = null, CancellationToken ct = default)
+    {
+        if (gestion?.Exiger(ActionProtegee.Revisions) is { Reussi: false } refus)
+        {
+            return refus;
+        }
+
+        if (await equipements.ObtenirAsync(equipementId, ct) is not { } equipement)
+        {
+            return ResultatOperation.Echec("Équipement introuvable.");
+        }
+
+        if (equipement.Etat == EtatEquipement.Reforme)
+        {
+            return ResultatOperation.Echec($"{equipement.Code} est réformé.");
+        }
+
+        var suivi = await revisions.ObtenirSuiviEnCoursAsync(equipementId, ct);
+        switch (suivi?.Etape)
+        {
+            case EtapeRevision.ChezPrestataire:
+                return ResultatOperation.Echec($"{equipement.Code} est chez {NomOuPrestataire(suivi.Prestataire)} : enregistrez d'abord son retour.");
+            case EtapeRevision.Interne:
+                return ResultatOperation.Echec($"{equipement.Code} est déjà en réparation au club.");
+        }
+
+        var intervenant = string.IsNullOrWhiteSpace(reglages.ResponsableMateriel) ? "le responsable matériel" : reglages.ResponsableMateriel.Trim();
+        var nouveau = suivi is null;
+        suivi ??= new SuiviRevision { EquipementId = equipementId, CreeLe = horloge.MaintenantUtc, Motif = (motif ?? "").Trim() };
+        suivi.Etape = EtapeRevision.Interne;
+        suivi.PrestataireId = null;
+        suivi.Prestataire = "";
+        suivi.NoteEnvoi = "";
+        suivi.SeanceTiv = false;
+        suivi.IntervenantInterne = intervenant;
+        await EnregistrerSuiviAsync(suivi, nouveau, ct);
+        await JournaliserAsync(ActionsJournal.RevisionEtape, $"{equipement.Code} : réparation au club, par {intervenant}", ct, equipementId);
+        return ResultatOperation.Ok($"{equipement.Designation} : réparation au club.", suivi.Id);
+    }
+
+    /// <summary>
+    /// « Envoyer chez un prestataire » : depuis À prévoir ou Réparation interne (pas un bloc prévu à la séance TIV), la
+    /// révision passe dans « À envoyer ». Prestataire obligatoire (actif), note d'envoi facultative. L'équipement reste au club.
+    /// </summary>
+    public async Task<ResultatOperation> EnvoyerChezPrestataireAsync(long equipementId, long? prestataireId, string? noteEnvoi, string? motif = null, CancellationToken ct = default)
+    {
+        if (gestion?.Exiger(ActionProtegee.Revisions) is { Reussi: false } refus)
+        {
+            return refus;
+        }
+
+        if (prestataireId is not { } idPrestataire || prestataires is null
+            || await prestataires.ObtenirAsync(idPrestataire, ct) is not { Actif: true } prestataire)
+        {
+            return ResultatOperation.Echec("Choisissez le magasin ou l'organisme.");
+        }
+
+        if (await equipements.ObtenirAsync(equipementId, ct) is not { } equipement)
+        {
+            return ResultatOperation.Echec("Équipement introuvable.");
+        }
+
+        if (equipement.Etat == EtatEquipement.Reforme)
+        {
+            return ResultatOperation.Echec($"{equipement.Code} est réformé.");
+        }
+
+        var note = (noteEnvoi ?? "").Trim();
+        if (note.Length > LongueurNoteEnvoi)
+        {
+            return ResultatOperation.Echec($"La note d'envoi ne doit pas dépasser {LongueurNoteEnvoi} caractères.");
+        }
+
+        var suivi = await revisions.ObtenirSuiviEnCoursAsync(equipementId, ct);
+        if (suivi is { Etape: EtapeRevision.ChezPrestataire })
+        {
+            return ResultatOperation.Echec($"{equipement.Code} est déjà chez {NomOuPrestataire(suivi.Prestataire)}.");
+        }
+
+        if (suivi is { Etape: EtapeRevision.Interne, SeanceTiv: true })
+        {
+            return ResultatOperation.Echec($"{equipement.Code} est prévu à la séance TIV : la TIV se fait au club.");
+        }
+
+        var nouveau = suivi is null;
+        suivi ??= new SuiviRevision { EquipementId = equipementId, CreeLe = horloge.MaintenantUtc, Motif = (motif ?? "").Trim() };
+        suivi.Etape = EtapeRevision.AEnvoyer;
+        suivi.PrestataireId = prestataire.Id;
+        suivi.Prestataire = prestataire.Nom;
+        suivi.NoteEnvoi = note;
+        suivi.IntervenantInterne = "";
+        suivi.SeanceTiv = false;
+        await EnregistrerSuiviAsync(suivi, nouveau, ct);
+        await JournaliserAsync(ActionsJournal.RevisionEtape,
+            $"{equipement.Code} : à envoyer chez {prestataire.Nom}{(note.Length > 0 ? $" ({note})" : "")}", ct, equipementId);
+        return ResultatOperation.Ok($"{equipement.Designation} : à envoyer chez {prestataire.Nom}. Il reste au club jusqu'au départ.", suivi.Id);
+    }
+
+    /// <summary>Note d'envoi : longueur maximale.</summary>
+    public const int LongueurNoteEnvoi = 120;
+
+    /// <summary>
+    /// « Marquer comme parti » : d'À envoyer à Chez le prestataire. Date d'envoi = aujourd'hui, retour prévu facultatif (pas passé).
+    /// Ouvre un passage en atelier : l'équipement est hors service jusqu'à son retour. Refusé s'il est dehors dans une sortie.
+    /// </summary>
+    public async Task<ResultatOperation> MarquerPartiAsync(long equipementId, DateOnly? retourPrevu, CancellationToken ct = default)
+    {
+        if (gestion?.Exiger(ActionProtegee.Revisions) is { Reussi: false } refus)
+        {
+            return refus;
+        }
+
+        if (await equipements.ObtenirAsync(equipementId, ct) is not { } equipement)
+        {
+            return ResultatOperation.Echec("Équipement introuvable.");
+        }
+
+        if (await revisions.ObtenirSuiviEnCoursAsync(equipementId, ct) is not { Etape: EtapeRevision.AEnvoyer } suivi)
+        {
+            return ResultatOperation.Echec($"{equipement.Code} n'est pas dans « À envoyer ».");
+        }
+
+        var ouverture = await OuvrirPassageAsync(equipement, suivi.Prestataire, suivi.Motif, retourPrevu, ct);
+        if (!ouverture.Reussi)
+        {
+            return ouverture;
+        }
+
+        suivi.Etape = EtapeRevision.ChezPrestataire;
+        suivi.DateEnvoi = horloge.AujourdHui;
+        suivi.DateRetourPrevue = retourPrevu;
+        suivi.AtelierId = ouverture.Id;
+        await revisions.MettreAJourSuiviAsync(suivi, ct);
+        return ResultatOperation.Ok($"{equipement.Designation} est parti chez {suivi.Prestataire}. Il est hors service jusqu'à son retour.", suivi.Id);
+    }
+
+    /// <summary>
+    /// Archive les cartes « Fait » (toutes celles de la colonne, ou une seule) : elles quittent la colonne, sans rien supprimer
+    /// (l'intervention reste dans l'Historique et la fiche EPI). Pas de code gestionnaire : aucune donnée de matériel ne change.
+    /// </summary>
+    public async Task<ResultatOperation> ArchiverAsync(IReadOnlyList<long> suiviIds, CancellationToken ct = default)
+    {
+        var n = suiviIds.Count == 0 ? 0 : await revisions.ArchiverSuivisAsync(suiviIds, true, horloge.AujourdHui, ct);
+        return n == 0
+            ? ResultatOperation.Echec("Rien à archiver.")
+            : ResultatOperation.Ok($"{Libelles.Pluriel(n, "intervention archivée", "interventions archivées")}.", n);
+    }
+
+    /// <summary>Annule l'archivage : les cartes reviennent dans « Fait ».</summary>
+    public async Task<ResultatOperation> DesarchiverAsync(IReadOnlyList<long> suiviIds, CancellationToken ct = default)
+    {
+        var n = suiviIds.Count == 0 ? 0 : await revisions.ArchiverSuivisAsync(suiviIds, false, null, ct);
+        return ResultatOperation.Ok($"{Libelles.Pluriel(n, "intervention revenue", "interventions revenues")} dans « Fait ».");
+    }
+
+    private static string NomOuPrestataire(string nom) => string.IsNullOrWhiteSpace(nom) ? "le prestataire" : nom;
+
+    private async Task EnregistrerSuiviAsync(SuiviRevision suivi, bool nouveau, CancellationToken ct)
+    {
+        if (nouveau)
+        {
+            await revisions.AjouterSuiviAsync(suivi, ct);
+        }
+        else
+        {
+            await revisions.MettreAJourSuiviAsync(suivi, ct);
+        }
     }
 
     /// <summary>Famille du filtre de Révisions pour les problèmes signalés.</summary>
@@ -517,7 +753,7 @@ public sealed class ServiceRevisions(
         return new CarteRevision(etape, l.EquipementId, l.Code, l.Libelle, l.Categorie, FamilleDe(l), l.Type, controle, detail, etat, badge, bloque, parUsage ? usage : null);
     }
 
-    /// <summary>« Ajouter à la séance TIV » : un bloc rejoint la prochaine séance (colonne « Planifié »).</summary>
+    /// <summary>« Séance TIV » : un bloc rejoint la prochaine séance (colonne « Réparation interne »).</summary>
     public async Task<ResultatOperation> AjouterASeanceAsync(long equipementId, CancellationToken ct = default)
     {
         if (gestion?.Exiger(ActionProtegee.Revisions) is { Reussi: false } refus)
@@ -546,6 +782,21 @@ public sealed class ServiceRevisions(
             return ResultatOperation.Echec($"{equipement.Code} est réformé.");
         }
 
+        var suivi = await revisions.ObtenirSuiviEnCoursAsync(equipement.Id, ct);
+        if (suivi is { Etape: EtapeRevision.ChezPrestataire })
+        {
+            return ResultatOperation.Echec($"{equipement.Code} est chez {NomOuPrestataire(suivi.Prestataire)} : enregistrez d'abord son retour.");
+        }
+
+        var nouveau = suivi is null;
+        suivi ??= new SuiviRevision { EquipementId = equipement.Id, CreeLe = horloge.MaintenantUtc };
+        suivi.Etape = EtapeRevision.Interne;
+        suivi.SeanceTiv = true;
+        suivi.IntervenantInterne = "Séance TIV";
+        suivi.PrestataireId = null;
+        suivi.Prestataire = "";
+        suivi.NoteEnvoi = "";
+        await EnregistrerSuiviAsync(suivi, nouveau, ct);
         await revisions.AjouterASeanceAsync(seance.Id, equipement.Id, ct);
         await JournaliserAsync(ActionsJournal.AjoutSeanceTiv, $"{equipement.Code} ajouté à la séance TIV du {Libelles.Date(seance.DateSeance)}", ct, equipement.Id);
         return ResultatOperation.Ok($"{equipement.Designation} ajouté à la séance TIV du {seance.DateSeance.ToString("d MMMM", Libelles.Culture)}.", equipement.Id);
@@ -561,6 +812,11 @@ public sealed class ServiceRevisions(
 
         var equipement = await equipements.ObtenirAsync(equipementId, ct);
         await revisions.RetirerDesSeancesAsync(equipementId, ct);
+        if (await revisions.ObtenirSuiviEnCoursAsync(equipementId, ct) is { Etape: EtapeRevision.Interne, SeanceTiv: true } suivi)
+        {
+            await revisions.SupprimerSuiviAsync(suivi.Id, ct); // De retour dans « À prévoir » si son échéance approche.
+        }
+
         await JournaliserAsync(ActionsJournal.RetraitSeanceTiv, $"{equipement?.Code ?? equipementId.ToString(Libelles.Culture)} retiré de la séance TIV", ct, equipementId);
         return ResultatOperation.Ok("Retiré de la séance TIV.", equipementId);
     }
@@ -582,9 +838,13 @@ public sealed class ServiceRevisions(
             return ResultatOperation.Echec("Ce passage en atelier est déjà terminé.");
         }
 
+        // Chez le prestataire : l'intervention est son retour (même saisie depuis la fiche EPI).
+        var passageOuvert = intervention.PassageAtelierId
+            ?? (await revisions.ObtenirSuiviEnCoursAsync(intervention.EquipementId, ct))?.AtelierId;
         var resultat = await EnregistrerControleAsync(intervention.EquipementId, intervention.Type, intervention.Resultat, intervention.Date,
             intervention.InspecteurId, intervention.Nature, intervention.Intervenant, intervention.Composant, intervention.Notes, ct);
-        if (!resultat.Reussi || intervention.PassageAtelierId is not { } passageAFermer)
+        if (!resultat.Reussi || passageOuvert is not { } passageAFermer
+            || await revisions.ObtenirPassageAsync(passageAFermer, ct) is not { RevenuLe: null })
         {
             return resultat;
         }
@@ -634,6 +894,36 @@ public sealed class ServiceRevisions(
             return ResultatOperation.Echec($"{equipement.Code} est réformé.");
         }
 
+        var ouverture = await OuvrirPassageAsync(equipement, prestataire, motif, retourPrevu, ct);
+        if (!ouverture.Reussi)
+        {
+            return ouverture;
+        }
+
+        // La révision passe « Chez le prestataire » (prestataire de la liste s'il porte ce nom).
+        var nom = prestataire.Trim();
+        var connu = prestataires is null ? null
+            : (await prestataires.ListerAsync(ct)).FirstOrDefault(p => string.Equals(p.Nom.Trim(), nom, StringComparison.OrdinalIgnoreCase));
+        var suivi = await revisions.ObtenirSuiviEnCoursAsync(equipement.Id, ct);
+        var nouveau = suivi is null;
+        suivi ??= new SuiviRevision { EquipementId = equipement.Id, CreeLe = horloge.MaintenantUtc, Motif = (motif ?? "").Trim() };
+        suivi.Etape = EtapeRevision.ChezPrestataire;
+        suivi.PrestataireId = connu?.Id;
+        suivi.Prestataire = connu?.Nom ?? nom;
+        suivi.SeanceTiv = false;
+        suivi.DateEnvoi = horloge.AujourdHui;
+        suivi.DateRetourPrevue = retourPrevu;
+        suivi.AtelierId = ouverture.Id;
+        await EnregistrerSuiviAsync(suivi, nouveau, ct);
+        return ResultatOperation.Ok($"{equipement.Designation} envoyé en atelier. Il est hors service jusqu'à son retour.", ouverture.Id);
+    }
+
+    /// <summary>
+    /// Ouvre un passage en atelier (envoi chez le prestataire) : refusé si l'équipement est dehors, déjà en atelier, ou si le
+    /// retour prévu est passé. L'équipement passe hors service jusqu'à son retour. Id du passage dans le résultat.
+    /// </summary>
+    private async Task<ResultatOperation> OuvrirPassageAsync(Equipement equipement, string prestataire, string? motif, DateOnly? retourPrevu, CancellationToken ct)
+    {
         if (await sorties.ObtenirAffectationDehorsAsync(equipement.Id, ct) is not null)
         {
             return ResultatOperation.Echec($"{equipement.Code} est dehors dans une sortie. Scannez son retour d'abord.");
@@ -661,7 +951,7 @@ public sealed class ServiceRevisions(
         equipement.Etat = EtatEquipement.HorsService;
         await equipements.MettreAJourAsync(equipement, ct);
         await JournaliserAsync(ActionsJournal.EnvoiAtelier, $"{equipement.Code} envoyé chez {prestataire.Trim()}", ct, equipement.Id);
-        return ResultatOperation.Ok($"{equipement.Designation} envoyé en atelier. Il est hors service jusqu'à son retour.", id);
+        return ResultatOperation.Ok("", id);
     }
 
     /// <summary>Retour d'atelier : l'équipement repasse en service.</summary>
@@ -679,6 +969,13 @@ public sealed class ServiceRevisions(
 
         passage.RevenuLe = horloge.AujourdHui;
         await revisions.MettreAJourPassageAsync(passage, ct);
+
+        // Revenu sans intervention enregistrée : la révision de ce passage est abandonnée (il revient dans « À prévoir » si besoin).
+        if (await revisions.ObtenirSuiviEnCoursAsync(passage.EquipementId, ct) is { } suivi && suivi.AtelierId == passage.Id)
+        {
+            await revisions.SupprimerSuiviAsync(suivi.Id, ct);
+        }
+
         var equipement = await equipements.ObtenirAsync(passage.EquipementId, ct);
         if (equipement is { Etat: EtatEquipement.HorsService })
         {

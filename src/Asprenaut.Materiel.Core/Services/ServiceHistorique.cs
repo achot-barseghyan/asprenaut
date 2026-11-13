@@ -53,6 +53,9 @@ public sealed class ServiceHistorique(
         [ActionsJournal.SeanceTivPlanifiee] = (TypeEvenement.Revision, "Séance TIV planifiée"),
         [ActionsJournal.AjoutSeanceTiv] = (TypeEvenement.Revision, "Ajouté à la séance TIV"),
         [ActionsJournal.RetraitSeanceTiv] = (TypeEvenement.Revision, "Retiré de la séance TIV"),
+        [ActionsJournal.RevisionEtape] = (TypeEvenement.Revision, "Révision"),
+        [ActionsJournal.PrestataireCree] = (TypeEvenement.Autre, "Prestataire ajouté"),
+        [ActionsJournal.PrestataireModifie] = (TypeEvenement.Autre, "Prestataire modifié"),
         [ActionsJournal.MoniteurCree] = (TypeEvenement.Autre, "Moniteur ajouté"),
         [ActionsJournal.MoniteurModifie] = (TypeEvenement.Autre, "Moniteur modifié"),
         [ActionsJournal.ClasseCreee] = (TypeEvenement.Autre, "Classe ajoutée"),
@@ -172,7 +175,7 @@ public sealed class ServiceHistorique(
             ActionsJournal.EquipementModifie => (equipement, l.Categorie ?? ""),
             ActionsJournal.ComposantAjoute => (equipement, SansCode(l.Details, l.Code)),
             ActionsJournal.ControleEnregistre or ActionsJournal.EnvoiAtelier or ActionsJournal.RetourAtelier
-                or ActionsJournal.AjoutSeanceTiv or ActionsJournal.RetraitSeanceTiv or ActionsJournal.ProblemeSignale =>
+                or ActionsJournal.AjoutSeanceTiv or ActionsJournal.RetraitSeanceTiv or ActionsJournal.ProblemeSignale or ActionsJournal.RevisionEtape =>
                 (equipement, SansCode(l.Details, l.Code)),
             _ => (null, ""),
         };
@@ -432,7 +435,8 @@ public sealed class ServiceHistorique(
         IReadOnlyList<Controle> Controles,
         IReadOnlyList<PassageAtelier> Ateliers,
         IReadOnlyDictionary<long, string> Noms,
-        IReadOnlyList<(Signalement Signalement, string Qui)> Signalements);
+        IReadOnlyList<(Signalement Signalement, string Qui)> Signalements,
+        IReadOnlyList<EntreeJournal> Etapes);
 
     private async Task<DonneesVie> ChargerAsync(Equipement e, CancellationToken ct)
     {
@@ -450,7 +454,9 @@ public sealed class ServiceHistorique(
             signales.Add((s, sortie?.MoniteurNom ?? "Inventaire"));
         }
 
-        return new DonneesVie(categorie, passages, controles, ateliers, noms, signales);
+        // Étapes du tableau des révisions (réparation au club, à envoyer, séance TIV), notées au journal.
+        var etapes = await journal.ListerPourEquipementAsync(e.Id, [ActionsJournal.RevisionEtape, ActionsJournal.AjoutSeanceTiv, ActionsJournal.RetraitSeanceTiv], ct);
+        return new DonneesVie(categorie, passages, controles, ateliers, noms, signales, etapes);
     }
 
     private VieEquipement ConstruireVie(Equipement e, DonneesVie d)
@@ -590,6 +596,24 @@ public sealed class ServiceHistorique(
                 s.Gravite == GraviteSignalement.HorsService ? ResultatControle.Refuse : ResultatControle.ASurveiller), 2));
         }
 
+        foreach (var j in d.Etapes)
+        {
+            // « A07 : à envoyer chez Aqua Service » → « À envoyer chez Aqua Service ».
+            var texte = j.Details;
+            var deuxPoints = texte.IndexOf(" : ", StringComparison.Ordinal);
+            if (deuxPoints >= 0)
+            {
+                texte = texte[(deuxPoints + 3)..];
+            }
+            else if (j.Action == ActionsJournal.AjoutSeanceTiv || j.Action == ActionsJournal.RetraitSeanceTiv)
+            {
+                texte = j.Action == ActionsJournal.AjoutSeanceTiv ? "Prévu à la séance TIV" : "Retiré de la séance TIV";
+            }
+
+            texte = texte.Length > 0 ? char.ToUpper(texte[0], Libelles.Culture) + texte[1..] : texte;
+            interventions.Add((new InterventionSuivie(DateOnly.FromDateTime(j.Horodatage.ToLocalTime()), ServiceInventaire.ComposantComplet,
+                texte, "—", TypeInterventionSuivie.Etape, "Étape", null), 0));
+        }
         // Les contrôles arrivent déjà du plus récent au plus ancien (date puis saisie) : le tri stable garde cet ordre.
         return interventions.OrderByDescending(i => i.Ligne.Date).ThenByDescending(i => i.Ordre).Select(i => i.Ligne).ToList();
     }

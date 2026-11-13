@@ -289,6 +289,19 @@ public sealed class JournalRepository(FabriqueConnexion fabrique) : IJournalRepo
         return lignes.AsList();
     }
 
+    public async Task<IReadOnlyList<EntreeJournal>> ListerPourEquipementAsync(long equipementId, IReadOnlyList<string> actions, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        var lignes = await cx.QueryAsync<EntreeJournal>(new CommandDefinition(
+            """
+            SELECT id, horodatage, action, details, equipement_id, sortie_id FROM journal
+            WHERE equipement_id = @equipementId AND action IN @actions
+            ORDER BY horodatage, id;
+            """,
+            new { equipementId, actions }, cancellationToken: ct));
+        return lignes.AsList();
+    }
+
     public async Task<IReadOnlyList<LigneJournal>> ListerAsync(DateTime? depuisUtc, int nombreMax, CancellationToken ct = default)
     {
         const string sql = """

@@ -85,4 +85,80 @@ public sealed class RevisionRepositoryMemoire(BaseMemoire db) : IRevisionReposit
 
     public Task<SeanceTiv?> ProchaineSeanceAsync(DateOnly aPartirDu, CancellationToken ct = default) =>
         Task.FromResult(Seances.Where(s => s.DateSeance >= aPartirDu).OrderBy(s => s.DateSeance).FirstOrDefault());
+
+    // --- Étapes (table revision) ---
+
+    public List<SuiviRevision> Suivis { get; } = [];
+
+    /// <summary>Prestataires connus, pour le nom lu avec la révision (comme la jointure SQL).</summary>
+    public List<Prestataire> Prestataires { get; } = [];
+
+    private SuiviRevision Lu(SuiviRevision s)
+    {
+        s.Prestataire = Prestataires.FirstOrDefault(p => p.Id == s.PrestataireId)?.Nom
+            ?? Passages.FirstOrDefault(p => p.Id == s.AtelierId)?.Prestataire ?? "";
+        return s;
+    }
+
+    public Task<IReadOnlyList<SuiviRevision>> ListerSuivisAsync(DateOnly faitDepuis, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<SuiviRevision>>(Suivis
+            .Where(s => s.Etape != EtapeRevision.Fait || (!s.Archive && s.DateFait >= faitDepuis))
+            .Select(Lu).ToList());
+
+    public Task<SuiviRevision?> ObtenirSuiviEnCoursAsync(long equipementId, CancellationToken ct = default) =>
+        Task.FromResult(Suivis.Where(s => s.EquipementId == equipementId && s.Etape != EtapeRevision.Fait).Select(Lu).SingleOrDefault());
+
+    public Task<SuiviRevision?> ObtenirSuiviAsync(long id, CancellationToken ct = default) =>
+        Task.FromResult(Suivis.Where(s => s.Id == id).Select(Lu).SingleOrDefault());
+
+    public Task<long> AjouterSuiviAsync(SuiviRevision suivi, CancellationToken ct = default)
+    {
+        if (suivi.Etape != EtapeRevision.Fait && Suivis.Any(s => s.EquipementId == suivi.EquipementId && s.Etape != EtapeRevision.Fait))
+        {
+            throw new InvalidOperationException("Une seule révision en cours par équipement (ux_revision_en_cours).");
+        }
+
+        suivi.Id = db.ProchainId();
+        Suivis.Add(suivi);
+        return Task.FromResult(suivi.Id);
+    }
+
+    public Task MettreAJourSuiviAsync(SuiviRevision suivi, CancellationToken ct = default) => Task.CompletedTask; // Même objet.
+
+    public Task SupprimerSuiviAsync(long id, CancellationToken ct = default)
+    {
+        Suivis.RemoveAll(s => s.Id == id && s.Etape != EtapeRevision.Fait);
+        return Task.CompletedTask;
+    }
+
+    public Task<int> ArchiverSuivisAsync(IReadOnlyList<long> ids, bool archive, DateOnly? le, CancellationToken ct = default)
+    {
+        var n = 0;
+        foreach (var s in Suivis.Where(s => ids.Contains(s.Id) && s.Etape == EtapeRevision.Fait))
+        {
+            s.Archive = archive;
+            s.DateArchive = archive ? le : null;
+            n++;
+        }
+
+        return Task.FromResult(n);
+    }
+}
+
+/// <summary>Prestataires en mémoire (partagés avec le dépôt des révisions pour le nom lu).</summary>
+public sealed class PrestataireRepositoryMemoire(BaseMemoire db, List<Prestataire> prestataires) : IPrestataireRepository
+{
+    public Task<IReadOnlyList<Prestataire>> ListerAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<Prestataire>>(prestataires.OrderByDescending(p => p.Actif).ThenBy(p => p.Nom).ToList());
+
+    public Task<Prestataire?> ObtenirAsync(long id, CancellationToken ct = default) => Task.FromResult(prestataires.FirstOrDefault(p => p.Id == id));
+
+    public Task<long> AjouterAsync(Prestataire prestataire, CancellationToken ct = default)
+    {
+        prestataire.Id = db.ProchainId();
+        prestataires.Add(prestataire);
+        return Task.FromResult(prestataire.Id);
+    }
+
+    public Task MettreAJourAsync(Prestataire prestataire, CancellationToken ct = default) => Task.CompletedTask;
 }

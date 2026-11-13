@@ -36,7 +36,18 @@ public sealed class ChampSaisie : Panel
     }
 
     // Initialisé avant le constructeur : OnLayout peut être appelé dès le premier changement de taille.
-    public TextBox Champ { get; } = new();
+    public TextBox Champ { get; } = new ZoneTexte();
+
+    /// <summary>
+    /// Texte indicatif gardé quand le champ a le focus (« Rechercher un adhérent… » sous le curseur, comme la maquette) :
+    /// Windows l'efface dès que le champ est actif.
+    /// </summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool IndicatifSiFocus
+    {
+        get => ((ZoneTexte)Champ).IndicatifSiFocus;
+        set => ((ZoneTexte)Champ).IndicatifSiFocus = value;
+    }
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public string Valeur
@@ -106,6 +117,50 @@ public sealed class ChampSaisie : Panel
         {
             var t = Dessin.Echelle(this, 20);
             Icones.Dessiner(e.Graphics, icone, new RectangleF(Padding.Left, (Height - t) / 2, t, t), Theme.AccentClair);
+        }
+    }
+}
+
+/// <summary>Zone de texte d'un <see cref="ChampSaisie"/> : peut garder son texte indicatif quand elle a le focus.</summary>
+internal sealed class ZoneTexte : TextBox
+{
+    private bool _indicatifSiFocus;
+
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool IndicatifSiFocus
+    {
+        get => _indicatifSiFocus;
+        set
+        {
+            _indicatifSiFocus = value;
+            Invalidate();
+        }
+    }
+
+    protected override void OnTextChanged(EventArgs e)
+    {
+        base.OnTextChanged(e);
+        if (_indicatifSiFocus && TextLength <= 1)
+        {
+            Invalidate(); // Premier caractère tapé ou dernier effacé : l'indicatif disparaît ou revient.
+        }
+    }
+
+    protected override void OnGotFocus(EventArgs e)
+    {
+        base.OnGotFocus(e);
+        Invalidate();
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        base.WndProc(ref m);
+        const int WmPaint = 0x000F;
+        if (m.Msg == WmPaint && _indicatifSiFocus && Focused && TextLength == 0 && PlaceholderText.Length > 0 && IsHandleCreated)
+        {
+            using var g = Graphics.FromHwnd(Handle);
+            TextRenderer.DrawText(g, PlaceholderText, Font, new Rectangle(1, 0, ClientSize.Width - 1, ClientSize.Height), Theme.TexteSecondaire,
+                TextFormatFlags.NoPadding | TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
         }
     }
 }

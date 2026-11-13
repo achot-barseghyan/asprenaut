@@ -216,11 +216,11 @@ public sealed class ServiceBilan(
     {
         var stock = inventaire
             .Where(e => e.Etat != EtatEquipement.Reforme)
-            .GroupBy(e => Groupe(e.Categorie, e.Taille))
+            .GroupBy(e => Groupe(e.Categorie, e.Taille, e.Code, e.Libelle))
             .ToDictionary(g => g.Key, g => g.Count());
 
         return passages
-            .GroupBy(p => Groupe(p.Categorie, p.Taille))
+            .GroupBy(p => Groupe(p.Categorie, p.Taille, p.Code, p.Libelle))
             .Select(g =>
             {
                 var parSortie = g.GroupBy(p => p.SortieId).Select(s => s.Select(p => p.EquipementId).Distinct().Count()).ToList();
@@ -238,9 +238,26 @@ public sealed class ServiceBilan(
             .ToList();
     }
 
-    /// <summary>« Gilets taille M », « Palmes taille 42-43 », « Détendeurs ».</summary>
-    public static string Groupe(string categorie, string? taille) =>
-        string.IsNullOrWhiteSpace(taille) ? categorie : $"{categorie} taille {taille.Trim()}";
+    /// <summary>
+    /// « Gilets taille M », « Palmes taille 42-43 », « Détendeurs adultes », « Détendeurs enfants » : les détendeurs enfant
+    /// (médaille E03, ou « enfant » dans le nom) ne remplacent pas un détendeur adulte, leur stock est compté à part.
+    /// </summary>
+    public static string Groupe(string categorie, string? taille, string? code = null, string? libelle = null)
+    {
+        var nom = EstDetendeur(categorie) ? $"{categorie} {(EstDetendeurEnfant(code, libelle) ? "enfants" : "adultes")}" : categorie;
+        return string.IsNullOrWhiteSpace(taille) ? nom : $"{nom} taille {taille.Trim()}";
+    }
+
+    private static bool EstDetendeur(string categorie)
+    {
+        var c = categorie.Trim();
+        return c.StartsWith("Détendeur", StringComparison.OrdinalIgnoreCase) || c.StartsWith("Detendeur", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Étiquette du club « E » + numéro (E03), ou « enfant » dans le nom (« Détendeur enfant »).</summary>
+    public static bool EstDetendeurEnfant(string? code, string? libelle) =>
+        System.Text.RegularExpressions.Regex.IsMatch((code ?? "").Trim(), "^E[0-9]+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+        || (libelle ?? "").Contains("enfant", StringComparison.OrdinalIgnoreCase);
 
     // ---------------------------------------------------------------- Textes
 

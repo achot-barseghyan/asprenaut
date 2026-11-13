@@ -39,6 +39,11 @@ public static class ActionsJournal
     public const string SeanceTivPlanifiee = "SeanceTivPlanifiee";
     public const string AjoutSeanceTiv = "AjoutSeanceTiv";
     public const string RetraitSeanceTiv = "RetraitSeanceTiv";
+
+    /// <summary>Révisions : changement d'étape (réparer au club, à envoyer chez un prestataire...), montré dans la fiche EPI.</summary>
+    public const string RevisionEtape = "RevisionEtape";
+    public const string PrestataireCree = "PrestataireCree";
+    public const string PrestataireModifie = "PrestataireModifie";
     public const string MoniteurCree = "MoniteurCree";
     public const string MoniteurModifie = "MoniteurModifie";
     public const string ClasseCreee = "ClasseCreee";

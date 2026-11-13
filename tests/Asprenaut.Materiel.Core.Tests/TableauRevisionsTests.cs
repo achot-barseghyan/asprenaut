@@ -3,7 +3,7 @@ using Asprenaut.Materiel.Core.Tests.Memoire;
 
 namespace Asprenaut.Materiel.Core.Tests;
 
-/// <summary>Tableau des révisions : À prévoir → Planifié → En atelier → Fait.</summary>
+/// <summary>Tableau des révisions : À prévoir → Réparation interne → À envoyer → Chez le prestataire → Fait.</summary>
 public class TableauRevisionsTests
 {
     private readonly Contexte _ctx = new();
@@ -46,7 +46,7 @@ public class TableauRevisionsTests
     }
 
     [Fact]
-    public async Task Ajouter_a_la_seance_fait_passer_le_bloc_dans_planifie()
+    public async Task La_seance_TIV_fait_passer_le_bloc_en_reparation_interne()
     {
         var bloc = _ctx.Equipement("BLOC-031", revision: Aujourdhui.AddDays(20));
         var det = _ctx.Equipement("DET-001", categorie: "Détendeurs", revision: Aujourdhui.AddDays(20));
@@ -58,7 +58,8 @@ public class TableauRevisionsTests
 
         var tableau = await TableauAsync();
         Assert.NotNull(tableau.Seance);
-        Assert.Equal(EtapeRevision.Planifie, tableau.Cartes.Single(c => c.Code == "BLOC-031").Etape);
+        var interne = tableau.Cartes.Single(c => c.Code == "BLOC-031");
+        Assert.Equal((EtapeRevision.Interne, true, $"Séance TIV du {Aujourdhui.AddDays(10).ToString("dd/MM", Libelles.Culture)}"), (interne.Etape, interne.SeanceTiv, interne.Detail));
         Assert.Contains(_ctx.Db.Journal, j => j.Action == ActionsJournal.AjoutSeanceTiv && j.EquipementId == bloc.Id);
 
         Assert.True((await _ctx.Revisions.RetirerDeSeanceAsync(bloc.Id)).Reussi);
@@ -95,8 +96,8 @@ public class TableauRevisionsTests
 
         var tableau = await TableauAsync();
         var enAtelier = tableau.Cartes.Single(c => c.Code == "DET-001");
-        Assert.Equal((EtapeRevision.EnAtelier, "En retard", "Révision"), (enAtelier.Etape, enAtelier.Badge, enAtelier.Controle));
-        Assert.StartsWith("Aqua Service · envoyé le", enAtelier.Detail, StringComparison.Ordinal);
+        Assert.Equal((EtapeRevision.ChezPrestataire, "En retard", "Révision"), (enAtelier.Etape, enAtelier.Badge, enAtelier.Controle));
+        Assert.Equal(("Aqua Service", Aujourdhui, 0), (enAtelier.Prestataire, enAtelier.DateEnvoi!.Value, enAtelier.JoursDehors!.Value));
         Assert.DoesNotContain(tableau.Cartes, c => c.Etape == EtapeRevision.APrevoir);
 
         var r = await _ctx.Revisions.EnregistrerInterventionAsync(new Intervention(

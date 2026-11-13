@@ -34,12 +34,14 @@ public sealed class EcranParametres : EcranBase
     private readonly ServiceExport _export;
     private readonly ServiceCompteur _compteur;
     private readonly ServiceTypesSortie _typesSortie;
+    private readonly ServicePrestataires _prestataires;
 
-    public EcranParametres(ServiceReglages reglages, IServiceSauvegarde sauvegardes, INavigation navigation, ParametresApplication parametres, ServiceGestion gestion, GardeGestion garde, ServiceExport export, ServiceCompteur compteur, ServiceTypesSortie typesSortie)
+    public EcranParametres(ServiceReglages reglages, IServiceSauvegarde sauvegardes, INavigation navigation, ParametresApplication parametres, ServiceGestion gestion, GardeGestion garde, ServiceExport export, ServiceCompteur compteur, ServiceTypesSortie typesSortie, ServicePrestataires prestataires)
     {
         _export = export;
         _compteur = compteur;
         _typesSortie = typesSortie;
+        _prestataires = prestataires;
         _gestion = gestion;
         _garde = garde;
         _reglages = reglages;
@@ -59,13 +61,13 @@ public sealed class EcranParametres : EcranBase
         };
         grille.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         grille.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        var cartes = new[] { CarteSecurite(), CartePistolet(), CarteRegles(), CarteCompteur(), CarteDonnees(), CarteClub(), CarteTypesSortie(), CarteAffichage(), CarteAPropos() };
+        var cartes = new[] { CarteSecurite(), CartePistolet(), CarteRegles(), CarteCompteur(), CarteDonnees(), CarteClub(), CarteTypesSortie(), CartePrestataires(), CarteAffichage(), CarteAPropos() };
         foreach (var carte in cartes[..^1]) // Toutes sauf « À propos » : leurs réglages demandent le code.
         {
             _garde.Lier(carte, ActionProtegee.Parametres);
         }
 
-        grille.SuspendLayout(); // Une seule mise en page pour les 9 cartes (sinon la grille se recalcule à chaque ajout).
+        grille.SuspendLayout(); // Une seule mise en page pour les 10 cartes (sinon la grille se recalcule à chaque ajout).
         for (var i = 0; i < cartes.Length; i++)
         {
             if (i % 2 == 0)
@@ -108,6 +110,7 @@ public sealed class EcranParametres : EcranBase
         AfficherEtatSauvegarde();
         await AfficherSeuilsAsync();
         await AfficherTypesAsync();
+        await AfficherPrestatairesAsync();
         if (parametre is VersAffichage && _carteAffichage is { } carte)
         {
             // L'écran vient d'être recréé dans le nouveau thème : on revient sur la carte du choix, une fois que
@@ -1335,6 +1338,168 @@ public sealed class EcranParametres : EcranBase
         }
 
         await AfficherTypesAsync();
+    }
+
+    // ---------------------------------------------------------------- Prestataires
+
+    private readonly TableLayoutPanel _listePrestataires = new()
+    {
+        ColumnCount = 1,
+        AutoSize = true,
+        AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        BackColor = Color.Transparent,
+        Margin = Padding.Empty,
+    };
+
+    /// <summary>
+    /// Magasins et organismes chez qui le matériel part en révision (Révisions › « Envoyer chez un prestataire »).
+    /// Jamais supprimés : on les désactive (plus proposés), les révisions passées les gardent.
+    /// </summary>
+    private CarteSection CartePrestataires()
+    {
+        var carte = new CarteSection("Prestataires", Icones.Camion, Theme.PrestataireClair);
+        var aide = Ui.Libelle("Magasins et organismes proposés dans Révisions › « Envoyer chez un prestataire ». "
+            + "Un prestataire désactivé n'est plus proposé ; les envois passés le gardent.", Theme.Police(9.75f), Theme.TexteSecondaire);
+        aide.MaximumSize = new Size(560, 0);
+        aide.Margin = new Padding(0, 0, 0, 8);
+        carte.Ajouter(aide);
+        _listePrestataires.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        carte.Ajouter(_listePrestataires);
+
+        var ajouter = new BoutonArrondi("Ajouter un prestataire", StyleBouton.Secondaire, Icones.Plus) { Margin = new Padding(0, 12, 0, 0) };
+        ajouter.Click += (_, _) => Executer(() => EditerPrestataireAsync(null));
+        carte.Ajouter(ajouter, pleineLargeur: false);
+        return carte;
+    }
+
+    private async Task AfficherPrestatairesAsync()
+    {
+        var prestataires = await _prestataires.ListerAsync();
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        _listePrestataires.SuspendLayout();
+        while (_listePrestataires.Controls.Count > 0)
+        {
+            var c = _listePrestataires.Controls[0];
+            _listePrestataires.Controls.RemoveAt(0);
+            c.Dispose();
+        }
+
+        _listePrestataires.RowStyles.Clear();
+        if (prestataires.Count == 0)
+        {
+            var vide = Ui.Libelle("Aucun prestataire pour l'instant.", Theme.Police(9.75f), Theme.TexteSecondaire);
+            vide.Margin = new Padding(0, 4, 0, 4);
+            _listePrestataires.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            _listePrestataires.Controls.Add(vide, 0, 0);
+        }
+
+        foreach (var p in prestataires)
+        {
+            var ligne = LignePrestataire(p);
+            if (IsHandleCreated)
+            {
+                Dessin.MettreALEchelle(ligne, this); // Lignes construites en pixels logiques, ajoutées après l'affichage.
+            }
+
+            _listePrestataires.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            ligne.Dock = DockStyle.Fill;
+            _listePrestataires.Controls.Add(ligne, 0, _listePrestataires.RowStyles.Count - 1);
+        }
+
+        _listePrestataires.ResumeLayout(true);
+    }
+
+    /// <summary>« Aqua Service · Magasin · 03 85… | Modifier | Désactiver ».</summary>
+    private TableLayoutPanel LignePrestataire(Prestataire p)
+    {
+        var nom = Ui.Libelle(p.Nom, Theme.PoliceTitre(10.5f), p.Actif ? Theme.Texte : Theme.TexteSecondaire);
+        nom.Margin = Padding.Empty;
+        var precision = string.Join(" · ", new[] { p.Type == TypePrestataire.Organisme ? "Organisme" : "Magasin", p.Telephone, p.Adresse, p.Actif ? "" : "désactivé" }
+            .Where(t => !string.IsNullOrWhiteSpace(t)));
+        var detail = Ui.Libelle(precision, Theme.Police(9f), Theme.TexteSecondaire);
+        detail.Margin = Padding.Empty;
+        detail.AutoEllipsis = true;
+        var textes = Ui.Pile(nom, detail);
+        textes.Anchor = AnchorStyles.Left;
+
+        var modifier = new BoutonArrondi("Modifier", StyleBouton.Secondaire) { Height = Theme.HauteurCliquable, Anchor = AnchorStyles.Right, Margin = new Padding(4, 0, 4, 0), AccessibleName = $"Modifier {p.Nom}" };
+        modifier.Click += (_, _) => Executer(() => EditerPrestataireAsync(p));
+        var actif = new BoutonArrondi(p.Actif ? $"Désactiver {p.Nom}" : $"Réactiver {p.Nom}", StyleBouton.Icone, p.Actif ? Icones.OeilBarre : Icones.Oeil)
+        {
+            Anchor = AnchorStyles.Right,
+            Margin = Padding.Empty,
+        };
+        actif.Click += (_, _) => Executer(async () =>
+        {
+            if (!Autoriser())
+            {
+                return;
+            }
+
+            var resultat = await _prestataires.ChangerActifAsync(p.Id, !p.Actif);
+            if (!resultat.Reussi)
+            {
+                Dialogues.Erreur(FindForm(), resultat.Message);
+                return;
+            }
+
+            await AfficherPrestatairesAsync();
+        });
+
+        var ligne = new CarteType
+        {
+            ColumnCount = 3,
+            RowCount = 1,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Margin = new Padding(0, 0, 0, 10),
+            Padding = new Padding(14, 12, 12, 12),
+        };
+        ligne.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        ligne.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        ligne.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        ligne.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        ligne.Controls.Add(textes, 0, 0);
+        ligne.Controls.Add(modifier, 1, 0);
+        ligne.Controls.Add(actif, 2, 0);
+        return ligne;
+    }
+
+    /// <summary>Fenêtre d'ajout (<paramref name="prestataire"/> null) ou de modification d'un prestataire.</summary>
+    private async Task EditerPrestataireAsync(Prestataire? prestataire)
+    {
+        if (!Autoriser())
+        {
+            return;
+        }
+
+        var nom = new ChampSaisie { Valeur = prestataire?.Nom ?? "", TexteIndicatif = "Ex. : Aqua Service" };
+        nom.Champ.AccessibleName = "Nom du prestataire";
+        nom.Champ.MaxLength = ServicePrestataires.LongueurNom;
+        var type = new ListeDeroulante { AccessibleName = "Type de prestataire" };
+        type.Items.Add(new Choix<TypePrestataire>(TypePrestataire.Magasin, "Magasin"));
+        type.Items.Add(new Choix<TypePrestataire>(TypePrestataire.Organisme, "Organisme (requalification)"));
+        type.SelectedIndex = prestataire?.Type == TypePrestataire.Organisme ? 1 : 0;
+        var telephone = new ChampSaisie { Valeur = prestataire?.Telephone ?? "" };
+        telephone.Champ.AccessibleName = "Téléphone";
+        var adresse = new ChampSaisie { Valeur = prestataire?.Adresse ?? "" };
+        adresse.Champ.AccessibleName = "Adresse";
+
+        using var fenetre = new FenetreFormulaire(prestataire is null ? "Ajouter un prestataire" : $"Modifier « {prestataire.Nom} »",
+            prestataire is null ? "Ajouter" : "Enregistrer", () =>
+                _prestataires.EnregistrerAsync(prestataire?.Id, nom.Valeur, (type.SelectedItem as Choix<TypePrestataire>)?.Valeur ?? TypePrestataire.Magasin,
+                    telephone.Valeur, adresse.Valeur));
+        fenetre.DeuxChamps("Nom", nom, "Type", type);
+        fenetre.DeuxChamps("Téléphone (facultatif)", telephone, "Adresse (facultatif)", adresse);
+        fenetre.Shown += (_, _) => nom.Champ.Focus();
+        if (fenetre.ShowDialog(FindForm()) == DialogResult.OK)
+        {
+            await AfficherPrestatairesAsync();
+        }
     }
 
     // ---------------------------------------------------------------- À propos

@@ -13,6 +13,9 @@ public enum TypeInterventionSuivie
 
     /// <summary>Problème signalé par un moniteur (table signalement).</summary>
     Signalement,
+
+    /// <summary>Étape du tableau des révisions (réparation au club, à envoyer chez un prestataire), d'après le journal.</summary>
+    Etape,
 }
 
 /// <summary>D'où vient un composant ajouté à un détendeur.</summary>

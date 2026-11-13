@@ -50,6 +50,15 @@ public static class Icones
     public const string OeilBarre = "M3 3l18 18M10.6 6.1A10 10 0 0 1 12 6c6 0 10 6 10 6a17 17 0 0 1-3.2 3.8M6.1 6.9C3.6 8.6 2 12 2 12s4 6 10 6a9.7 9.7 0 0 0 4-.9";
     public const string Corbeille ="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6";
     public const string Fleche = "M5 12h14M13 6l6 6-6 6";
+
+    /// <summary>Maison « au club » (Révisions).</summary>
+    public const string Maison = "M3 11l9-7 9 7M5 10v10h14V10M10 20v-6h4v6";
+
+    /// <summary>Camion « chez le prestataire » (Révisions).</summary>
+    public const string Camion = "M3 6h11v10H3zM14 9h4l3 3v4h-7M7.5 19a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM17.5 19a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z";
+
+    /// <summary>Boîte d'archive (« Archiver » dans la colonne Fait).</summary>
+    public const string Archive = "M3 7h18v4H3zM5 11v9h14v-9M10 15h4";
     public const string Coche = "M5 12l5 5 9-10";
     public const string Croix = "M6 6l12 12M18 6L6 18";
     public const string ChevronGauche = "M15 6l-6 6 6 6";

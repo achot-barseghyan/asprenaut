@@ -30,6 +30,8 @@ public sealed class Contexte
     public SignalementRepositoryMemoire DepotSignalements { get; }
     public ServiceAdherents Adherents { get; }
     public AdherentRepositoryMemoire DepotAdherents { get; }
+    public ServicePrestataires Prestataires { get; }
+    public PrestataireRepositoryMemoire DepotPrestataires { get; }
 
     public Contexte()
     {
@@ -41,7 +43,7 @@ public sealed class Contexte
         DepotRevisions = new RevisionRepositoryMemoire(Db);
         Gestion = new ServiceGestion(Reglages, Stockage, Horloge);
         Compteur = new ServiceCompteur(Reglages, Stockage, equipements, categories, Gestion);
-        Scan = new ServiceScan(equipements, sorties, journal, Horloge, Reglages, Compteur);
+        Scan = new ServiceScan(equipements, sorties, journal, Horloge, Reglages, Compteur, Gestion);
         var types = new TypeSortieRepositoryMemoire(Db);
         TypesSortie = new ServiceTypesSortie(types, Gestion);
         DepotAdherents = new AdherentRepositoryMemoire(Db);
@@ -51,7 +53,9 @@ public sealed class Contexte
         ServiceReglages = new ServiceReglages(Reglages, Stockage, Sauvegardes, Gestion);
         DepotSignalements = new SignalementRepositoryMemoire(Db);
         Signalements = new ServiceSignalements(DepotSignalements, equipements, categories, sorties, DepotRevisions, journal, Horloge, Gestion);
-        Revisions = new ServiceRevisions(equipements, categories, sorties, DepotRevisions, moniteurs, journal, Horloge, Reglages, Gestion, Compteur, DepotSignalements);
+        DepotPrestataires = new PrestataireRepositoryMemoire(Db, DepotRevisions.Prestataires);
+        Prestataires = new ServicePrestataires(DepotPrestataires, journal, Horloge, Gestion);
+        Revisions = new ServiceRevisions(equipements, categories, sorties, DepotRevisions, moniteurs, journal, Horloge, Reglages, Gestion, Compteur, DepotSignalements, DepotPrestataires);
         Moniteurs = new ServiceMoniteurs(moniteurs, sorties, journal, Horloge, Gestion);
         Historique = new ServiceHistorique(journal, equipements, categories, sorties, DepotRevisions, moniteurs, Horloge, Reglages, DepotSignalements);
         Bilan = new ServiceBilan(sorties, DepotRevisions, equipements, Horloge);

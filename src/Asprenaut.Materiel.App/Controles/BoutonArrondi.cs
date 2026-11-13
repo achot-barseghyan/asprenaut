@@ -32,6 +32,12 @@ public enum StyleBouton
 
     /// <summary>Bouton jaune « Déverrouiller » du bandeau Mode consultation.</summary>
     Verrou,
+
+    /// <summary>Réparation externe (violet plein) : « Marquer comme parti », « Retour du prestataire ».</summary>
+    Prestataire,
+
+    /// <summary>Réparation externe (contour violet) : « Envoyer chez un prestataire ».</summary>
+    PrestataireContour,
 }
 
 /// <summary>Bouton dessiné à coins arrondis, au moins 44 px de haut. Garde le clavier et l'accessibilité de Button.</summary>
@@ -364,6 +370,8 @@ public class BoutonArrondi : Button, IVerrouillable
             StyleBouton.Principal => (Etat(Theme.Accent), null, Theme.TexteSurAccent, null),
             StyleBouton.Depart => (Etat(Theme.DepartClair), Etat(Theme.Depart), Theme.TexteSurDepart, null),
             StyleBouton.Verrou => (Etat(Theme.Avertissement), null, Theme.TexteSurAvertissement, null),
+            StyleBouton.Prestataire => (Etat(Theme.Prestataire), null, Theme.TexteSurPrestataire, null),
+            StyleBouton.PrestataireContour => (_survol ? Theme.Sur(parent, Theme.Prestataire, 0.14f) : null, null, Theme.PrestataireClair, Theme.Sur(parent, Theme.Prestataire, 0.55f)),
             StyleBouton.Retour => (Etat(Theme.Sur(Theme.Retour, Color.White, 0.2f)), Etat(Theme.Retour), Theme.TexteSurRetour, null),
             StyleBouton.Secondaire => (_survol ? Theme.SurfaceActive : Theme.Sur(parent, Theme.Fond, 0.45f), null, Theme.Texte, Theme.BordureForte),
             StyleBouton.Verre => (Theme.Sur(Theme.BandeauMilieu, Theme.Fond, _survol ? 0.15f : 0.35f), null, Theme.Texte, Theme.Sur(Theme.BandeauMilieu, Theme.Lumiere, 0.25f)),

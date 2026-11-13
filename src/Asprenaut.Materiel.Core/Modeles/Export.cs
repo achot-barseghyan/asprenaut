@@ -28,6 +28,12 @@ public enum GenreColonne
 
     /// <summary>ASurveiller / HorsService → À surveiller / Hors service.</summary>
     GraviteSignalement,
+
+    /// <summary>Interne / AEnvoyer... → Réparation interne / À envoyer...</summary>
+    EtapeRevision,
+
+    /// <summary>Magasin / Organisme.</summary>
+    TypePrestataire,
 }
 
 public sealed record ColonneExport(string Nom, GenreColonne Genre = GenreColonne.Texte);

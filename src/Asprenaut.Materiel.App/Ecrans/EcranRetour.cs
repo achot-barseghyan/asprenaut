@@ -162,7 +162,7 @@ public sealed class EcranRetour : EcranScanBase
         _ajouter.Visible = resume.Statut == StatutSortie.EnCours;
         _conseil.Text = cloturee
             ? resume.NbManquants > 0
-                ? $"Sortie clôturée avec {Libelles.Pluriel(resume.NbManquants, "manquant")}. Scannez un manquant s'il revient."
+                ? $"Sortie clôturée avec {Libelles.Pluriel(resume.NbManquants, "manquant")}. En mode gestion, scannez un manquant qui revient ou cliquez sur ✓ (Marquer rendu)."
                 : "Sortie clôturée : tout a été rendu."
             : toutRendu
                 ? "Tout est rentré. Vous pouvez clôturer la sortie."
@@ -245,7 +245,9 @@ public sealed class EcranRetour : EcranScanBase
             Alerte: l.Statut == StatutSortieEquipement.Manquant ? "Manquant" : null,
             CouleurAlerte: Theme.Erreur,
             ManuelId: ManuelDe(l.EquipementId),
-            Adherent: l.AdherentNom)), ouvrirManuel: OuvrirManuel); // Sortie nominative : qui l'a pris.
+            Adherent: l.AdherentNom)), // Sortie nominative : qui l'a pris.
+            Cloturee ? "Marquer rendu" : null, Icones.Coche, e => Executer(() => MarquerRenduAsync(e)), // Sortie clôturée : manquant revenu.
+            OuvrirManuel);
         // Rendu : drapeau « Signaler » sur chaque ligne ; un problème ouvert se voit en pastille et dans le détail.
         _rendu.Afficher(rendus.Select(l =>
         {
@@ -269,8 +271,33 @@ public sealed class EcranRetour : EcranScanBase
         }, OuvrirManuel);
     }
 
+    private bool Cloturee => _resume?.Statut == StatutSortie.Cloturee;
+
+    /// <summary>Sortie clôturée : un manquant revenu sans être scanné (étiquette abîmée…). Mode gestion, avec confirmation.</summary>
+    private async Task MarquerRenduAsync(ElementMateriel element)
+    {
+        if (!_garde.Exiger(FindForm(), ActionProtegee.RendreManquant, "Rendre un manquant")
+            || !Dialogues.Confirmer(FindForm(), $"Noter {element.Code} · {element.Libelle} comme rendu ?\n\nIl ne sera plus manquant dans cette sortie ni dans l'inventaire."))
+        {
+            ZoneScan.PrendreFocus();
+            return;
+        }
+
+        var resultat = await _scan.RendreManquantAsync(SortieId, element.EquipementId);
+        ZoneScan.AfficherMessage(resultat.Reussi ? NiveauResultat.Succes : NiveauResultat.Erreur, resultat.Message, element.Code);
+        await RafraichirAsync();
+        ZoneScan.PrendreFocus();
+    }
+
     protected override async Task TraiterCodeAsync(string code)
     {
+        // Sortie clôturée : rendre un manquant demande le mode gestion (le pavé du code s'ouvre).
+        if (Cloturee && !_garde.Exiger(FindForm(), ActionProtegee.RendreManquant, "Rendre un manquant"))
+        {
+            ZoneScan.AfficherMessage(NiveauResultat.Erreur, "Sortie clôturée : le code gestionnaire est nécessaire pour rendre un manquant.", code);
+            return;
+        }
+
         var resultat = await _scan.ScannerRetourAsync(SortieId, code);
         ZoneScan.AfficherResultat(resultat);
         if (resultat is { Niveau: NiveauResultat.Succes, Equipement: { } rendu })
