@@ -2,6 +2,17 @@ namespace Asprenaut.Materiel.Core.Modeles;
 
 // Modèles de lecture (projections) pour les écrans. Remplis par les dépôts.
 
+/// <summary>Une page des sorties clôturées : ses sorties, le total, la page (à partir de 1).</summary>
+public sealed record PageSorties(IReadOnlyList<SortieResume> Sorties, int Total, int Page, int ParPage)
+{
+    public int NbPages => Math.Max(1, (Total + ParPage - 1) / ParPage);
+
+    /// <summary>Rang de la première et de la dernière sortie de la page (« Sorties 13 à 24 sur 143 ») ; 0 si aucune.</summary>
+    public int Premiere => Total == 0 ? 0 : ((Page - 1) * ParPage) + 1;
+
+    public int Derniere => Math.Min(Total, Page * ParPage);
+}
+
 /// <summary>Résumé d'une sortie pour la liste des sorties.</summary>
 public sealed class SortieResume
 {
@@ -82,6 +93,19 @@ public sealed class LigneSortie
 
 /// <summary>Carte d'un moniteur : sorties de la saison et matériel encore dehors sous sa responsabilité.</summary>
 public sealed record FicheMoniteur(Moniteur Moniteur, int SortiesSaison, int NbDehors);
+
+/// <summary>Filtres de l'onglet Moniteurs (puces).</summary>
+public enum FiltreMoniteurs
+{
+    Tous,
+    Actifs,
+    InspecteursTiv,
+    MaterielDehors,
+    Inactifs,
+}
+
+/// <summary>Onglet Moniteurs : les cartes filtrées et le nombre de moniteurs de chaque filtre (après recherche).</summary>
+public sealed record ListeMoniteurs(IReadOnlyList<FicheMoniteur> Fiches, int Tous, int Actifs, int InspecteursTiv, int MaterielDehors, int Inactifs);
 
 /// <summary>Sortie en cours d'un moniteur, avec le matériel encore dehors.</summary>
 public sealed record SortieDehors(SortieResume Sortie, IReadOnlyList<LigneSortie> Dehors);

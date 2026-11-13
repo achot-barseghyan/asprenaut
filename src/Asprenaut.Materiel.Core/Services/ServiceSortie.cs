@@ -69,6 +69,22 @@ public sealed class ServiceSortie(
     public Task<IReadOnlyList<SortieResume>> ListerClotureesAsync(CancellationToken ct = default) =>
         sorties.ListerResumesAsync(cloturees: true, ct);
 
+    /// <summary>Sorties clôturées par page sur l'écran Sorties.</summary>
+    public const int SortiesParPage = 12;
+
+    /// <summary>
+    /// Une page des sorties clôturées (la plus récemment clôturée d'abord) : seules ses sorties sont lues. Page hors limites
+    /// ramenée à la première ou à la dernière.
+    /// </summary>
+    public async Task<PageSorties> ListerClotureesAsync(int page, int parPage = SortiesParPage, CancellationToken ct = default)
+    {
+        parPage = Math.Max(1, parPage);
+        var total = await sorties.CompterClotureesAsync(ct);
+        var nbPages = Math.Max(1, (total + parPage - 1) / parPage);
+        page = Math.Clamp(page, 1, nbPages);
+        return new PageSorties(await sorties.ListerClotureesAsync((page - 1) * parPage, parPage, ct), total, page, parPage);
+    }
+
     public Task<SortieResume?> ObtenirResumeAsync(long sortieId, CancellationToken ct = default) =>
         sorties.ObtenirResumeAsync(sortieId, ct);
 

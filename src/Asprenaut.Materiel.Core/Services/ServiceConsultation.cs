@@ -66,6 +66,32 @@ public sealed class ServiceMoniteurs(IMoniteurRepository moniteurs, ISortieRepos
             .ToList();
     }
 
+    /// <summary>
+    /// Onglet Moniteurs : recherche (prénom, nom, niveau, téléphone ; majuscules et accents ignorés) puis filtre
+    /// (actifs, inspecteurs TIV actifs, matériel dehors, inactifs), avec le nombre de chaque filtre après la recherche.
+    /// </summary>
+    public static ListeMoniteurs Filtrer(IEnumerable<FicheMoniteur> fiches, string? recherche, FiltreMoniteurs filtre)
+    {
+        var mots = ServiceAdherents.Simplifier(recherche ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var trouves = fiches.Where(f =>
+        {
+            var m = f.Moniteur;
+            var texte = ServiceAdherents.Simplifier($"{m.Prenom} {m.Nom} {m.Niveau} {m.Abrege} {m.Telephone}");
+            var chiffres = new string(m.Telephone.Where(char.IsDigit).ToArray());
+            return mots.All(mot => texte.Contains(mot, StringComparison.Ordinal) || (mot.All(char.IsDigit) && chiffres.Contains(mot, StringComparison.Ordinal)));
+        }).ToList();
+        var filtrees = trouves.Where(f => filtre switch
+        {
+            FiltreMoniteurs.Actifs => f.Moniteur.Actif,
+            FiltreMoniteurs.InspecteursTiv => f.Moniteur.Actif && f.Moniteur.InspecteurTiv,
+            FiltreMoniteurs.MaterielDehors => f.NbDehors > 0,
+            FiltreMoniteurs.Inactifs => !f.Moniteur.Actif,
+            _ => true,
+        }).ToList();
+        return new ListeMoniteurs(filtrees, trouves.Count, trouves.Count(f => f.Moniteur.Actif),
+            trouves.Count(f => f.Moniteur.Actif && f.Moniteur.InspecteurTiv), trouves.Count(f => f.NbDehors > 0), trouves.Count(f => !f.Moniteur.Actif));
+    }
+
     /// <summary>Fiche : matériel dehors par sortie en cours, dernières sorties clôturées.</summary>
     public async Task<DetailMoniteur?> ObtenirDetailAsync(long moniteurId, CancellationToken ct = default)
     {

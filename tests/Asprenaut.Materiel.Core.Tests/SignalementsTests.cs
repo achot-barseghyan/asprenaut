@@ -25,6 +25,50 @@ public class SignalementsTests
         Assert.Equal("Autre", ServiceSignalements.CausesPour("Lampes")[^1]);
     }
 
+    // Règle 34 : tuiles réglables par catégorie dans Paramètres ; une tuile peut rendre la précision obligatoire.
+    [Fact]
+    public async Task Les_tuiles_se_reglent_par_categorie_et_peuvent_exiger_une_precision()
+    {
+        var a07 = Detendeur();
+        var tuiles = new List<CauseSignalement>
+        {
+            new() { Libelle = "Fuite / bulles", Pictogramme = "Goutte" },
+            new() { Libelle = "Manomètre HS", Pictogramme = "Ecran" },
+            new() { Libelle = "Autre", Pictogramme = "Autre", PrecisionObligatoire = true },
+        };
+
+        Assert.True(_ctx.ServiceReglages.ChangerTuilesSignalement("détendeurs", tuiles).Reussi);
+
+        Assert.Equal(["Fuite / bulles", "Manomètre HS", "Autre"], _ctx.Signalements.Tuiles("Détendeurs").Select(t => t.Libelle));
+        Assert.Equal("Autre", ServiceSignalements.CausesPour("Gilets", _ctx.Reglages)[^1]); // Les autres catégories gardent celles d'origine.
+        Assert.True(_ctx.Stockage.Enregistrements > 0);
+
+        var refus = await SignalerAsync(a07, cause: "Autre", precision: "  ");
+        Assert.Equal("Précisez le problème : « Autre » demande une précision.", refus.Message);
+        Assert.Empty(_ctx.DepotSignalements.Signalements);
+        Assert.True((await SignalerAsync(a07, cause: "Autre", precision: "Purge du 2e étage")).Reussi);
+        Assert.True((await SignalerAsync(a07, cause: "Manomètre HS")).Reussi); // Précision facultative.
+
+        Assert.True(_ctx.ServiceReglages.RetablirTuilesSignalement("Détendeurs").Reussi);
+        Assert.Equal(ServiceSignalements.CausesPour("Détendeurs"), _ctx.Signalements.Tuiles("Détendeurs").Select(t => t.Libelle));
+    }
+
+    [Fact]
+    public void Les_tuiles_sont_verifiees_et_le_reglage_est_protege()
+    {
+        CauseSignalement T(string libelle) => new() { Libelle = libelle };
+        Assert.Equal("Gardez au moins une tuile.", _ctx.ServiceReglages.ChangerTuilesSignalement("Gilets", []).Message);
+        Assert.Equal("Donnez un nom à chaque tuile.", _ctx.ServiceReglages.ChangerTuilesSignalement("Gilets", [T(" ")]).Message);
+        Assert.Equal("« fuite » existe déjà.", _ctx.ServiceReglages.ChangerTuilesSignalement("Gilets", [T("fuite"), T("Fuite")]).Message);
+        Assert.False(_ctx.ServiceReglages.ChangerTuilesSignalement("Gilets", Enumerable.Range(1, 13).Select(i => T($"T{i}")).ToList()).Reussi);
+        Assert.False(_ctx.ServiceReglages.ChangerTuilesSignalement("Gilets", [T(new string('x', 61))]).Reussi);
+
+        Assert.True(_ctx.Gestion.DefinirCode(null, "1234", "1234").Reussi);
+        _ctx.Gestion.Verrouiller();
+        Assert.False(_ctx.ServiceReglages.ChangerTuilesSignalement("Gilets", [T("Fuite")]).Reussi);
+        Assert.Empty(_ctx.Reglages.CausesSignalement);
+    }
+
     [Fact]
     public async Task A_surveiller_est_libre_garde_l_equipement_en_service_et_note_la_sortie()
     {

@@ -92,6 +92,11 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   (`CarteEquipement`, vrais `BoutonArrondi` liés à `ActionProtegee.Revisions`), filtre par famille, champ de scan qui ouvre
   le panneau « Ajouter une intervention » en haut de page ; « Fiche › » mène à Historique (vie de l'équipement).
   `PageRevisions.OnLayout` recommence le placement si la hauteur posée a fait apparaître la barre (mise en page imbriquée ignorée).
+- **Paramètres** (`EcranParametres`) : deux onglets (`Bascule`). « Paramètres » (fonctionnement de l'app) : Sécurité, Pistolet,
+  Règles des sorties, Données et sauvegardes, Affichage, À propos. « Configuration du club » : Club, Types de sortie, Compteur
+  d'utilisation, Prestataires, Problèmes signalés — construit et rempli seulement à sa première ouverture (`AfficherOngletAsync`,
+  mis à l'échelle à ce moment-là) : la page s'ouvre deux fois plus vite. « Paramètres › Types de sortie / Club / Prestataires /
+  Problèmes signalés » dans ce document = cet onglet.
 - **Inventaire** : colonne « Utilisation » (`ServiceCompteur.ListerUtilisationsAsync` : « 64 / 80 utilisations », barre jaune à 90 %,
   rouge au seuil, pastille « SEUIL MODÈLE / ÉQUIPEMENT » selon `OrigineSeuil`, `Tableaux.PeindreUtilisation`) dans les trois jeux
   de colonnes ; nom souligné en pointillé + ligne « marque modèle · catégorie » (`Tableaux.PeindreIconeDeuxLignes`), le clic
@@ -233,7 +238,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     `ServiceMoniteurs.AbregeDe` : « Niveau 2 » → « N2 ») ; ni téléphone, ni niveau, ni TIV (jamais inspecteur). Le genre ne change
     pas à la modification. Journal `ClasseCreee` / `ClasseModifiee`. Afficher `SortieResume.LibelleResponsable`
     (« Moniteur : … » / « Classe : … »). App : onglets `Bascule` dans `EcranMoniteurs`, `ChoixResponsable` (Moniteur | Classe
-    puis la liste) dans Nouvelle sortie et Modifier la sortie. Données de démo : chargées si aucun moniteur (genre Moniteur).
+    puis la liste) dans Nouvelle sortie et Modifier la sortie. Filtres de l'écran Membres (`FiltresMembresTests`) : onglet Moniteurs, recherche (prénom, nom, niveau, téléphone, accents ignorés) et puces Tous / Actifs / Inspecteurs TIV / Matériel dehors / Inactifs (`ServiceMoniteurs.Filtrer` → `ListeMoniteurs`, nombres après la recherche) ; onglet Adhérents, recherche, liste Niveau (tous, ceux du club, « Sans niveau » = `ServiceAdherents.SansNiveau`) et puces Tous / Matériel dehors / Non rendu / Nitrox / Désactivés ; pas de filtre pour les classes ; chaque onglet a sa recherche. Données de démo : chargées si aucun moniteur (genre Moniteur).
 25. Manuels (`ServiceManuels`, migration 009, écran `EcranManuels`, maquette « Manuels ») : consultation libre ; ajouter, modifier,
     retirer = action protégée Matériel. Le PDF est copié dans `Manuels\` à côté de la base (`IStockageManuels`, nom déjà pris →
     « (2) ») ; l'écran lit son nombre de pages (`LecteurPdf.CompterPagesAsync`). Marque et titre obligatoires ; sommaire tapé une
@@ -279,8 +284,8 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
 28. Problèmes signalés (`ServiceSignalements`, migration 013, maquette « Retour du matériel ») : fenêtre « Problème sur A07 »
     (`Ecrans/FormulaireSignalement`, `CibleSignalement`) ouverte au retour (bouton « Signaler un problème » à côté du message
     du dernier rendu, drapeau sur chaque ligne « Rendu ») et depuis l'inventaire (drapeau de la colonne Actions). Causes selon la
-    catégorie (`CausesPour`, « Autre » en dernier ; pictogrammes `Icones.PourCause`), cause obligatoire (60 car.), précision
-    facultative (200 car.). « À surveiller » libre : l'équipement reste en service (pastille « À surveiller · cause » au-dessus des actions de l'inventaire).
+    catégorie (tuiles réglables, règle 34 ; d'origine `CausesParDefaut`, « Autre » en dernier), cause obligatoire (60 car.), précision
+    facultative (200 car.) sauf pour une tuile « précision obligatoire ». « À surveiller » libre : l'équipement reste en service (pastille « À surveiller · cause » au-dessus des actions de l'inventaire).
     « Hors service » : action protégée Révisions, refusé si dehors, met HorsService (`MisHorsService`) ; redescendre à
     « À surveiller » demande aussi le code et ne remet en service que si c'est le signalement qui l'avait arrêté (et hors atelier).
     Un seul signalement ouvert par équipement (index `ux_signalement_ouvert`) : signaler de nouveau le modifie. Réformé refusé.
@@ -321,16 +326,21 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     dehors / Non rendu ; fiche (matériel en ce moment, non rendu, dernières sorties nominatives, Modifier) ; ajouter et importer
     demandent le code (action Moniteurs). Import (`ImporterAsync`, `LireTableau`) : en-tête « Nom » + « Prénom » (Niveau, Licence,
     Téléphone facultatifs), mise à jour par licence (sinon nom + prénom), ajout des autres, personne retiré ; fichier .xlsx ou .csv
-    lu par `Infrastructure/LecteurTableur` (zip XML, sans bibliothèque). Export : `adherents.csv`, colonne Adhérent du matériel des sorties.
+    lu par `Infrastructure/LecteurTableur` (zip XML, sans bibliothèque). « Modèle Excel à remplir » (libre, onglet Adhérents) : classeur vide écrit par `Infrastructure/EcrivainTableur` (zip XML, sans bibliothèque ; en-têtes `ServiceAdherents.ColonnesModele(niveaux)` = ceux de l'import, listes Niveau et Nitrox rangées dans une feuille cachée « Listes », première ligne figée, cases au format texte, bulle d'aide par colonne, liste Oui / Non pour Nitrox, feuille « Mode d'emploi » `ModeEmploiModele`), à donner au club puis à réimporter ; nom `NomFichierModele`. Export : `adherents.csv`, colonne Adhérent du matériel des sorties.
 
 31. Nitrox et adhérents désactivés (migration 015) : case « Nitrox » de la fiche des blocs et des détendeurs seulement
     (`ServiceInventaire.PeutEtreNitrox`, vidée pour les autres catégories, journal « nitrox » / « plus nitrox ») ; « Certifié nitrox »
-    sur l'adhérent (formulaire, pastille NITROX, colonne « Nitrox » oui / non de l'import : absente = inchangé). Au départ d'une sortie
+    sur l'adhérent (formulaire, pastille NITROX, colonne « Nitrox » oui / non de l'import : absente ou case vide = inchangé). Au départ d'une sortie
     nominative, `ServiceAdherents.RefusPour` (utilisé par `AttribuerAdherentAsync`) refuse un adhérent désactivé et un équipement nitrox
     pour un adhérent non certifié : l'équipement reste en attente. Le panneau l'annonce (« nitrox : adhérent certifié nitrox »),
     met les certifiés en premier et marque les autres « pas certifié nitrox ». Fiche adhérent : « Désactiver » (confirmation) /
     « Réactiver » (`ChangerActifAsync`, action Moniteurs) ; désactivé : ne sort plus de matériel, gardé dans la liste (à la fin)
     pour être réactivé. Sortie non nominative : pas de contrôle nitrox.
+    Niveaux (ServiceAdherents.Niveaux, Reglages.NiveauxAdherents, liste d'origine Reglages.NiveauxParDefaut FFESSM, réglée dans
+    Paramètres › Configuration du club › Niveaux des adhérents, ServiceReglages.ChangerNiveauxAdherents : 1 à 30, 30 car., sans doublon) :
+    liste déroulante du formulaire ; EnregistrerAsync n'accepte qu'un niveau de la liste (NiveauReconnu : majuscules, accents,
+    espaces et ponctuation ignorés, « N2 » / « niv 2 » → « Niveau 2 ») ou l'ancien niveau inchangé (« hors liste ») ; l'import ramène
+    le niveau à la liste, un inconnu est laissé vide (l'ancien gardé) et compté dans le message.
 
 32. Manquants retrouvés (`ManquantsTests`) : un équipement Manquant scanné au départ d'une sortie est d'abord noté Rendu dans
     chaque sortie où il manquait (journal `ManquantRetrouve` relié à l'ancienne sortie, message « A01 était manquant (sortie
@@ -358,12 +368,27 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     60 car. ; jamais supprimés, désactivés (plus proposés). Couleurs `Theme.Prestataire` / `PrestataireClair` /
     `TexteSurPrestataire`, boutons `StyleBouton.Prestataire` et `PrestataireContour`. Export : prestataires.csv, revisions.csv.
 
+34. Tuiles des problèmes signalés (Paramètres › Problèmes signalés, `SignalementsTests`) : par catégorie (nom exact, majuscules
+    ignorées), une liste de `CauseSignalement` (libellé, pictogramme = clé de `Icones.PictosCause`, `PrecisionObligatoire`) dans
+    `Reglages.CausesSignalement` (parametres.json) ; catégorie sans réglage : `ServiceSignalements.CausesParDefaut`.
+    `ServiceReglages.ChangerTuilesSignalement` (action Paramètres, `VerifierTuiles` : 1 à 12 tuiles, libellé obligatoire de 60 car.
+    au plus, sans doublon) et `RetablirTuilesSignalement`. `ServiceSignalements.Tuiles(categorie)` alimente la fenêtre ; `SignalerAsync`
+    refuse une précision vide pour une tuile « précision obligatoire » (« Précisez le problème : « Autre » demande une précision. »),
+    et la fenêtre l'annonce au-dessus du champ. Carte : catégorie, puis `ListeTuiles`, un seul contrôle dessiné pour toutes les
+    lignes (des contrôles par ligne ralentissaient l'ouverture de Paramètres) : monter / descendre / modifier / supprimer et case
+    « Précision obligatoire » retrouvés par calcul, clavier (flèches, Ctrl + flèches, Espace, Entrée, Suppr) ; sa hauteur est posée
+    (un TableLayoutPanel en Dock Fill garde la hauteur du contrôle) et la carte suit.
+
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
 à côté de la base d'essai : les essais ne touchent jamais les réglages réels. Préfixe des étiquettes : `CodeScanne.Nettoyer(brut, prefixe)`.
 Sauvegardes : `IServiceSauvegarde` (dossier modifiable, dernière sauvegarde, `RestaurerAsync` qui vérifie le fichier,
 copie les données actuelles en `materiel_…_avant-restauration.db`, puis réapplique les migrations).
 Étiquettes QR : section retirée de l'écran Paramètres à la demande du demandeur (impression non prévue pour l'instant).
+
+Écran Sorties : les sorties clôturées sont paginées (`ServiceSortie.ListerClotureesAsync(page)` → `PageSorties`, `SortiesParPage` = 12,
+la plus récemment clôturée d'abord ; `ISortieRepository.ListerClotureesAsync(decalage, nombre)` ne lit que les sorties de la page,
+`CompterClotureesAsync` le total) : barre « Sorties 13 à 24 sur 143 · page 2 / 12 » et « ‹ Précédentes / Suivantes › » sous le tableau.
 
 Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnCours` (scan retour ; ajout de matériel encore possible)
 → `Cloturer` → `Cloturee` (scan retour encore possible pour les manquants).

@@ -43,3 +43,19 @@ public sealed class Signalement
 
 /// <summary>Signalement à enregistrer (fenêtre « Problème sur A07 »). Remplace le signalement ouvert de l'équipement s'il y en a un.</summary>
 public sealed record NouveauSignalement(long EquipementId, long? SortieId, string Cause, GraviteSignalement Gravite, string? Precision = null);
+
+/// <summary>
+/// Une tuile de la fenêtre « Problème sur A07 » : libellé, pictogramme (clé de <c>Icones.PictosCause</c> dans l'App) et
+/// précision obligatoire ou non. Réglable par catégorie dans Paramètres › Problèmes signalés (<see cref="Reglages.CausesSignalement"/>).
+/// </summary>
+public sealed class CauseSignalement
+{
+    public string Libelle { get; set; } = "";
+
+    public string Pictogramme { get; set; } = "Autre";
+
+    /// <summary>Le champ « Précision » doit être rempli quand cette tuile est choisie.</summary>
+    public bool PrecisionObligatoire { get; set; }
+
+    public CauseSignalement Copie() => new() { Libelle = Libelle, Pictogramme = Pictogramme, PrecisionObligatoire = PrecisionObligatoire };
+}

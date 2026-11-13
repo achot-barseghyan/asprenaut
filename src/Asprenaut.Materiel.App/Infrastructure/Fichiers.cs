@@ -87,6 +87,44 @@ public static class Fichiers
         return true;
     }
 
+    /// <summary>
+    /// Classeur Excel : demande où l'enregistrer, l'écrit (<paramref name="ecrire"/> reçoit le chemin), puis propose de l'ouvrir.
+    /// Vrai si le fichier a été écrit.
+    /// </summary>
+    public static async Task<bool> EnregistrerXlsxAsync(IWin32Window? proprietaire, string titre, string nomPropose, Action<string> ecrire)
+    {
+        using var dialogue = new SaveFileDialog
+        {
+            Title = titre,
+            Filter = "Classeur Excel|*.xlsx",
+            FileName = nomPropose,
+            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            OverwritePrompt = true,
+        };
+        if (dialogue.ShowDialog(proprietaire) != DialogResult.OK)
+        {
+            return false;
+        }
+
+        try
+        {
+            var chemin = dialogue.FileName;
+            await Task.Run(() => ecrire(chemin));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Dialogues.Erreur(proprietaire, "Impossible d'écrire le fichier. Est-il ouvert dans Excel ?");
+            return false;
+        }
+
+        if (Dialogues.Confirmer(proprietaire, "Modèle enregistré. L'ouvrir maintenant ?"))
+        {
+            Ouvrir(dialogue.FileName);
+        }
+
+        return true;
+    }
+
     /// <summary>Ouvre un fichier ou un dossier avec le programme associé (Excel, l'Explorateur...) ; sans erreur si impossible.</summary>
     public static void Ouvrir(string chemin)
     {

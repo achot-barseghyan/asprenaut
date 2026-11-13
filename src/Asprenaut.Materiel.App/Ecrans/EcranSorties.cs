@@ -18,6 +18,12 @@ public sealed class EcranSorties : EcranBase
     private readonly GrilleAdaptative _cartes = new() { LargeurMin = 400, HauteurElement = 196, Ecart = 18, RangeesVisibles = 1, Margin = new Padding(0, 0, 0, 30) };
     private readonly DataGridView _cloturees = new();
 
+    // Pagination des sorties clôturées : seule la page affichée est lue dans la base.
+    private readonly Label _rangPage = Ui.Libelle("", Theme.Police(9.75f), Theme.TexteSecondaire);
+    private readonly BoutonArrondi _precedente = new("‹ Précédentes", StyleBouton.Secondaire) { AccessibleName = "Sorties clôturées précédentes (plus récentes)" };
+    private readonly BoutonArrondi _suivante = new("Suivantes ›", StyleBouton.Secondaire) { AccessibleName = "Sorties clôturées suivantes (plus anciennes)" };
+    private PageSorties? _pageCloturees;
+
     public EcranSorties(ServiceSortie sorties, IHorloge horloge, INavigation navigation)
     {
         _sorties = sorties;
@@ -73,7 +79,23 @@ public sealed class EcranSorties : EcranBase
 
         var carteCloturees = new Carte { Padding = new Padding(8, 6, 8, 8), Rayon = 22 };
         _cloturees.Dock = DockStyle.Fill;
+
+        // Sous le tableau : « Sorties 1 à 12 sur 143 », puis précédentes / suivantes.
+        _rangPage.AutoSize = false;
+        _rangPage.Dock = DockStyle.Fill;
+        _rangPage.TextAlign = ContentAlignment.MiddleLeft;
+        _rangPage.Margin = new Padding(12, 0, 0, 0);
+        _precedente.Margin = new Padding(0, 0, 8, 0);
+        _suivante.Margin = new Padding(0, 0, 8, 0);
+        _precedente.Click += (_, _) => Executer(() => AfficherClotureesAsync((_pageCloturees?.Page ?? 1) - 1));
+        _suivante.Click += (_, _) => Executer(() => AfficherClotureesAsync((_pageCloturees?.Page ?? 1) + 1));
+        var pagination = Ui.Colonnes((_rangPage, SizeType.Percent, 100), (_precedente, SizeType.AutoSize, 0), (_suivante, SizeType.AutoSize, 0));
+        pagination.Dock = DockStyle.Bottom;
+        pagination.Height = Theme.HauteurBouton + 12;
+        pagination.Padding = new Padding(0, 6, 0, 0);
+        carteCloturees.Controls.Add(pagination);
         carteCloturees.Controls.Add(_cloturees);
+        _cloturees.BringToFront(); // Le tableau prend la place laissée par la barre du bas.
 
         var titreEnCours = Ui.TitreSection("Sorties en cours");
         var precision = Ui.Libelle("matériel encore dehors", Theme.Police(10.5f), Theme.TexteSecondaire);
@@ -106,7 +128,6 @@ public sealed class EcranSorties : EcranBase
     protected override async Task ChargerAsync(object? parametre)
     {
         var enCours = await _sorties.ListerEnCoursAsync();
-        var cloturees = await _sorties.ListerClotureesAsync();
         if (IsDisposed)
         {
             return;
@@ -150,12 +171,36 @@ public sealed class EcranSorties : EcranBase
 
         _cartes.ResumeLayout(true);
 
+        await AfficherClotureesAsync(_pageCloturees?.Page ?? 1);
+    }
+
+    /// <summary>Affiche une page des sorties clôturées (12 par page, la plus récemment clôturée d'abord).</summary>
+    private async Task AfficherClotureesAsync(int page)
+    {
+        var resultat = await _sorties.ListerClotureesAsync(page);
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        _pageCloturees = resultat;
+        _cloturees.SuspendLayout();
         _cloturees.Rows.Clear();
-        foreach (var s in cloturees)
+        foreach (var s in resultat.Sorties)
         {
             var i = _cloturees.Rows.Add(Libelles.Date(s.DateSortie), s.Intitule, s.MoniteurNom, Libelles.Pluriel(s.NbTotal, "équipement"), "");
             _cloturees.Rows[i].Tag = s;
         }
+
+        _cloturees.ResumeLayout();
+        _rangPage.Text = resultat.Total == 0
+            ? "Aucune sortie clôturée pour l'instant."
+            : resultat.NbPages == 1
+                ? Libelles.Pluriel(resultat.Total, "sortie clôturée", "sorties clôturées")
+                : $"Sorties {resultat.Premiere} à {resultat.Derniere} sur {resultat.Total} · page {resultat.Page} / {resultat.NbPages}";
+        _precedente.Visible = _suivante.Visible = resultat.NbPages > 1;
+        _precedente.Enabled = resultat.Page > 1;
+        _suivante.Enabled = resultat.Page < resultat.NbPages;
     }
 
     private BandeauAccueil CreerBandeau()

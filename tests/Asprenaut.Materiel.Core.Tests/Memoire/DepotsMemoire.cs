@@ -185,6 +185,17 @@ public sealed class SortieRepositoryMemoire(BaseMemoire db) : ISortieRepository
     public Task<SortieResume?> ObtenirResumeAsync(long id, CancellationToken ct = default) =>
         Task.FromResult(db.Sorties.Where(s => s.Id == id).Select(Resumer).FirstOrDefault());
 
+    public Task<IReadOnlyList<SortieResume>> ListerClotureesAsync(int decalage, int nombre, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<SortieResume>>(db.Sorties
+            .Where(s => s.Statut == StatutSortie.Cloturee)
+            .OrderByDescending(s => s.ClotureeLe).ThenByDescending(s => s.Id)
+            .Skip(decalage).Take(nombre)
+            .Select(Resumer)
+            .ToList());
+
+    public Task<int> CompterClotureesAsync(CancellationToken ct = default) =>
+        Task.FromResult(db.Sorties.Count(s => s.Statut == StatutSortie.Cloturee));
+
     public Task<IReadOnlyList<SortieResume>> ListerResumesAsync(bool cloturees, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<SortieResume>>(db.Sorties
             .Where(s => (s.Statut == StatutSortie.Cloturee) == cloturees)

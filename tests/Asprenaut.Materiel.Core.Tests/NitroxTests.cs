@@ -127,4 +127,23 @@ public class NitroxTests
         Assert.False(_ctx.Db.Adherents.Single(a => a.Licence == "L1").Nitrox);
         Assert.True(_ctx.Db.Adherents.Single(a => a.Licence == "L2").Nitrox);
     }
+
+    // Modèle Excel : ses en-têtes sont ceux de l'import ; une case Nitrox laissée vide ne retire pas la certification.
+    [Fact]
+    public async Task Le_modele_excel_se_reimporte_et_une_case_nitrox_vide_ne_change_rien()
+    {
+        var lea = await AdherentAsync("Léa", "Dubois", nitrox: true);
+        lea.Licence = "L2";
+        await _ctx.Adherents.EnregistrerAsync(lea);
+        var entete = Core.Services.ServiceAdherents.ColonnesModele(_ctx.Adherents.Niveaux).Select(c => c.EnTete).ToList();
+        Assert.Equal(["Nom", "Prénom", "Niveau", "Licence", "Téléphone", "Nitrox"], entete);
+
+        var r = await _ctx.Adherents.ImporterAsync([entete, ["Dubois", "Léa", "Niveau 3", "L2", "", ""], ["Petit", "Hugo", "", "", "06 11 22 33 44", "Oui"]]);
+
+        Assert.True(r.Reussi, r.Message);
+        var relue = _ctx.Db.Adherents.Single(a => a.Licence == "L2");
+        Assert.Equal(("Niveau 3", true), (relue.Niveau, relue.Nitrox)); // Mis à jour par la licence, nitrox gardé.
+        Assert.True(_ctx.Db.Adherents.Single(a => a.Nom == "Petit").Nitrox);
+        Assert.Equal("Adhérents à remplir - Asprenaut.xlsx", Core.Services.ServiceAdherents.NomFichierModele(" Asprenaut "));
+    }
 }

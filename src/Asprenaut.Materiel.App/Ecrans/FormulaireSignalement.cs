@@ -21,12 +21,23 @@ public static class FormulaireSignalement
     public static async Task<ResultatOperation?> OuvrirAsync(IWin32Window? proprietaire, ServiceSignalements service, GardeGestion garde, CibleSignalement cible)
     {
         var existant = await service.OuvertAsync(cible.EquipementId);
-        var causes = ServiceSignalements.CausesPour(cible.Categorie);
-        var choixCause = new GrilleCauses(causes);
+        var choixCause = new GrilleCauses(service.Tuiles(cible.Categorie));
         var gravite = new ChoixGravite(garde.Gestion.EstAutorise(ActionProtegee.Revisions));
         var precision = new ChampSaisie { TexteIndicatif = "Ex. fuite au raccord du flexible MP" };
         precision.Champ.MaxLength = ServiceSignalements.LongueurMaxPrecision;
         precision.Champ.AccessibleName = "Précision (facultatif)";
+        var libellePrecision = Ui.LibelleChamp("Précision (facultatif)");
+
+        // Tuile qui demande une précision (Paramètres › Problèmes signalés) : le libellé le dit.
+        void MettreAJourPrecision()
+        {
+            var obligatoire = choixCause.Tuile?.PrecisionObligatoire == true;
+            libellePrecision.Text = obligatoire ? "Précision (obligatoire pour ce problème)" : "Précision (facultatif)";
+            libellePrecision.ForeColor = obligatoire ? Theme.Avertissement : Theme.TexteSecondaireClair;
+            precision.Champ.AccessibleName = libellePrecision.Text;
+        }
+
+        choixCause.ChoixChange += (_, _) => MettreAJourPrecision();
 
         if (existant is not null)
         {
@@ -54,7 +65,10 @@ public static class FormulaireSignalement
         fenetre.Ajouter(Ui.LibelleChamp("Peut-il repartir ?"));
         gravite.Margin = new Padding(0, 0, 0, 18);
         fenetre.Ajouter(gravite, SizeType.Absolute, ChoixGravite.Hauteur + 18);
-        fenetre.Champ("Précision (facultatif)", precision);
+        fenetre.Ajouter(libellePrecision, SizeType.AutoSize, 0);
+        precision.Margin = new Padding(0, 0, 0, 14);
+        fenetre.Ajouter(precision, SizeType.Absolute, Theme.HauteurChamp + 14);
+        MettreAJourPrecision();
         var note = Ui.Libelle($"Envoyé dans Révisions et noté dans la fiche EPI de {cible.Code}.", Theme.Police(9f), Theme.TexteSecondaireClair);
         note.Margin = new Padding(0, 0, 0, 4);
         fenetre.Ajouter(note);
@@ -81,11 +95,11 @@ public static class FormulaireSignalement
         private const int Colonnes = 3;
         private const int HauteurTuile = 88;
         private const int Ecart = 10;
-        private readonly IReadOnlyList<string> _causes;
+        private readonly IReadOnlyList<CauseSignalement> _causes;
         private int _choisie = -1;
         private int _survol = -1;
 
-        public GrilleCauses(IReadOnlyList<string> causes)
+        public GrilleCauses(IReadOnlyList<CauseSignalement> causes)
         {
             _causes = causes;
             SetStyle(ControlStyles.Selectable, true);
@@ -99,19 +113,30 @@ public static class FormulaireSignalement
         /// <summary>Hauteur en pixels logiques pour toutes les rangées.</summary>
         public int HauteurVoulue => (Rangees * HauteurTuile) + ((Rangees - 1) * Ecart);
 
-        public string? Choisie => _choisie >= 0 ? _causes[_choisie] : null;
+        public string? Choisie => Tuile?.Libelle;
+
+        /// <summary>Tuile choisie (libellé, précision obligatoire), ou null.</summary>
+        public CauseSignalement? Tuile => _choisie >= 0 ? _causes[_choisie] : null;
+
+        /// <summary>Une autre tuile a été choisie.</summary>
+        public event EventHandler? ChoixChange;
 
         public void Choisir(string cause)
         {
-            var i = _causes.ToList().FindIndex(c => string.Equals(c, cause, StringComparison.OrdinalIgnoreCase));
+            var i = _causes.ToList().FindIndex(c => string.Equals(c.Libelle, cause, StringComparison.OrdinalIgnoreCase));
             if (i < 0)
             {
                 i = _causes.Count - 1; // Cause d'une autre catégorie (catégorie changée depuis) : « Autre ».
             }
 
+            var change = i != _choisie;
             _choisie = i;
-            AccessibleDescription = _causes[i];
+            AccessibleDescription = _causes[i].Libelle + (_causes[i].PrecisionObligatoire ? ", précision obligatoire" : "");
             Invalidate();
+            if (change)
+            {
+                ChoixChange?.Invoke(this, EventArgs.Empty);
+            }
         }
 
         private RectangleF Zone(int i)
@@ -159,7 +184,7 @@ public static class FormulaireSignalement
             if (IndexSous(e.Location) is var i and >= 0)
             {
                 Focus();
-                Choisir(_causes[i]);
+                Choisir(_causes[i].Libelle);
             }
         }
 
@@ -178,7 +203,7 @@ public static class FormulaireSignalement
             };
             if (pas != 0)
             {
-                Choisir(_causes[Math.Clamp((_choisie < 0 ? 0 : _choisie + pas), 0, _causes.Count - 1)]);
+                Choisir(_causes[Math.Clamp((_choisie < 0 ? 0 : _choisie + pas), 0, _causes.Count - 1)].Libelle);
                 e.Handled = true;
             }
         }
@@ -214,10 +239,10 @@ public static class FormulaireSignalement
 
                 var couleur = choisie ? Theme.TexteSurAvertissement : Theme.Texte;
                 var t = E(24);
-                Icones.Dessiner(g, Icones.PourCause(_causes[i]), new RectangleF(r.X + ((r.Width - t) / 2), r.Y + E(12), t, t),
+                Icones.Dessiner(g, Icones.PourPictogramme(_causes[i].Pictogramme), new RectangleF(r.X + ((r.Width - t) / 2), r.Y + E(12), t, t),
                     choisie ? Theme.TexteSurAvertissement : Theme.Avertissement, 1.9f);
                 var texte = Rectangle.Round(new RectangleF(r.X + E(6), r.Y + E(42), r.Width - E(12), r.Height - E(46)));
-                TextRenderer.DrawText(g, _causes[i], Theme.PoliceTitre(9.5f), texte, couleur,
+                TextRenderer.DrawText(g, _causes[i].Libelle, Theme.PoliceTitre(9.5f), texte, couleur,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
             }
         }

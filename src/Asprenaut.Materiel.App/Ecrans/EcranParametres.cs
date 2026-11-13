@@ -35,13 +35,15 @@ public sealed class EcranParametres : EcranBase
     private readonly ServiceCompteur _compteur;
     private readonly ServiceTypesSortie _typesSortie;
     private readonly ServicePrestataires _prestataires;
+    private readonly ServiceInventaire _inventaire;
 
-    public EcranParametres(ServiceReglages reglages, IServiceSauvegarde sauvegardes, INavigation navigation, ParametresApplication parametres, ServiceGestion gestion, GardeGestion garde, ServiceExport export, ServiceCompteur compteur, ServiceTypesSortie typesSortie, ServicePrestataires prestataires)
+    public EcranParametres(ServiceReglages reglages, IServiceSauvegarde sauvegardes, INavigation navigation, ParametresApplication parametres, ServiceGestion gestion, GardeGestion garde, ServiceExport export, ServiceCompteur compteur, ServiceTypesSortie typesSortie, ServicePrestataires prestataires, ServiceInventaire inventaire)
     {
         _export = export;
         _compteur = compteur;
         _typesSortie = typesSortie;
         _prestataires = prestataires;
+        _inventaire = inventaire;
         _gestion = gestion;
         _garde = garde;
         _reglages = reglages;
@@ -49,7 +51,48 @@ public sealed class EcranParametres : EcranBase
         _navigation = navigation;
         _parametres = parametres;
 
-        // Deux colonnes de cartes ; chaque rangée prend la hauteur de sa carte la plus haute.
+        // Onglet « Paramètres » : le fonctionnement de l'application. L'onglet « Configuration du club » (les listes et données
+        // propres au club) n'est construit qu'à sa première ouverture : la page s'ouvre plus vite.
+        _grilleParametres = Grille(CarteSecurite(), CartePistolet(), CarteRegles(), CarteDonnees(), CarteAffichage(), CarteAPropos());
+
+        // Cadre défilant vertical (la page est plus haute que l'écran).
+        var cadre = _cadre;
+        cadre.HorizontalScroll.Maximum = 0;
+        cadre.AutoScroll = false;
+        cadre.VerticalScroll.Visible = false;
+        cadre.AutoScroll = true;
+        Natif.ScrollbarsDuTheme(cadre);
+        cadre.Controls.Add(_grilleParametres);
+
+        var consultation = new BandeauConsultation(_garde, "Consultez librement. Toute modification des paramètres demande le code gestionnaire.");
+        _garde.Lier(consultation, ActionProtegee.Parametres);
+
+        _onglets.AccessibleName = "Onglets des paramètres";
+        _onglets.Margin = new Padding(0, 0, 0, 18);
+        _onglets.Changement += (_, _) => Executer(AfficherOngletAsync);
+        _sousTitre = Ui.SousTitre(SousTitreParametres);
+
+        Controls.Add(Ui.Colonne(
+            (Ui.Entete(Ui.Pile(Ui.Titre(Titre), _sousTitre)), SizeType.AutoSize, 0),
+            (Ui.Rangee(true, _onglets), SizeType.AutoSize, 0),
+            (consultation, SizeType.AutoSize, 0),
+            (cadre, SizeType.Percent, 100)));
+    }
+
+    private const string SousTitreParametres = "Fonctionnement de l'application : sécurité, pistolet, règles des sorties, sauvegardes, affichage.";
+    private const string SousTitreConfiguration = "Données propres au club : identité, types de sortie, compteurs, niveaux, prestataires, problèmes signalés.";
+
+    private readonly Bascule _onglets = new("Paramètres", "Configuration du club");
+    private readonly TableLayoutPanel _grilleParametres;
+    private TableLayoutPanel? _grilleConfiguration;
+    private Label _sousTitre = null!;
+
+    /// <summary>
+    /// Deux colonnes de cartes ; chaque rangée prend la hauteur de sa carte la plus haute. Toutes les cartes sauf « À propos »
+    /// demandent le code gestionnaire.
+    /// </summary>
+    private TableLayoutPanel Grille(params CarteSection[] cartes)
+    {
         var grille = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
@@ -61,13 +104,12 @@ public sealed class EcranParametres : EcranBase
         };
         grille.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         grille.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        var cartes = new[] { CarteSecurite(), CartePistolet(), CarteRegles(), CarteCompteur(), CarteDonnees(), CarteClub(), CarteTypesSortie(), CartePrestataires(), CarteAffichage(), CarteAPropos() };
-        foreach (var carte in cartes[..^1]) // Toutes sauf « À propos » : leurs réglages demandent le code.
+        foreach (var carte in cartes.Where(c => c.AccessibleName != "À propos"))
         {
             _garde.Lier(carte, ActionProtegee.Parametres);
         }
 
-        grille.SuspendLayout(); // Une seule mise en page pour les 10 cartes (sinon la grille se recalcule à chaque ajout).
+        grille.SuspendLayout(); // Une seule mise en page pour toutes les cartes (sinon la grille se recalcule à chaque ajout).
         for (var i = 0; i < cartes.Length; i++)
         {
             if (i % 2 == 0)
@@ -82,23 +124,39 @@ public sealed class EcranParametres : EcranBase
         }
 
         grille.ResumeLayout(true);
+        return grille;
+    }
 
-        // Cadre défilant vertical (la page est plus haute que l'écran).
-        var cadre = _cadre;
-        cadre.HorizontalScroll.Maximum = 0;
-        cadre.AutoScroll = false;
-        cadre.VerticalScroll.Visible = false;
-        cadre.AutoScroll = true;
-        Natif.ScrollbarsDuTheme(cadre);
-        cadre.Controls.Add(grille);
+    /// <summary>Affiche l'onglet choisi ; « Configuration du club » est construit et rempli la première fois.</summary>
+    private async Task AfficherOngletAsync()
+    {
+        var configuration = _onglets.SelectedIndex == 1;
+        _sousTitre.Text = configuration ? SousTitreConfiguration : SousTitreParametres;
+        if (configuration && _grilleConfiguration is null)
+        {
+            _grilleConfiguration = Grille(CarteClub(), CarteTypesSortie(), CarteCompteur(), CarteNiveaux(), CartePrestataires(), CarteTuilesSignalement());
+            _grilleConfiguration.Visible = false;
+            Dessin.MettreALEchelle(_grilleConfiguration, this); // Construite après l'affichage : pixels logiques à convertir.
+            _cadre.Controls.Add(_grilleConfiguration);
+            await AfficherSeuilsAsync();
+            await AfficherTypesAsync();
+            await AfficherPrestatairesAsync();
+            await ChargerCategoriesTuilesAsync();
+            if (IsDisposed)
+            {
+                return;
+            }
+        }
 
-        var consultation = new BandeauConsultation(_garde, "Consultez librement. Toute modification des paramètres demande le code gestionnaire.");
-        _garde.Lier(consultation, ActionProtegee.Parametres);
+        _cadre.SuspendLayout();
+        _grilleParametres.Visible = !configuration;
+        if (_grilleConfiguration is not null)
+        {
+            _grilleConfiguration.Visible = configuration;
+        }
 
-        Controls.Add(Ui.Colonne(
-            (Ui.Entete(Ui.Pile(Ui.Titre(Titre), Ui.SousTitre("Pistolet, règles des sorties et sauvegardes."))), SizeType.AutoSize, 0),
-            (consultation, SizeType.AutoSize, 0),
-            (cadre, SizeType.Percent, 100)));
+        _cadre.ResumeLayout(true);
+        _cadre.AutoScrollPosition = Point.Empty;
     }
 
     public override string Titre => "Paramètres";
@@ -108,9 +166,6 @@ public sealed class EcranParametres : EcranBase
     protected override async Task ChargerAsync(object? parametre)
     {
         AfficherEtatSauvegarde();
-        await AfficherSeuilsAsync();
-        await AfficherTypesAsync();
-        await AfficherPrestatairesAsync();
         if (parametre is VersAffichage && _carteAffichage is { } carte)
         {
             // L'écran vient d'être recréé dans le nouveau thème : on revient sur la carte du choix, une fois que
@@ -1340,6 +1395,58 @@ public sealed class EcranParametres : EcranBase
         await AfficherTypesAsync();
     }
 
+    // ---------------------------------------------------------------- Niveaux des adhérents
+
+    /// <summary>
+    /// Niveaux proposés pour les adhérents (formulaire, modèle Excel, import) : un par ligne, dans l'ordre de la liste.
+    /// Les adhérents gardent leur niveau s'il est retiré de la liste.
+    /// </summary>
+    private CarteSection CarteNiveaux()
+    {
+        var carte = new CarteSection("Niveaux des adhérents", Icones.Moniteurs, Theme.AccentClair);
+        var aide = Ui.Libelle("Proposés dans la fiche d'un adhérent et dans le modèle Excel. Un niveau par ligne, dans l'ordre voulu. "
+            + "À l'import, « N2 » ou « niveau 2 » deviennent « Niveau 2 » ; un niveau inconnu est laissé vide.", Theme.Police(9.75f), Theme.TexteSecondaire);
+        aide.MaximumSize = new Size(560, 0);
+        aide.Margin = new Padding(0, 0, 0, 10);
+        carte.Ajouter(aide);
+
+        var liste = new ChampSaisie(multiligne: true) { Height = 230, Margin = new Padding(0, 0, 0, 12) };
+        liste.Champ.AccessibleName = "Niveaux, un par ligne";
+        liste.Valeur = string.Join(Environment.NewLine, _reglages.Actuels.NiveauxAdherents);
+        carte.Ajouter(liste);
+
+        var enregistrer = new BoutonArrondi("Enregistrer la liste", StyleBouton.Secondaire, Icones.Coche) { Margin = Padding.Empty };
+        enregistrer.Click += (_, _) =>
+        {
+            if (!Autoriser())
+            {
+                return;
+            }
+
+            var r = _reglages.ChangerNiveauxAdherents(liste.Valeur.Split('\n'));
+            if (r.Reussi)
+            {
+                liste.Valeur = string.Join(Environment.NewLine, _reglages.Actuels.NiveauxAdherents); // Nettoyée (espaces, lignes vides).
+                Dialogues.Information(FindForm(), r.Message);
+            }
+            else
+            {
+                Dialogues.Erreur(FindForm(), r.Message);
+            }
+        };
+        var retablir = new BoutonArrondi("Rétablir la liste d'origine", StyleBouton.Lien) { Margin = new Padding(12, 0, 0, 0) };
+        retablir.Click += (_, _) =>
+        {
+            if (Autoriser() && Dialogues.Confirmer(FindForm(), "Revenir à la liste d'origine des niveaux ?")
+                && _reglages.ChangerNiveauxAdherents(Reglages.NiveauxParDefaut).Reussi)
+            {
+                liste.Valeur = string.Join(Environment.NewLine, Reglages.NiveauxParDefaut);
+            }
+        };
+        carte.Ajouter(Ui.Rangee(true, enregistrer, retablir), pleineLargeur: false);
+        return carte;
+    }
+
     // ---------------------------------------------------------------- Prestataires
 
     private readonly TableLayoutPanel _listePrestataires = new()
@@ -1499,6 +1606,534 @@ public sealed class EcranParametres : EcranBase
         if (fenetre.ShowDialog(FindForm()) == DialogResult.OK)
         {
             await AfficherPrestatairesAsync();
+        }
+    }
+
+    // ---------------------------------------------------------------- Problèmes signalés (tuiles)
+
+    private readonly ListeDeroulante _categorieTuiles = new() { AccessibleName = "Catégorie des tuiles", Margin = new Padding(0, 0, 0, 10) };
+    private readonly Label _origineTuiles = Ui.Libelle("", Theme.Police(9f), Theme.TexteSecondaire);
+
+    private readonly ListeTuiles _listeTuiles = new() { Margin = Padding.Empty };
+
+    /// <summary>
+    /// Tuiles de la fenêtre « Problème sur A07 », par catégorie : nom, pictogramme, ordre, et « Précision obligatoire »
+    /// (le champ Précision doit alors être rempli). « Rétablir » revient aux tuiles d'origine.
+    /// </summary>
+    private CarteSection CarteTuilesSignalement()
+    {
+        var carte = new CarteSection("Problèmes signalés", Icones.Drapeau, Theme.Avertissement);
+        var aide = Ui.Libelle("Tuiles proposées dans la fenêtre « Problème sur… », selon la catégorie de l'équipement. "
+            + "Pour chaque tuile : nom, pictogramme, ordre, et si la précision doit être remplie.", Theme.Police(9.75f), Theme.TexteSecondaire);
+        aide.MaximumSize = new Size(560, 0);
+        aide.Margin = new Padding(0, 0, 0, 10);
+        carte.Ajouter(aide);
+        carte.Ajouter(Ui.LibelleChamp("Catégorie"));
+        _categorieTuiles.SelectedIndexChanged += (_, _) => AfficherTuiles();
+        carte.Ajouter(_categorieTuiles);
+        _origineTuiles.Margin = new Padding(0, 0, 0, 8);
+        carte.Ajouter(_origineTuiles);
+        _listeTuiles.Geste += (_, g) => GesteSurTuile(g.Geste, g.Index);
+        carte.Ajouter(_listeTuiles);
+
+        var ajouter = new BoutonArrondi("Ajouter une tuile", StyleBouton.Secondaire, Icones.Plus) { Margin = new Padding(0, 12, 0, 0) };
+        ajouter.Click += (_, _) => EditerTuile(null);
+        carte.Ajouter(ajouter, pleineLargeur: false);
+        var retablir = new BoutonArrondi("Rétablir les tuiles d'origine", StyleBouton.Lien) { Margin = new Padding(0, 6, 0, 0) };
+        retablir.Click += (_, _) =>
+        {
+            if (CategorieTuiles is { } categorie && Autoriser()
+                && Dialogues.Confirmer(FindForm(), $"Revenir aux tuiles d'origine pour « {categorie} » ?"))
+            {
+                AfficherResultat(_reglages.RetablirTuilesSignalement(categorie));
+            }
+        };
+        carte.Ajouter(retablir, pleineLargeur: false);
+        return carte;
+    }
+
+    private string? CategorieTuiles => (_categorieTuiles.SelectedItem as Choix<string>)?.Valeur;
+
+    private async Task ChargerCategoriesTuilesAsync()
+    {
+        var categories = await _inventaire.ListerCategoriesAsync();
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        _categorieTuiles.Items.Clear();
+        foreach (var c in categories.OrderBy(c => c.Nom, StringComparer.Create(Libelles.Culture, true)))
+        {
+            _categorieTuiles.Items.Add(new Choix<string>(c.Nom, c.Nom));
+        }
+
+        if (_categorieTuiles.Items.Count > 0)
+        {
+            _categorieTuiles.SelectedIndex = 0; // Affiche ses tuiles.
+        }
+    }
+
+    private void AfficherResultat(ResultatOperation resultat)
+    {
+        if (!resultat.Reussi)
+        {
+            Dialogues.Erreur(FindForm(), resultat.Message);
+        }
+
+        AfficherTuiles();
+    }
+
+    /// <summary>Enregistre la nouvelle liste de tuiles de la catégorie choisie (code gestionnaire demandé avant).</summary>
+    private void EnregistrerTuiles(List<CauseSignalement> tuiles)
+    {
+        if (CategorieTuiles is { } categorie && Autoriser())
+        {
+            AfficherResultat(_reglages.ChangerTuilesSignalement(categorie, tuiles));
+        }
+    }
+
+    private List<CauseSignalement> TuilesActuelles() => ServiceSignalements.TuilesPour(CategorieTuiles, _reglages.Actuels).ToList();
+
+    private void AfficherTuiles()
+    {
+        var categorie = CategorieTuiles;
+        var tuiles = TuilesActuelles();
+        _origineTuiles.Text = categorie is null ? "" : ServiceSignalements.TuilesPersonnalisees(categorie, _reglages.Actuels)
+            ? $"Tuiles personnalisées · {Libelles.Pluriel(tuiles.Count, "tuile")}"
+            : $"Tuiles d'origine · {Libelles.Pluriel(tuiles.Count, "tuile")}";
+
+        _listeTuiles.Afficher(tuiles);
+    }
+
+    /// <summary>Monter, descendre, modifier, supprimer une tuile, ou basculer « Précision obligatoire » (code gestionnaire demandé).</summary>
+    private void GesteSurTuile(GesteTuile geste, int index)
+    {
+        var tuiles = TuilesActuelles();
+        if (index < 0 || index >= tuiles.Count)
+        {
+            return;
+        }
+
+        switch (geste)
+        {
+            case GesteTuile.Modifier:
+                EditerTuile(index);
+                return;
+            case GesteTuile.Supprimer when !Dialogues.Confirmer(FindForm(), $"Retirer la tuile « {tuiles[index].Libelle} » ?"):
+                return;
+            case GesteTuile.Supprimer:
+                tuiles.RemoveAt(index);
+                break;
+            case GesteTuile.Monter when index > 0:
+                (tuiles[index - 1], tuiles[index]) = (tuiles[index], tuiles[index - 1]);
+                break;
+            case GesteTuile.Descendre when index < tuiles.Count - 1:
+                (tuiles[index + 1], tuiles[index]) = (tuiles[index], tuiles[index + 1]);
+                break;
+            case GesteTuile.Precision:
+                tuiles[index].PrecisionObligatoire = !tuiles[index].PrecisionObligatoire;
+                break;
+            default:
+                return;
+        }
+
+        EnregistrerTuiles(tuiles);
+    }
+
+    /// <summary>Fenêtre d'ajout (<paramref name="index"/> null) ou de modification d'une tuile : nom, pictogramme, précision.</summary>
+    private void EditerTuile(int? index)
+    {
+        if (CategorieTuiles is not { } categorie || !Autoriser())
+        {
+            return;
+        }
+
+        var tuiles = TuilesActuelles();
+        var actuelle = index is { } i ? tuiles[i] : null;
+        var nom = new ChampSaisie { Valeur = actuelle?.Libelle ?? "", TexteIndicatif = "Ex. : Manomètre bloqué", IndicatifSiFocus = true };
+        nom.Champ.AccessibleName = "Nom de la tuile";
+        nom.Champ.MaxLength = ServiceSignalements.LongueurMaxCause;
+        var picto = new ListeDeroulante { AccessibleName = "Pictogramme" };
+        foreach (var (cle, libelle, _) in Icones.PictosCause)
+        {
+            picto.Items.Add(new Choix<string>(cle, libelle));
+        }
+
+        picto.SelectedItem = picto.Items.OfType<Choix<string>>().FirstOrDefault(c => string.Equals(c.Valeur, actuelle?.Pictogramme ?? "Autre", StringComparison.OrdinalIgnoreCase))
+            ?? picto.Items[^1];
+        var apercu = new PictoTuile((picto.SelectedItem as Choix<string>)?.Valeur) { Size = new Size(52, 52), Margin = new Padding(0, 0, 0, 12) };
+        picto.SelectedIndexChanged += (_, _) => apercu.Cle = (picto.SelectedItem as Choix<string>)?.Valeur;
+        var obligatoire = new CaseOption("Précision obligatoire", "Le moniteur doit écrire une précision quand il choisit cette tuile.")
+        {
+            Checked = actuelle?.PrecisionObligatoire ?? false,
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 4, 0, 0),
+        };
+
+        using var fenetre = new FenetreFormulaire(actuelle is null ? "Ajouter une tuile" : $"Modifier « {actuelle.Libelle} »",
+            actuelle is null ? "Ajouter" : "Enregistrer", () =>
+            {
+                var tuile = new CauseSignalement
+                {
+                    Libelle = nom.Valeur,
+                    Pictogramme = (picto.SelectedItem as Choix<string>)?.Valeur ?? "Autre",
+                    PrecisionObligatoire = obligatoire.Checked,
+                };
+                var liste = tuiles.Select(t => t.Copie()).ToList();
+                if (index is { } position)
+                {
+                    liste[position] = tuile;
+                }
+                else
+                {
+                    // Nouvelle tuile : avant « Autre » s'il est en dernier.
+                    var autre = liste.Count > 0 && string.Equals(liste[^1].Libelle, ServiceSignalements.CauseAutre, StringComparison.OrdinalIgnoreCase);
+                    liste.Insert(autre ? liste.Count - 1 : liste.Count, tuile);
+                }
+
+                return Task.FromResult(_reglages.ChangerTuilesSignalement(categorie, liste));
+            });
+        fenetre.EnTete($"Catégorie : {categorie}");
+        fenetre.Champ("Nom", nom);
+        fenetre.Champ("Pictogramme", picto);
+        fenetre.Ajouter(apercu, SizeType.Absolute, 64);
+        fenetre.Ajouter(obligatoire, SizeType.AutoSize, 0);
+        fenetre.Shown += (_, _) => nom.Champ.Focus();
+        if (fenetre.ShowDialog(FindForm()) == DialogResult.OK)
+        {
+            AfficherTuiles();
+        }
+    }
+
+    /// <summary>Ce qu'on demande sur une tuile de la liste.</summary>
+    private enum GesteTuile
+    {
+        Monter,
+        Descendre,
+        Modifier,
+        Supprimer,
+        Precision,
+    }
+
+    /// <summary>
+    /// Liste des tuiles d'une catégorie, entièrement dessinée dans un seul contrôle (une douzaine de contrôles par tuile
+    /// ralentissaient l'ouverture de Paramètres) : par ligne, pictogramme, nom, monter / descendre / modifier / supprimer,
+    /// puis la case « Précision obligatoire ». Souris (clic retrouvé par calcul) et clavier : flèches pour choisir la ligne,
+    /// Ctrl + flèches pour la déplacer, Espace pour la case, Entrée pour modifier, Suppr pour retirer.
+    /// </summary>
+    private sealed class ListeTuiles : ControleDessine
+    {
+        // Pixels logiques (96 dpi).
+        private const int HauteurLigne = 128;
+        private const int Ecart = 10;
+        private const int HauteurEntete = 58;
+        private const int Bouton = 44;
+
+        private IReadOnlyList<CauseSignalement> _tuiles = [];
+        private int _choisie;
+        private (int Ligne, GesteTuile Geste)? _survol;
+
+        public ListeTuiles()
+        {
+            SetStyle(ControlStyles.Selectable, true);
+            TabStop = true;
+            AccessibleRole = AccessibleRole.List;
+            AccessibleName = "Tuiles de la catégorie";
+        }
+
+        /// <summary>Un geste sur une ligne (le code gestionnaire est demandé par l'écran).</summary>
+        public event EventHandler<(GesteTuile Geste, int Index)>? Geste;
+
+        // Placée dans la carte avant d'avoir sa fenêtre : l'échelle de l'écran se lit sur le parent.
+        private float Ec(float v) => Dessin.Echelle(Parent ?? this, v);
+
+        public void Afficher(IReadOnlyList<CauseSignalement> tuiles)
+        {
+            _tuiles = tuiles;
+            _choisie = Math.Clamp(_choisie, 0, Math.Max(0, tuiles.Count - 1));
+            _survol = null;
+            AccessibleDescription = string.Join(", ", tuiles.Select(t => t.Libelle + (t.PrecisionObligatoire ? " (précision obligatoire)" : "")));
+            AjusterHauteur();
+            Invalidate();
+        }
+
+        private int HauteurVoulue => _tuiles.Count == 0 ? 0 : (int)Ec((_tuiles.Count * HauteurLigne) + ((_tuiles.Count - 1) * Ecart));
+
+        // La carte (TableLayoutPanel) garde la hauteur du contrôle : on la pose, et la carte suit d'elle-même.
+        private void AjusterHauteur()
+        {
+            if (Height != HauteurVoulue)
+            {
+                Height = HauteurVoulue;
+            }
+        }
+
+        protected override void OnParentChanged(EventArgs e)
+        {
+            base.OnParentChanged(e);
+            AjusterHauteur();
+        }
+
+        protected override void OnDpiChangedAfterParent(EventArgs e)
+        {
+            base.OnDpiChangedAfterParent(e);
+            AjusterHauteur();
+        }
+
+        public override Size GetPreferredSize(Size proposedSize) => new(proposedSize.Width is > 0 and < int.MaxValue ? proposedSize.Width : Width, HauteurVoulue);
+
+        private RectangleF Ligne(int i) => new(0.5f, (i * Ec(HauteurLigne + Ecart)) + 0.5f, Width - 1.5f, Ec(HauteurLigne) - 1.5f);
+
+        /// <summary>Zone d'un geste dans sa ligne (vide si sans objet : monter la première, descendre la dernière, retirer la seule).</summary>
+        private RectangleF Zone(int i, GesteTuile geste)
+        {
+            var r = Ligne(i);
+            if (geste == GesteTuile.Precision)
+            {
+                return new RectangleF(r.Left + Ec(14), r.Top + Ec(HauteurEntete), r.Width - Ec(28), r.Bottom - r.Top - Ec(HauteurEntete) - Ec(12));
+            }
+
+            var possible = geste switch
+            {
+                GesteTuile.Monter => i > 0,
+                GesteTuile.Descendre => i < _tuiles.Count - 1,
+                GesteTuile.Supprimer => _tuiles.Count > 1,
+                _ => true,
+            };
+            if (!possible)
+            {
+                return RectangleF.Empty;
+            }
+
+            var rang = 3 - (int)geste; // Supprimer tout à droite, puis Modifier, Descendre, Monter.
+            var b = Ec(Bouton);
+            return new RectangleF(r.Right - Ec(10) - b - (rang * (b + Ec(4))), r.Top + Ec(8), b, b);
+        }
+
+        private (int Ligne, GesteTuile Geste)? Sous(Point p)
+        {
+            for (var i = 0; i < _tuiles.Count; i++)
+            {
+                if (!Ligne(i).Contains(p))
+                {
+                    continue;
+                }
+
+                foreach (var g in Enum.GetValues<GesteTuile>())
+                {
+                    if (Zone(i, g).Contains(p))
+                    {
+                        return (i, g);
+                    }
+                }
+
+                return null;
+            }
+
+            return null;
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            var s = Sous(e.Location);
+            Cursor = s is null ? Cursors.Default : Cursors.Hand;
+            if (s != _survol)
+            {
+                _survol = s;
+                Invalidate();
+            }
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            base.OnMouseLeave(e);
+            _survol = null;
+            Invalidate();
+        }
+
+        protected override void OnMouseClick(MouseEventArgs e)
+        {
+            base.OnMouseClick(e);
+            if (e.Button == MouseButtons.Left && Sous(e.Location) is { } s)
+            {
+                _choisie = s.Ligne;
+                Invalidate();
+                Geste?.Invoke(this, (s.Geste, s.Ligne));
+            }
+        }
+
+        protected override bool IsInputKey(Keys keyData) =>
+            (keyData & Keys.KeyCode) is Keys.Up or Keys.Down or Keys.Enter or Keys.Space or Keys.Delete || base.IsInputKey(keyData);
+
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            base.OnKeyDown(e);
+            if (_tuiles.Count == 0)
+            {
+                return;
+            }
+
+            GesteTuile? geste = (e.KeyCode, e.Control) switch
+            {
+                (Keys.Up, true) when _choisie > 0 => GesteTuile.Monter,
+                (Keys.Down, true) when _choisie < _tuiles.Count - 1 => GesteTuile.Descendre,
+                (Keys.Space, _) => GesteTuile.Precision,
+                (Keys.Enter, _) => GesteTuile.Modifier,
+                (Keys.Delete, _) when _tuiles.Count > 1 => GesteTuile.Supprimer,
+                _ => null,
+            };
+            if (geste is { } g)
+            {
+                var index = _choisie;
+                _choisie += g == GesteTuile.Monter ? -1 : g == GesteTuile.Descendre ? 1 : 0; // La ligne suit la tuile déplacée.
+                e.Handled = e.SuppressKeyPress = true;
+                Geste?.Invoke(this, (g, index));
+            }
+            else if (e.KeyCode is Keys.Up or Keys.Down)
+            {
+                _choisie = Math.Clamp(_choisie + (e.KeyCode == Keys.Up ? -1 : 1), 0, _tuiles.Count - 1);
+                AccessibilityNotifyClients(AccessibleEvents.Focus, _choisie);
+                e.Handled = true;
+                Invalidate();
+            }
+        }
+
+        protected override void OnGotFocus(EventArgs e)
+        {
+            base.OnGotFocus(e);
+            Invalidate();
+        }
+
+        protected override void OnLostFocus(EventArgs e)
+        {
+            base.OnLostFocus(e);
+            Invalidate();
+        }
+
+        protected override void Peindre(Graphics g)
+        {
+            var fond = Theme.Sur(Theme.Surface, Theme.Fond, 0.35f);
+            for (var i = 0; i < _tuiles.Count; i++)
+            {
+                var t = _tuiles[i];
+                var r = Ligne(i);
+                using (var chemin = Dessin.Arrondi(r, Ec(16)))
+                using (var pinceau = new SolidBrush(fond))
+                using (var bord = new Pen(Focused && i == _choisie ? Theme.Accent : Theme.Bordure, Ec(Focused && i == _choisie ? 2 : 1)))
+                {
+                    g.FillPath(pinceau, chemin);
+                    g.DrawPath(bord, chemin);
+                }
+
+                // Pictogramme et nom.
+                var cote = Ec(38);
+                var picto = new RectangleF(r.Left + Ec(14), r.Top + Ec(8) + ((Ec(Bouton) - cote) / 2), cote, cote);
+                using (var chemin = Dessin.Arrondi(picto, Ec(10)))
+                using (var pinceau = new SolidBrush(Theme.Sur(fond, Theme.Avertissement, 0.14f)))
+                {
+                    g.FillPath(pinceau, chemin);
+                }
+
+                var ti = cote * 0.55f;
+                Icones.Dessiner(g, Icones.PourPictogramme(t.Pictogramme), new RectangleF(picto.X + ((cote - ti) / 2), picto.Y + ((cote - ti) / 2), ti, ti), Theme.Avertissement, 1.9f);
+                var premierBouton = Enum.GetValues<GesteTuile>().Where(x => x != GesteTuile.Precision).Select(x => Zone(i, x)).Where(z => !z.IsEmpty).Min(z => z.Left);
+                var xNom = (int)(picto.Right + Ec(12));
+                Dessin.Texte(g, t.Libelle, Theme.PoliceTitre(10.5f), Rectangle.FromLTRB(xNom, (int)picto.Top, (int)(premierBouton - Ec(6)), (int)picto.Bottom), Theme.Texte);
+
+                // Boutons.
+                foreach (var geste in new[] { GesteTuile.Monter, GesteTuile.Descendre, GesteTuile.Modifier, GesteTuile.Supprimer })
+                {
+                    var z = Zone(i, geste);
+                    if (z.IsEmpty)
+                    {
+                        continue;
+                    }
+
+                    if (_survol == (i, geste))
+                    {
+                        using var chemin = Dessin.Arrondi(z, Ec(12));
+                        using var pinceau = new SolidBrush(Theme.SurfaceActive);
+                        g.FillPath(pinceau, chemin);
+                    }
+
+                    var icone = geste switch
+                    {
+                        GesteTuile.Monter => "M6 15l6-6 6 6",
+                        GesteTuile.Descendre => Icones.ChevronBas,
+                        GesteTuile.Modifier => Icones.Crayon,
+                        _ => Icones.Corbeille,
+                    };
+                    var tb = Ec(20);
+                    Icones.Dessiner(g, icone, new RectangleF(z.X + ((z.Width - tb) / 2), z.Y + ((z.Height - tb) / 2), tb, tb),
+                        geste == GesteTuile.Supprimer ? Theme.Erreur : _survol == (i, geste) ? Theme.Texte : Theme.TexteSecondaire, 2f);
+                }
+
+                // Case « Précision obligatoire ».
+                var c = Zone(i, GesteTuile.Precision);
+                var coche = t.PrecisionObligatoire;
+                using (var chemin = Dessin.Arrondi(c, Ec(12)))
+                using (var pinceau = new SolidBrush(coche ? Theme.Sur(fond, Theme.Accent, 0.12f) : _survol == (i, GesteTuile.Precision) ? Theme.Sur(fond, Theme.Texte, 0.05f) : Theme.Sur(fond, Theme.Fond, 0.4f)))
+                using (var bord = new Pen(coche ? Theme.Sur(fond, Theme.Accent, 0.6f) : Theme.Bordure, Ec(1)))
+                {
+                    g.FillPath(pinceau, chemin);
+                    g.DrawPath(bord, chemin);
+                }
+
+                var tc = Ec(22);
+                var boite = new RectangleF(c.Left + Ec(14), c.Top + ((c.Height - tc) / 2), tc, tc);
+                using (var chemin = Dessin.Arrondi(boite, Ec(6)))
+                {
+                    if (coche)
+                    {
+                        using var plein = new SolidBrush(Theme.Accent);
+                        g.FillPath(plein, chemin);
+                        Icones.Dessiner(g, Icones.Coche, RectangleF.Inflate(boite, -Ec(4), -Ec(4)), Theme.TexteSurAccent, 3f);
+                    }
+                    else
+                    {
+                        using var bord = new Pen(Theme.BordureForte, Ec(1.5f));
+                        g.DrawPath(bord, chemin);
+                    }
+                }
+
+                var xt = (int)(boite.Right + Ec(14));
+                var milieu = (int)(c.Top + (c.Height / 2));
+                Dessin.Texte(g, "Précision obligatoire", Theme.PoliceTitre(10f), Rectangle.FromLTRB(xt, milieu - (int)Ec(21), (int)(c.Right - Ec(10)), milieu), Theme.Texte);
+                Dessin.Texte(g, "Le moniteur doit écrire une précision quand il choisit cette tuile.", Theme.Police(9f),
+                    Rectangle.FromLTRB(xt, milieu, (int)(c.Right - Ec(10)), milieu + (int)Ec(20)), Theme.TexteSecondaireClair);
+            }
+
+        }
+    }
+
+    /// <summary>Pictogramme d'une tuile dans un carré teinté jaune (comme dans la fenêtre « Problème sur… »).</summary>
+    private sealed class PictoTuile : ControleDessine
+    {
+        private string? _cle;
+
+        public PictoTuile(string? cle)
+        {
+            _cle = cle;
+            AccessibleRole = AccessibleRole.Graphic;
+        }
+
+        [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+        public string? Cle { get => _cle; set => Invalider(ref _cle, value); }
+
+        protected override void Peindre(Graphics g)
+        {
+            var cote = Math.Min(Width, Height) - 1;
+            var r = new RectangleF(0.5f, 0.5f, cote, cote);
+            using (var chemin = Dessin.Arrondi(r, E(10)))
+            using (var fond = new SolidBrush(Theme.Sur(Dessin.CouleurParent(this), Theme.Avertissement, 0.14f)))
+            {
+                g.FillPath(fond, chemin);
+            }
+
+            var t = cote * 0.55f;
+            Icones.Dessiner(g, Icones.PourPictogramme(_cle), new RectangleF((cote - t) / 2, (cote - t) / 2, t, t), Theme.Avertissement, 1.9f);
         }
     }
 

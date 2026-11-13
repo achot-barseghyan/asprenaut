@@ -77,6 +77,26 @@ public sealed class SortieRepository(FabriqueConnexion fabrique) : ISortieReposi
         return lignes.AsList();
     }
 
+    public async Task<IReadOnlyList<SortieResume>> ListerClotureesAsync(int decalage, int nombre, CancellationToken ct = default)
+    {
+        // Les sorties de la page d'abord (index ix_sortie_statut), puis leurs totaux : on ne compte pas le matériel des autres.
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        var lignes = await cx.QueryAsync<SortieResume>(new CommandDefinition(
+            $"""
+            {SelectResume}
+            WHERE s.id IN (SELECT id FROM sortie WHERE statut = 'Cloturee' ORDER BY cloturee_le DESC, id DESC LIMIT @nombre OFFSET @decalage)
+            GROUP BY s.id ORDER BY s.cloturee_le DESC, s.id DESC;
+            """,
+            new { decalage = Math.Max(0, decalage), nombre = Math.Max(0, nombre) }, cancellationToken: ct));
+        return lignes.AsList();
+    }
+
+    public async Task<int> CompterClotureesAsync(CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        return await cx.ExecuteScalarAsync<int>(new CommandDefinition("SELECT COUNT(*) FROM sortie WHERE statut = 'Cloturee';", cancellationToken: ct));
+    }
+
     public async Task<IReadOnlyList<LigneSortie>> ListerLignesAsync(long sortieId, CancellationToken ct = default)
     {
         const string sql = """

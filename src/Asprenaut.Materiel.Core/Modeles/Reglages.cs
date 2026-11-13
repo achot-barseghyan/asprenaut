@@ -81,6 +81,23 @@ public sealed class Reglages
     /// <summary>Seuils propres à un modèle ou à un équipement (notice du fabricant) : ils remplacent celui de la catégorie.</summary>
     public List<SeuilSpecifique> SeuilsSpecifiques { get; set; } = [];
 
+    // --- Adhérents (voir ServiceAdherents) ---
+
+    /// <summary>Niveaux proposés à l'origine (FFESSM) : liste du formulaire, du modèle Excel et de l'import.</summary>
+    public static readonly IReadOnlyList<string> NiveauxParDefaut =
+        ["Débutant", "Niveau 1", "PA20", "PE40", "Niveau 2", "PA40", "PE60", "PA60", "Niveau 3", "Niveau 4", "Initiateur", "MF1", "MF2"];
+
+    /// <summary>Niveaux des adhérents, dans l'ordre de la liste (Paramètres › Configuration du club › Niveaux).</summary>
+    public List<string> NiveauxAdherents { get; set; } = [.. NiveauxParDefaut];
+
+    // --- Problèmes signalés (voir ServiceSignalements) ---
+
+    /// <summary>
+    /// Tuiles de la fenêtre « Problème sur A07 » personnalisées, par nom de catégorie. Catégorie absente : les tuiles d'origine
+    /// (<see cref="Services.ServiceSignalements.CausesParDefaut"/>).
+    /// </summary>
+    public Dictionary<string, List<CauseSignalement>> CausesSignalement { get; set; } = [];
+
     /// <summary>À 90 % du seuil, l'équipement passe « à planifier » dans Révisions.</summary>
     public bool PrevenirAvantSeuil { get; set; } = true;
 

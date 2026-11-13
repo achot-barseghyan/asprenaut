@@ -15,8 +15,35 @@ public sealed class ServiceAdherents(
     IAdherentRepository adherents,
     IJournalRepository journal,
     IHorloge horloge,
-    ServiceGestion? gestion = null)
+    ServiceGestion? gestion = null,
+    Reglages? reglages = null)
 {
+    /// <summary>Niveaux proposés (réglables dans Paramètres › Configuration du club).</summary>
+    public IReadOnlyList<string> Niveaux => reglages?.NiveauxAdherents is { Count: > 0 } liste ? liste : Reglages.NiveauxParDefaut;
+
+    /// <summary>
+    /// Niveau de la liste qui correspond à la saisie, sans tenir compte des majuscules, accents, espaces, points et tirets ;
+    /// « N2 », « niv 2 », « niveau2 » → « Niveau 2 ». Null si vide ou inconnu.
+    /// </summary>
+    public static string? NiveauReconnu(string? saisie, IReadOnlyList<string> niveaux)
+    {
+        static string Cle(string s) => new(Simplifier(s).Where(char.IsLetterOrDigit).ToArray());
+        var cle = Cle(saisie ?? "");
+        if (cle.Length == 0)
+        {
+            return null;
+        }
+
+        if (niveaux.FirstOrDefault(n => Cle(n) == cle) is { } exact)
+        {
+            return exact;
+        }
+
+        // Abréviations courantes : « n2 », « niv2 », « niveau2 ».
+        var abrege = System.Text.RegularExpressions.Regex.Match(cle, "^(n|niv|niveau)([1-4])$");
+        return abrege.Success ? niveaux.FirstOrDefault(n => Cle(n) == $"niveau{abrege.Groups[2].Value}") : null;
+    }
+
     /// <summary>Dernières sorties nominatives montrées sur la fiche.</summary>
     public const int NombreSortiesFiche = 5;
 
@@ -52,10 +79,21 @@ public sealed class ServiceAdherents(
     /// Onglet Adhérents : tous, les désactivés à la fin (pour pouvoir les réactiver). Filtre et recherche, avec le nombre
     /// d'adhérents de chaque filtre (puces « Tous 8 », « Matériel dehors 2 », « Non rendu 1 »).
     /// </summary>
-    public async Task<ListeAdherents> ListerAsync(string? recherche, FiltreAdherents filtre, CancellationToken ct = default)
+    public async Task<ListeAdherents> ListerAsync(string? recherche, FiltreAdherents filtre, CancellationToken ct = default) =>
+        await ListerAsync(recherche, filtre, niveau: null, ct);
+
+    /// <summary>Choix « sans niveau » du filtre par niveau.</summary>
+    public const string SansNiveau = "";
+
+    /// <summary>
+    /// Comme <see cref="ListerAsync(string?, FiltreAdherents, CancellationToken)"/>, limité à un niveau (null = tous,
+    /// <see cref="SansNiveau"/> = niveau non renseigné). Les nombres des puces tiennent compte de la recherche et du niveau.
+    /// </summary>
+    public async Task<ListeAdherents> ListerAsync(string? recherche, FiltreAdherents filtre, string? niveau, CancellationToken ct = default)
     {
         var situations = (await adherents.ListerSituationsAsync(ct)).ToDictionary(s => s.AdherentId);
         var fiches = Filtrer(await adherents.ListerAsync(actifsSeulement: false, ct), recherche)
+            .Where(a => niveau is null || (niveau.Length == 0 ? string.IsNullOrWhiteSpace(a.Niveau) : string.Equals(a.Niveau?.Trim(), niveau, StringComparison.OrdinalIgnoreCase)))
             .Select(a => situations.TryGetValue(a.Id, out var s) ? new FicheAdherent(a, s.NbDehors, s.NbManquants) : new FicheAdherent(a, 0, 0))
             .OrderBy(f => !f.Adherent.Actif)
             .ToList();
@@ -63,9 +101,12 @@ public sealed class ServiceAdherents(
         {
             FiltreAdherents.MaterielDehors => f.NbDehors > 0,
             FiltreAdherents.NonRendu => f.NbNonRendus > 0,
+            FiltreAdherents.Nitrox => f.Adherent.Nitrox,
+            FiltreAdherents.Desactives => !f.Adherent.Actif,
             _ => true,
         }).ToList();
-        return new ListeAdherents(filtrees, fiches.Count, fiches.Count(f => f.NbDehors > 0), fiches.Count(f => f.NbNonRendus > 0));
+        return new ListeAdherents(filtrees, fiches.Count, fiches.Count(f => f.NbDehors > 0), fiches.Count(f => f.NbNonRendus > 0),
+            fiches.Count(f => f.Adherent.Nitrox), fiches.Count(f => !f.Adherent.Actif));
     }
 
     /// <summary>Fiche : matériel qu'il a en ce moment, matériel non rendu (manquant à la clôture), dernières sorties nominatives.</summary>
@@ -109,6 +150,21 @@ public sealed class ServiceAdherents(
         }
 
         var tous = await adherents.ListerAsync(actifsSeulement: false, ct);
+
+        // Niveau pris dans la liste ; un ancien niveau hors liste reste accepté tant qu'il n'est pas changé.
+        if (!string.IsNullOrWhiteSpace(saisie.Niveau))
+        {
+            var ancien = tous.FirstOrDefault(a => a.Id == saisie.Id && saisie.Id != 0)?.Niveau;
+            if (NiveauReconnu(saisie.Niveau, Niveaux) is { } niveau)
+            {
+                saisie.Niveau = niveau;
+            }
+            else if (!string.Equals(ancien?.Trim(), saisie.Niveau.Trim(), StringComparison.Ordinal))
+            {
+                return ResultatOperation.Echec("Choisissez le niveau dans la liste.");
+            }
+        }
+
         if (Normaliser(saisie, tous) is { } erreur)
         {
             return erreur;
@@ -207,6 +263,40 @@ public sealed class ServiceAdherents(
         ["nitrox", "certifie nitrox", "certification nitrox", "brevet nitrox"],
     ];
 
+    /// <summary>Une colonne du modèle Excel à remplir par le club : en-tête (reconnu par l'import), aide, largeur, obligatoire.</summary>
+    public sealed record ColonneModele(string EnTete, string Aide, int Largeur, bool Obligatoire, IReadOnlyList<string>? Choix = null);
+
+    /// <summary>
+    /// Colonnes du modèle « Nouveaux adhérents » (bouton « Modèle Excel ») : exactement celles que <see cref="LireTableau"/>
+    /// reconnaît, dans le même ordre. Niveau : liste des niveaux du club ; Nitrox : liste Oui / Non.
+    /// </summary>
+    public static IReadOnlyList<ColonneModele> ColonnesModele(IReadOnlyList<string> niveaux) =>
+    [
+        new("Nom", "Nom de famille", 22, true),
+        new("Prénom", "Prénom", 18, true),
+        new("Niveau", "Choisissez dans la liste (flèche de la case)", 16, false, niveaux),
+        new("Licence", "Numéro de licence FFESSM (sert à reconnaître l'adhérent à l'import suivant)", 18, false),
+        new("Téléphone", "Ex. : 06 12 34 56 78", 18, false),
+        new("Nitrox", "Oui si certifié nitrox, sinon Non", 12, false, ["Oui", "Non"]),
+    ];
+
+    /// <summary>Nom proposé pour le modèle : « Adhérents à remplir - Asprenaut.xlsx ».</summary>
+    public static string NomFichierModele(string? nomClub) =>
+        $"Adhérents à remplir - {(string.IsNullOrWhiteSpace(nomClub) ? "club" : nomClub.Trim())}.xlsx";
+
+    /// <summary>Mode d'emploi écrit dans la seconde feuille du modèle (une ligne par paragraphe).</summary>
+    public static IReadOnlyList<string> ModeEmploiModele { get; } =
+    [
+        "Comment remplir ce fichier",
+        "1. Une ligne par adhérent, dans la feuille « Adhérents », à partir de la ligne 2.",
+        "2. Nom et Prénom sont obligatoires. Les autres colonnes peuvent rester vides.",
+        "3. Ne changez pas la première ligne (les titres des colonnes) : l'application s'en sert pour lire le fichier.",
+        "4. Licence : si elle est remplie, l'adhérent est reconnu à l'import suivant et mis à jour au lieu d'être ajouté en double.",
+        "5. Niveau et Nitrox : choisissez dans la liste (flèche à droite de la case). Ne tapez pas d'autre niveau : il serait ignoré. Vide = inchangé.",
+        "6. Enregistrez en .xlsx et rapportez le fichier au responsable matériel : Membres › Adhérents › Importer la liste Excel.",
+        "Personne n'est retiré par l'import : les adhérents absents du fichier restent dans l'application.",
+    ];
+
     /// <summary>
     /// Lit le tableau (feuille Excel ou CSV déjà découpé en cellules) : la première ligne qui contient « Nom » et « Prénom »
     /// est l'en-tête ; les colonnes Niveau, Licence et Téléphone sont facultatives. Les lignes vides sont ignorées.
@@ -252,7 +342,9 @@ public sealed class ServiceAdherents(
                 Licence = Cellule(ligne, colonnes[3]),
                 Telephone = Cellule(ligne, colonnes[4]),
             };
-            var nitrox = colonnes[5] >= 0 ? OuiNon(Cellule(ligne, colonnes[5])) : (bool?)null;
+            // Cellule vide (colonne présente, ex. le modèle à remplir) : statut inchangé, comme une colonne absente.
+            var celluleNitrox = colonnes[5] >= 0 ? Cellule(ligne, colonnes[5]) : null;
+            var nitrox = string.IsNullOrWhiteSpace(celluleNitrox) ? (bool?)null : OuiNon(celluleNitrox);
             a.Nitrox = nitrox ?? false;
             resultat.Add(Normaliser(a, []) is { } erreur ? new LigneImport(i + 1, null, erreur.Message) : new LigneImport(i + 1, a, null, nitrox));
         }
@@ -281,9 +373,21 @@ public sealed class ServiceAdherents(
         int ajoutes = 0, misAJour = 0;
         var ignorees = lues.Where(l => l.Adherent is null).Select(l => l.Numero).ToList();
         var licencesVues = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var niveauxInconnus = new List<int>();
         foreach (var lu in lues.Where(l => l.Adherent is not null).Select(l => (l.Numero, Adherent: l.Adherent!, l.Nitrox)))
         {
             var nouveau = lu.Adherent;
+
+            // Niveau ramené à la liste (« N2 » → « Niveau 2 ») ; inconnu : laissé vide (l'ancien est gardé), et signalé.
+            if (nouveau.Niveau is { } niveauLu)
+            {
+                nouveau.Niveau = NiveauReconnu(niveauLu, Niveaux);
+                if (nouveau.Niveau is null)
+                {
+                    niveauxInconnus.Add(lu.Numero);
+                }
+            }
+
             if (nouveau.Licence is { } licence && !licencesVues.Add(licence))
             {
                 ignorees.Add(lu.Numero); // Même licence deux fois dans le fichier : la première ligne compte.
@@ -317,6 +421,12 @@ public sealed class ServiceAdherents(
         if (ignorees.Count > 0)
         {
             message += $", {Libelles.Pluriel(ignorees.Count, "ligne ignorée", "lignes ignorées")} (ligne{(ignorees.Count > 1 ? "s" : "")} {string.Join(", ", ignorees.Order().Take(10))}{(ignorees.Count > 10 ? "…" : "")})";
+        }
+
+        if (niveauxInconnus.Count > 0)
+        {
+            message += $", {Libelles.Pluriel(niveauxInconnus.Count, "niveau inconnu laissé vide", "niveaux inconnus laissés vides")} " +
+                $"(ligne{(niveauxInconnus.Count > 1 ? "s" : "")} {string.Join(", ", niveauxInconnus.Take(10))}{(niveauxInconnus.Count > 10 ? "…" : "")})";
         }
 
         await JournaliserAsync(ActionsJournal.AdherentsImportes, $"Import de la liste des adhérents : {message}", ct);

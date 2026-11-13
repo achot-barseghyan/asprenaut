@@ -17,56 +17,87 @@ public sealed class ServiceSignalements(
     IRevisionRepository revisions,
     IJournalRepository journal,
     IHorloge horloge,
-    ServiceGestion? gestion = null)
+    ServiceGestion? gestion = null,
+    Reglages? reglages = null)
 {
+    /// <summary>Tuiles de la fenêtre pour cette catégorie (réglées dans Paramètres, sinon d'origine).</summary>
+    public IReadOnlyList<CauseSignalement> Tuiles(string? categorie) => TuilesPour(categorie, reglages);
+
     public const int LongueurMaxCause = 60;
     public const int LongueurMaxPrecision = 200;
     public const string CauseAutre = "Autre";
 
+    /// <summary>Nombre de tuiles d'une catégorie : de 1 à 12 (quatre rangées de trois dans la fenêtre).</summary>
+    public const int TuilesMax = 12;
+
+    /// <summary>Libellés des tuiles proposées pour cette catégorie (réglées dans Paramètres, sinon celles d'origine).</summary>
+    public static IReadOnlyList<string> CausesPour(string? categorie, Reglages? reglages = null) =>
+        TuilesPour(categorie, reglages).Select(c => c.Libelle).ToList();
+
     /// <summary>
-    /// Choix proposés selon la catégorie (maquette « Retour du matériel »), « Autre » en dernier.
-    /// Catégorie inconnue : choix génériques.
+    /// Tuiles de la fenêtre « Problème sur A07 » pour cette catégorie : celles réglées dans Paramètres › Problèmes signalés
+    /// (nom de catégorie, sans tenir compte des majuscules), sinon celles d'origine (<see cref="CausesParDefaut"/>). Copies.
     /// </summary>
-    public static IReadOnlyList<string> CausesPour(string? categorie)
+    public static IReadOnlyList<CauseSignalement> TuilesPour(string? categorie, Reglages? reglages)
+    {
+        var nom = (categorie ?? "").Trim();
+        var reglees = reglages?.CausesSignalement
+            .FirstOrDefault(p => string.Equals(p.Key.Trim(), nom, StringComparison.OrdinalIgnoreCase)).Value;
+        return (reglees is { Count: > 0 } ? reglees : CausesParDefaut(categorie)).Select(c => c.Copie()).ToList();
+    }
+
+    /// <summary>Tuiles réglées pour cette catégorie (plutôt que celles d'origine).</summary>
+    public static bool TuilesPersonnalisees(string? categorie, Reglages reglages) =>
+        reglages.CausesSignalement.Any(p => string.Equals(p.Key.Trim(), (categorie ?? "").Trim(), StringComparison.OrdinalIgnoreCase) && p.Value.Count > 0);
+
+    /// <summary>
+    /// Tuiles d'origine selon la catégorie (maquette « Retour du matériel »), « Autre » en dernier, précision facultative.
+    /// Catégorie inconnue : choix génériques. Pictogrammes : clés de <c>Icones.PictosCause</c>.
+    /// </summary>
+    public static IReadOnlyList<CauseSignalement> CausesParDefaut(string? categorie)
     {
         var c = (categorie ?? "").Trim();
         bool Est(params string[] debuts) => debuts.Any(d => c.StartsWith(d, StringComparison.OrdinalIgnoreCase));
-        if (Est("Détendeur", "Detendeur"))
+        (string Libelle, string Picto)[] tuiles =
+            Est("Détendeur", "Detendeur") ? [("Fuite / bulles", "Goutte"), ("Débit continu", "Debit"), ("Respiration dure", "Respiration"), ("Embout abîmé", "Embout"), ("Flexible abîmé", "Flexible")]
+            : Est("Gilet", "Stab") ? [("Ne tient pas l'air", "Goutte"), ("Inflateur qui colle", "Boucle"), ("Purge qui reste bloquée", "Bloque"), ("Sangle ou boucle cassée", "Casse"), ("Poche à plombs abîmée", "Dechire")]
+            : Est("Bloc") ? [("Robinet qui fuit", "Robinet"), ("Robinet dur", "Bloque"), ("Choc / bosse", "Choc"), ("Corrosion visible", "Corrosion"), ("Joint torique abîmé", "Goutte")]
+            : Est("Masque") ? [("Verre fêlé", "Verre"), ("Jupe déchirée", "Dechire"), ("Sangle cassée", "Casse"), ("Boucle cassée", "Boucle"), ("Buée permanente", "Buee")]
+            : Est("Palme") ? [("Sangle ou talon cassé", "Casse"), ("Voilure fendue", "Palmes"), ("Boucle cassée", "Boucle")]
+            : Est("Combinaison") ? [("Déchirure", "Dechire"), ("Fermeture bloquée", "Fermeture"), ("Coutures ouvertes", "Casse")]
+            : Est("Ordinateur") ? [("Ne s'allume plus", "Ecran"), ("Pile faible", "Pile"), ("Bracelet cassé", "Casse")]
+            : [("Cassé", "Casse"), ("Abîmé", "Dechire"), ("Ne fonctionne plus", "Ecran")];
+        return [.. tuiles.Select(t => new CauseSignalement { Libelle = t.Libelle, Pictogramme = t.Picto }), new CauseSignalement { Libelle = CauseAutre, Pictogramme = "Autre" }];
+    }
+
+    /// <summary>
+    /// Vérifie une liste de tuiles avant de l'enregistrer : 1 à <see cref="TuilesMax"/>, libellé obligatoire
+    /// (<see cref="LongueurMaxCause"/> car.), sans doublon (majuscules ignorées). Message d'erreur, ou null.
+    /// </summary>
+    public static string? VerifierTuiles(IReadOnlyList<CauseSignalement> tuiles)
+    {
+        if (tuiles.Count == 0)
         {
-            return ["Fuite / bulles", "Débit continu", "Respiration dure", "Embout abîmé", "Flexible abîmé", CauseAutre];
+            return "Gardez au moins une tuile.";
         }
 
-        if (Est("Gilet", "Stab"))
+        if (tuiles.Count > TuilesMax)
         {
-            return ["Ne tient pas l'air", "Inflateur qui colle", "Purge qui reste bloquée", "Sangle ou boucle cassée", "Poche à plombs abîmée", CauseAutre];
+            return $"{TuilesMax} tuiles au plus.";
         }
 
-        if (Est("Bloc"))
+        if (tuiles.Any(t => string.IsNullOrWhiteSpace(t.Libelle)))
         {
-            return ["Robinet qui fuit", "Robinet dur", "Choc / bosse", "Corrosion visible", "Joint torique abîmé", CauseAutre];
+            return "Donnez un nom à chaque tuile.";
         }
 
-        if (Est("Masque"))
+        if (tuiles.FirstOrDefault(t => t.Libelle.Trim().Length > LongueurMaxCause) is { } longue)
         {
-            return ["Verre fêlé", "Jupe déchirée", "Sangle cassée", "Boucle cassée", "Buée permanente", CauseAutre];
+            return $"« {longue.Libelle.Trim()[..20]}… » : {LongueurMaxCause} caractères au plus.";
         }
 
-        if (Est("Palme"))
-        {
-            return ["Sangle ou talon cassé", "Voilure fendue", "Boucle cassée", CauseAutre];
-        }
-
-        if (Est("Combinaison"))
-        {
-            return ["Déchirure", "Fermeture bloquée", "Coutures ouvertes", CauseAutre];
-        }
-
-        if (Est("Ordinateur"))
-        {
-            return ["Ne s'allume plus", "Pile faible", "Bracelet cassé", CauseAutre];
-        }
-
-        return ["Cassé", "Abîmé", "Ne fonctionne plus", CauseAutre];
+        var doublon = tuiles.GroupBy(t => t.Libelle.Trim(), StringComparer.OrdinalIgnoreCase).FirstOrDefault(g => g.Count() > 1);
+        return doublon is null ? null : $"« {doublon.Key} » existe déjà.";
     }
 
     public static string Libelle(GraviteSignalement gravite) => gravite == GraviteSignalement.HorsService ? "Hors service" : "À surveiller";
@@ -114,6 +145,13 @@ public sealed class ServiceSignalements(
         if (precision.Length > LongueurMaxPrecision)
         {
             return ResultatOperation.Echec($"Précision : {LongueurMaxPrecision} caractères au plus.");
+        }
+
+        // Tuile qui demande une précision (réglage de Paramètres › Problèmes signalés).
+        var categorie = (await categories.ListerAsync(ct)).FirstOrDefault(c => c.Id == equipement.CategorieId)?.Nom;
+        if (precision.Length == 0 && Tuiles(categorie).Any(t => t.PrecisionObligatoire && string.Equals(t.Libelle.Trim(), cause, StringComparison.OrdinalIgnoreCase)))
+        {
+            return ResultatOperation.Echec($"Précisez le problème : « {cause} » demande une précision.");
         }
 
         var existant = await signalements.ObtenirOuvertAsync(equipement.Id, ct);

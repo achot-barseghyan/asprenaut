@@ -124,29 +124,37 @@ public static class Icones
     private const string Boucle = "M9 4h6v6H9zM12 10v10M8 16h8";
     private const string Bloque = "M12 4v8M8 8l4 4 4-4M5 20h14";
 
-    /// <summary>Pictogramme d'une cause proposée par <see cref="Core.Services.ServiceSignalements.CausesPour"/> ; points sinon.</summary>
-    public static string PourCause(string cause) => cause switch
-    {
-        "Fuite / bulles" or "Ne tient pas l'air" or "Joint torique abîmé" => Goutte,
-        "Débit continu" => "M3 8h12a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h8",
-        "Respiration dure" => "M12 4v8M8 7c-3 1-4 5-4 9 0 2 2 3 4 2l2-1V9M16 7c3 1 4 5 4 9 0 2-2 3-4 2l-2-1V9",
-        "Embout abîmé" => "M5 9a7 7 0 0 1 14 0v3a7 7 0 0 1-14 0zM9 11h6",
-        "Flexible abîmé" => "M4 18c4 0 4-12 8-12s4 12 8 12",
-        "Inflateur qui colle" or "Boucle cassée" => Boucle,
-        "Purge qui reste bloquée" or "Robinet dur" => Bloque,
-        "Sangle ou boucle cassée" or "Sangle cassée" or "Sangle ou talon cassé" or "Coutures ouvertes" or "Bracelet cassé" or "Cassé" => Casse,
-        "Poche à plombs abîmée" or "Jupe déchirée" or "Déchirure" or "Abîmé" => Dechire,
-        "Robinet qui fuit" => "M9 3h6v4H9zM12 7v4M6 11h12v10H6z",
-        "Choc / bosse" => "M8 3h8v18H8zM8 12q4-3 8 0",
-        "Corrosion visible" => "M8 3h8v18H8zM11 8h.01M13 13h.01M10 16h.01",
-        "Verre fêlé" => "M4 4h16v16H4zM9 4l3 6-3 4 3 6",
-        "Buée permanente" => "M3 12h18M5 8h14M7 16h10",
-        "Voilure fendue" => Palmes,
-        "Fermeture bloquée" => "M12 3v18M10 6h4M10 10h4M10 14h4",
-        "Ne s'allume plus" or "Ne fonctionne plus" => "M7 4h10v16H7zM9 8h6M9 12h4",
-        "Pile faible" => "M4 8h14v8H4zM18 11h2v2h-2M7 11h4",
-        _ => Autre,
-    };
+    /// <summary>
+    /// Pictogrammes au choix pour les tuiles des problèmes signalés (Paramètres › Problèmes signalés) : clé enregistrée dans
+    /// <see cref="Core.Modeles.CauseSignalement.Pictogramme"/>, nom affiché dans la liste, tracé.
+    /// </summary>
+    public static IReadOnlyList<(string Cle, string Nom, string Chemin)> PictosCause =>
+    [
+        ("Goutte", "Fuite", Goutte),
+        ("Debit", "Débit d'air", "M3 8h12a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h8"),
+        ("Respiration", "Respiration", "M12 4v8M8 7c-3 1-4 5-4 9 0 2 2 3 4 2l2-1V9M16 7c3 1 4 5 4 9 0 2-2 3-4 2l-2-1V9"),
+        ("Embout", "Embout", "M5 9a7 7 0 0 1 14 0v3a7 7 0 0 1-14 0zM9 11h6"),
+        ("Flexible", "Flexible", "M4 18c4 0 4-12 8-12s4 12 8 12"),
+        ("Boucle", "Boucle, inflateur", Boucle),
+        ("Bloque", "Bloqué", Bloque),
+        ("Casse", "Cassé", Casse),
+        ("Dechire", "Déchiré, abîmé", Dechire),
+        ("Robinet", "Robinet", "M9 3h6v4H9zM12 7v4M6 11h12v10H6z"),
+        ("Choc", "Choc", "M8 3h8v18H8zM8 12q4-3 8 0"),
+        ("Corrosion", "Corrosion", "M8 3h8v18H8zM11 8h.01M13 13h.01M10 16h.01"),
+        ("Verre", "Verre fêlé", "M4 4h16v16H4zM9 4l3 6-3 4 3 6"),
+        ("Buee", "Buée", "M3 12h18M5 8h14M7 16h10"),
+        ("Palmes", "Palme", Palmes),
+        ("Fermeture", "Fermeture", "M12 3v18M10 6h4M10 10h4M10 14h4"),
+        ("Ecran", "Écran, électronique", "M7 4h10v16H7zM9 8h6M9 12h4"),
+        ("Pile", "Pile", "M4 8h14v8H4zM18 11h2v2h-2M7 11h4"),
+        ("Alerte", "Attention", Alerte),
+        ("Autre", "Autre (points)", Autre),
+    ];
+
+    /// <summary>Tracé d'un pictogramme de tuile d'après sa clé ; points si la clé est inconnue.</summary>
+    public static string PourPictogramme(string? cle) =>
+        PictosCause.FirstOrDefault(p => string.Equals(p.Cle, cle, StringComparison.OrdinalIgnoreCase)).Chemin ?? Autre;
 
     private static readonly Dictionary<string, GraphicsPath> Cache = [];
 

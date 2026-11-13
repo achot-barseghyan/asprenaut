@@ -263,4 +263,44 @@ public class AdherentsTests
         Assert.Equal(2, ServiceAdherents.Filtrer(liste, "  ").Count);
         Assert.Equal("JM", liste[1].Initiales);
     }
-}
+
+    // Niveaux : une liste (Paramètres), le formulaire n'accepte qu'un niveau de la liste, l'import ramène les abréviations.
+    [Fact]
+    public async Task Le_niveau_est_pris_dans_la_liste()
+    {
+        Assert.Equal("Niveau 2", ServiceAdherents.NiveauReconnu(" n2 ", _ctx.Adherents.Niveaux));
+        Assert.Equal("Niveau 2", ServiceAdherents.NiveauReconnu("NIVEAU 2", _ctx.Adherents.Niveaux));
+        Assert.Equal("PA40", ServiceAdherents.NiveauReconnu("pa 40", _ctx.Adherents.Niveaux));
+        Assert.Equal("Débutant", ServiceAdherents.NiveauReconnu("debutant", _ctx.Adherents.Niveaux));
+        Assert.Null(ServiceAdherents.NiveauReconnu("N5", _ctx.Adherents.Niveaux));
+
+        var hugo = await AdherentAsync("Hugo", "Moreau", niveau: "niv 3");
+        Assert.Equal("Niveau 3", hugo.Niveau);
+        var refus = await _ctx.Adherents.EnregistrerAsync(new Adherent { Prenom = "Léa", Nom = "Dubois", Niveau = "Plongeur confirmé" });
+        Assert.Equal("Choisissez le niveau dans la liste.", refus.Message);
+
+        // Un ancien niveau hors liste (saisi avant) est gardé tant qu'on ne le change pas.
+        hugo.Niveau = "Niveau 3 ancien";
+        _ctx.Db.Adherents.Single(a => a.Id == hugo.Id).Niveau = "Niveau 3 ancien";
+        Assert.True((await _ctx.Adherents.EnregistrerAsync(new Adherent { Id = hugo.Id, Prenom = "Hugo", Nom = "Moreau", Niveau = "Niveau 3 ancien", Actif = true })).Reussi);
+    }
+
+    [Fact]
+    public async Task L_import_ramene_les_niveaux_a_la_liste_et_signale_les_inconnus()
+    {
+        var r = await _ctx.Adherents.ImporterAsync([["Nom", "Prénom", "Niveau"], ["Martin", "Julie", "N2"], ["Petit", "Hugo", "super plongeur"], ["Dubois", "Léa", ""]]);
+
+        Assert.Equal("Import terminé : 3 adhérents ajoutés, 0 mis à jour, 1 niveau inconnu laissé vide (ligne 3).", r.Message);
+        Assert.Equal("Niveau 2", _ctx.Db.Adherents.Single(a => a.Nom == "Martin").Niveau);
+        Assert.Null(_ctx.Db.Adherents.Single(a => a.Nom == "Petit").Niveau);
+    }
+
+    [Fact]
+    public void La_liste_des_niveaux_se_regle_dans_les_parametres()
+    {
+        Assert.True(_ctx.ServiceReglages.ChangerNiveauxAdherents(["Débutant", " Niveau 1 ", "", "Bronze"]).Reussi);
+        Assert.Equal(["Débutant", "Niveau 1", "Bronze"], _ctx.Adherents.Niveaux);
+        Assert.Equal("« Niveau 1 » est en double.", _ctx.ServiceReglages.ChangerNiveauxAdherents(["Niveau 1", "NIVEAU 1"]).Message);
+        Assert.Equal("Gardez au moins un niveau.", _ctx.ServiceReglages.ChangerNiveauxAdherents([" "]).Message);
+        Assert.Equal("Bronze", ServiceAdherents.ColonnesModele(_ctx.Adherents.Niveaux)[2].Choix![2]); // Liste du modèle Excel.
+    }}

@@ -30,13 +30,19 @@ public sealed class EcranMoniteurs : EcranBase
     private readonly Bascule _onglets = new("Moniteurs", "Classes", "Adhérents");
     private readonly BoutonArrondi _ajouter = new("Ajouter un moniteur", StyleBouton.Principal, Icones.Plus);
     private readonly BoutonArrondi _importer = new("Importer la liste Excel", StyleBouton.Secondaire, Icones.Document) { Visible = false };
+    private readonly BoutonArrondi _modele = new("Modèle Excel à remplir", StyleBouton.Secondaire, Icones.Telecharger) { Visible = false };
+    private readonly Reglages _reglages;
     private readonly Dictionary<GenreResponsable, long?> _selection = [];
     private IReadOnlyList<FicheMoniteur> _tous = [];
     private IReadOnlyList<FicheMoniteur> _liste = [];
 
     // Onglet Adhérents : recherche par nom, filtres, adhérent choisi.
     private readonly BarreRecherche _recherche = new("Rechercher un adhérent…", "nom ou prénom") { Margin = new Padding(0, 0, 14, 0) };
-    private readonly Bascule _filtreAdherents = new("Tous", "Matériel dehors", "Non rendu");
+    private readonly Bascule _filtreAdherents = new("Tous", "Matériel dehors", "Non rendu", "Nitrox", "Désactivés");
+
+    // Onglet Moniteurs : mêmes recherche et puces (pas pour les classes, peu nombreuses).
+    private readonly Bascule _filtreMoniteurs = new("Tous", "Actifs", "Inspecteurs TIV", "Matériel dehors", "Inactifs");
+    private readonly ListeDeroulante _niveau = new() { AccessibleName = "Filtrer par niveau", Width = 220 };
     private readonly System.Windows.Forms.Timer _attenteRecherche = new() { Interval = 300 };
     private readonly TableLayoutPanel _page;
     private IReadOnlyList<FicheAdherent> _listeAdherents = [];
@@ -44,9 +50,10 @@ public sealed class EcranMoniteurs : EcranBase
 
     private readonly GardeGestion _garde;
 
-    public EcranMoniteurs(ServiceMoniteurs moniteurs, ServiceAdherents adherents, INavigation navigation, GardeGestion garde)
+    public EcranMoniteurs(ServiceMoniteurs moniteurs, ServiceAdherents adherents, INavigation navigation, GardeGestion garde, Reglages reglages)
     {
         _garde = garde;
+        _reglages = reglages;
         _moniteurs = moniteurs;
         _adherents = adherents;
         _navigation = navigation;
@@ -55,6 +62,8 @@ public sealed class EcranMoniteurs : EcranBase
         _garde.Lier(_importer, ActionProtegee.Moniteurs);
         _ajouter.Click += (_, _) => Executer(() => Adherents ? ModifierAdherentAsync(null) : ModifierAsync(null, Genre));
         _importer.Click += (_, _) => Executer(ImporterAsync);
+        _modele.Click += (_, _) => Executer(EnregistrerModeleAsync); // Libre : ne change aucune donnée.
+        _modele.AccessibleDescription = "Fichier Excel vide à donner au club pour noter les nouveaux adhérents, puis à importer";
 
         _onglets.AccessibleName = "Membres";
         _onglets.Margin = new Padding(0, 0, 0, 22);
@@ -62,6 +71,20 @@ public sealed class EcranMoniteurs : EcranBase
 
         _filtreAdherents.AccessibleName = "Filtrer les adhérents";
         _filtreAdherents.Changement += (_, _) => Executer(AfficherAdherentsAsync);
+        _filtreMoniteurs.AccessibleName = "Filtrer les moniteurs";
+        _filtreMoniteurs.Changement += (_, _) => Executer(AfficherGenreAsync);
+
+        // Niveau : tous, ceux de la liste du club, ou non renseigné.
+        _niveau.Items.Add(new Choix<string?>(null, "Tous les niveaux"));
+        foreach (var n in adherents.Niveaux)
+        {
+            _niveau.Items.Add(new Choix<string?>(n, n));
+        }
+
+        _niveau.Items.Add(new Choix<string?>(ServiceAdherents.SansNiveau, "Sans niveau"));
+        _niveau.SelectedIndex = 0;
+        _niveau.Margin = new Padding(0, 0, 14, 0);
+        _niveau.SelectedIndexChanged += (_, _) => Executer(AfficherAdherentsAsync);
         _recherche.Champ.TextChanged += (_, _) =>
         {
             _attenteRecherche.Stop();
@@ -70,7 +93,7 @@ public sealed class EcranMoniteurs : EcranBase
         _attenteRecherche.Tick += (_, _) =>
         {
             _attenteRecherche.Stop();
-            Executer(AfficherAdherentsAsync);
+            Executer(AfficherGenreAsync); // Moniteurs ou adhérents, selon l'onglet.
         };
 
         Natif.ScrollbarsDuTheme(_fiche);
@@ -78,13 +101,20 @@ public sealed class EcranMoniteurs : EcranBase
         _carteFiche.Controls.Add(_fiche);
 
         var onglets = Ui.Rangee(true, _onglets);
-        // Le filtre remplit sa cellule (ancré seulement, il gardait la hauteur nulle de la rangée masquée au départ).
-        var filtres = Ui.Colonnes((_recherche, SizeType.Percent, 100), (_filtreAdherents, SizeType.AutoSize, 0));
+        // Recherche (et niveau pour les adhérents) puis les puces de l'onglet ; les puces remplissent leur cellule (ancrées
+        // seulement, elles gardaient la hauteur nulle de la rangée masquée au départ).
+        _recherche.Margin = new Padding(0, 0, 14, 0);
+        var ligneRecherche = Ui.Colonnes((_recherche, SizeType.Percent, 100), (_niveau, SizeType.AutoSize, 0));
+        var puces = Ui.Rangee(true, _filtreAdherents, _filtreMoniteurs);
+        puces.Margin = new Padding(0, 10, 0, 0);
+        var filtres = Ui.Colonne(
+            (ligneRecherche, SizeType.Absolute, 54),
+            (puces, SizeType.Absolute, Theme.HauteurCliquable + 8 + 10));
         filtres.Margin = new Padding(0, 0, 0, 20);
         _page = Ui.Colonne(
-            (Ui.Entete(Ui.Pile(Ui.Titre(Titre), Ui.SousTitre("Les responsables de sortie, les adhérents du club et le matériel encore dehors.")), _ajouter, _importer), SizeType.AutoSize, 0),
+            (Ui.Entete(Ui.Pile(Ui.Titre(Titre), Ui.SousTitre("Les responsables de sortie, les adhérents du club et le matériel encore dehors.")), _ajouter, _importer, _modele), SizeType.AutoSize, 0),
             (onglets, SizeType.AutoSize, 0),
-            (filtres, SizeType.Absolute, 0), // 54 + 20 sur l'onglet Adhérents.
+            (filtres, SizeType.Absolute, 0), // HauteurFiltres sur les onglets Moniteurs et Adhérents.
             (Ui.Colonnes((_cartes, SizeType.Percent, 60), (_carteFiche, SizeType.Percent, 40)), SizeType.Percent, 100));
         filtres.Visible = false;
         Controls.Add(_page);
@@ -93,6 +123,9 @@ public sealed class EcranMoniteurs : EcranBase
     public override string Titre => "Membres du club";
 
     public override EntreeMenu Menu => EntreeMenu.Moniteurs;
+
+    /// <summary>Hauteur de la zone recherche + puces (pixels logiques) : 54 + puces + marges.</summary>
+    private const int HauteurFiltres = 54 + Theme.HauteurCliquable + 8 + 10 + 20;
 
     private GenreResponsable Genre => _onglets.SelectedIndex == 1 ? GenreResponsable.Classe : GenreResponsable.Moniteur;
 
@@ -130,15 +163,28 @@ public sealed class EcranMoniteurs : EcranBase
     /// <summary>Cartes de l'onglet choisi (moniteurs ou classes) et fiche du responsable choisi dans cet onglet.</summary>
     private async Task AfficherGenreAsync()
     {
-        // Barre de recherche et filtres : seulement pour les adhérents.
+        // Recherche et filtres : moniteurs et adhérents (pas les classes). Puces et niveau de l'onglet ouvert.
+        var avecFiltres = !Classes;
         var filtres = _page.GetControlFromPosition(0, 2)!;
-        if (filtres.Visible != Adherents)
+        if (filtres.Visible != avecFiltres)
         {
-            filtres.Visible = Adherents;
-            _page.RowStyles[2].Height = Adherents ? Dessin.Echelle(this, 54 + 20) : 0;
+            filtres.Visible = avecFiltres;
+            _page.RowStyles[2].Height = avecFiltres ? Dessin.Echelle(this, HauteurFiltres) : 0;
+        }
+
+        _filtreAdherents.Visible = _niveau.Visible = Adherents;
+        _filtreMoniteurs.Visible = !Adherents;
+        var indicatif = Adherents ? "Rechercher un adhérent…" : "Rechercher un moniteur (nom, niveau, téléphone)…";
+        if (_recherche.Champ.PlaceholderText != indicatif)
+        {
+            _recherche.Champ.PlaceholderText = indicatif;
+            _attenteRecherche.Stop();
+            _recherche.Champ.Text = ""; // Chaque onglet a sa recherche.
+            _attenteRecherche.Stop();
         }
 
         _importer.Visible = Adherents;
+        _modele.Visible = Adherents;
         if (Adherents)
         {
             _ajouter.Text = _ajouter.AccessibleName = "Ajouter un adhérent";
@@ -149,7 +195,21 @@ public sealed class EcranMoniteurs : EcranBase
         var genre = Genre;
         _ajouter.Text = Classes ? "Ajouter une classe" : "Ajouter un moniteur";
         _ajouter.AccessibleName = _ajouter.Text;
-        _liste = _tous.Where(f => f.Moniteur.Genre == genre).ToList();
+        var duGenre = _tous.Where(f => f.Moniteur.Genre == genre).ToList();
+        if (Classes)
+        {
+            _liste = duGenre;
+        }
+        else
+        {
+            var filtrees = ServiceMoniteurs.Filtrer(duGenre, _recherche.Champ.Text, (FiltreMoniteurs)_filtreMoniteurs.SelectedIndex);
+            _filtreMoniteurs.DefinirNombre(0, filtrees.Tous);
+            _filtreMoniteurs.DefinirNombre(1, filtrees.Actifs);
+            _filtreMoniteurs.DefinirNombre(2, filtrees.InspecteursTiv);
+            _filtreMoniteurs.DefinirNombre(3, filtrees.MaterielDehors);
+            _filtreMoniteurs.DefinirNombre(4, filtrees.Inactifs);
+            _liste = filtrees.Fiches;
+        }
         if (!_selection.TryGetValue(genre, out var choisi) || _liste.All(f => f.Moniteur.Id != choisi))
         {
             _selection[genre] = _liste.FirstOrDefault()?.Moniteur.Id;
@@ -318,7 +378,7 @@ public sealed class EcranMoniteurs : EcranBase
         }
 
         var filtre = (FiltreAdherents)_filtreAdherents.SelectedIndex;
-        var liste = await _adherents.ListerAsync(_recherche.Champ.Text, filtre);
+        var liste = await _adherents.ListerAsync(_recherche.Champ.Text, filtre, (_niveau.SelectedItem as Choix<string?>)?.Valeur);
         if (IsDisposed)
         {
             return;
@@ -327,6 +387,8 @@ public sealed class EcranMoniteurs : EcranBase
         _filtreAdherents.DefinirNombre(0, liste.Tous);
         _filtreAdherents.DefinirNombre(1, liste.MaterielDehors);
         _filtreAdherents.DefinirNombre(2, liste.NonRendu);
+        _filtreAdherents.DefinirNombre(3, liste.Nitrox);
+        _filtreAdherents.DefinirNombre(4, liste.Desactives);
         _listeAdherents = liste.Fiches;
         if (_adherentChoisi is null || _listeAdherents.All(f => f.Adherent.Id != _adherentChoisi))
         {
@@ -506,18 +568,30 @@ public sealed class EcranMoniteurs : EcranBase
 
         var prenom = new ChampSaisie { Valeur = a?.Prenom ?? "" };
         var nom = new ChampSaisie { Valeur = a?.Nom ?? "" };
-        var niveau = new ChampSaisie { Valeur = a?.Niveau ?? "", TexteIndicatif = "Niveau 1, Niveau 2…" };
+        // Niveau : la liste du club (Paramètres › Configuration du club) ; un ancien niveau hors liste reste proposé.
+        var niveau = new ListeDeroulante { AccessibleName = "Niveau" };
+        niveau.Items.Add(new Choix<string>("", "Non renseigné"));
+        foreach (var n in _adherents.Niveaux)
+        {
+            niveau.Items.Add(new Choix<string>(n, n));
+        }
+
+        if (a?.Niveau is { Length: > 0 } actuel && !_adherents.Niveaux.Contains(actuel))
+        {
+            niveau.Items.Add(new Choix<string>(actuel, $"{actuel} (hors liste)"));
+        }
+
+        niveau.SelectedItem = niveau.Items.OfType<Choix<string>>().FirstOrDefault(c => c.Valeur == (a?.Niveau ?? "")) ?? niveau.Items[0];
         var licence = new ChampSaisie { Valeur = a?.Licence ?? "", TexteIndicatif = "A-12-345678" };
         var telephone = new ChampSaisie { Valeur = a?.Telephone ?? "", TexteIndicatif = "06 12 34 56 78" };
         var actif = new Interrupteur("Actif") { Checked = a?.Actif ?? true };
         var nitrox = new Interrupteur("Certifié nitrox") { Checked = a?.Nitrox ?? false };
         prenom.Champ.AccessibleName = "Prénom";
         nom.Champ.AccessibleName = "Nom";
-        niveau.Champ.AccessibleName = "Niveau";
-        licence.Champ.AccessibleName = "Licence";
+       licence.Champ.AccessibleName = "Licence";
         licence.Champ.CharacterCasing = CharacterCasing.Upper;
         telephone.Champ.AccessibleName = "Téléphone";
-        foreach (var (champ, max) in new[] { (prenom, Adherent.LongueurMaxNom), (nom, Adherent.LongueurMaxNom), (niveau, Adherent.LongueurMaxNiveau),
+        foreach (var (champ, max) in new[] { (prenom, Adherent.LongueurMaxNom), (nom, Adherent.LongueurMaxNom),
             (licence, Adherent.LongueurMaxLicence), (telephone, Adherent.LongueurMaxTelephone) })
         {
             champ.Champ.MaxLength = max;
@@ -529,7 +603,7 @@ public sealed class EcranMoniteurs : EcranBase
             Id = a?.Id ?? 0,
             Prenom = prenom.Valeur,
             Nom = nom.Valeur,
-            Niveau = niveau.Valeur,
+            Niveau = (niveau.SelectedItem as Choix<string>)?.Valeur,
             Licence = licence.Valeur,
             Telephone = telephone.Valeur,
             Actif = actif.Checked,
@@ -555,6 +629,16 @@ public sealed class EcranMoniteurs : EcranBase
     /// « Importer la liste Excel » (.xlsx ou .csv) : les colonnes Nom et Prénom sont obligatoires, Niveau, Licence et
     /// Téléphone facultatives. Un adhérent de même licence est mis à jour ; les autres sont ajoutés.
     /// </summary>
+private async Task EnregistrerModeleAsync()
+    {
+        // Couleur de l'en-tête : celle du logo du club (fixe dans les deux thèmes).
+        var c = Theme.LogoFonce;
+        var colonnes = ServiceAdherents.ColonnesModele(_adherents.Niveaux).Select(m => new Infrastructure.ColonneClasseur(
+            m.EnTete, m.Obligatoire ? $"Obligatoire. {m.Aide}" : m.Aide, m.Largeur, m.Choix)).ToList();
+        await Infrastructure.Fichiers.EnregistrerXlsxAsync(FindForm(), "Enregistrer le modèle des adhérents", ServiceAdherents.NomFichierModele(_reglages.NomClub),
+            chemin => Infrastructure.EcrivainTableur.EcrireModele(chemin, "Adhérents", colonnes, ServiceAdherents.ModeEmploiModele, $"{c.R:X2}{c.G:X2}{c.B:X2}"));
+    }
+
     private async Task ImporterAsync()
     {
         if (!_garde.Exiger(FindForm(), ActionProtegee.Moniteurs, "Importer la liste des adhérents"))
@@ -737,8 +821,7 @@ public sealed class EcranMoniteurs : EcranBase
             var tiv = new Interrupteur("Inspecteur TIV") { Checked = m?.InspecteurTiv ?? false };
             prenom.Champ.AccessibleName = "Prénom";
             nom.Champ.AccessibleName = "Nom";
-            niveau.Champ.AccessibleName = "Niveau";
-            telephone.Champ.AccessibleName = "Téléphone";
+               telephone.Champ.AccessibleName = "Téléphone";
 
             fenetre = new FenetreFormulaire(titre, m is null ? "Ajouter" : "Enregistrer", async () => enregistre = await _moniteurs.EnregistrerAsync(new Moniteur
             {

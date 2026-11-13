@@ -71,6 +71,11 @@ public interface ISortieRepository
     /// <summary>Sorties clôturées si <paramref name="cloturees"/>, sinon en préparation et en cours.</summary>
     Task<IReadOnlyList<SortieResume>> ListerResumesAsync(bool cloturees, CancellationToken ct = default);
 
+    /// <summary>Une page des sorties clôturées, la plus récemment clôturée d'abord (seules ces sorties sont lues).</summary>
+    Task<IReadOnlyList<SortieResume>> ListerClotureesAsync(int decalage, int nombre, CancellationToken ct = default);
+
+    Task<int> CompterClotureesAsync(CancellationToken ct = default);
+
     // --- Matériel d'une sortie (table sortie_equipement) ---
 
     Task<IReadOnlyList<LigneSortie>> ListerLignesAsync(long sortieId, CancellationToken ct = default);

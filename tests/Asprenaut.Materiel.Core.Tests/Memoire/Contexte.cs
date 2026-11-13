@@ -47,12 +47,12 @@ public sealed class Contexte
         var types = new TypeSortieRepositoryMemoire(Db);
         TypesSortie = new ServiceTypesSortie(types, Gestion);
         DepotAdherents = new AdherentRepositoryMemoire(Db);
-        Adherents = new ServiceAdherents(DepotAdherents, journal, Horloge, Gestion);
+        Adherents = new ServiceAdherents(DepotAdherents, journal, Horloge, Gestion, Reglages);
         Sorties = new ServiceSortie(sorties, moniteurs, journal, Horloge, Reglages, Gestion, types, DepotAdherents);
         Inventaire = new ServiceInventaire(equipements, categories, journal, Horloge, Reglages, Gestion, sorties, DepotRevisions);
         ServiceReglages = new ServiceReglages(Reglages, Stockage, Sauvegardes, Gestion);
         DepotSignalements = new SignalementRepositoryMemoire(Db);
-        Signalements = new ServiceSignalements(DepotSignalements, equipements, categories, sorties, DepotRevisions, journal, Horloge, Gestion);
+        Signalements = new ServiceSignalements(DepotSignalements, equipements, categories, sorties, DepotRevisions, journal, Horloge, Gestion, Reglages);
         DepotPrestataires = new PrestataireRepositoryMemoire(Db, DepotRevisions.Prestataires);
         Prestataires = new ServicePrestataires(DepotPrestataires, journal, Horloge, Gestion);
         Revisions = new ServiceRevisions(equipements, categories, sorties, DepotRevisions, moniteurs, journal, Horloge, Reglages, Gestion, Compteur, DepotSignalements, DepotPrestataires);

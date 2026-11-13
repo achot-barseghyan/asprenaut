@@ -67,13 +67,19 @@ public enum FiltreAdherents
     Tous,
     MaterielDehors,
     NonRendu,
+
+    /// <summary>Certifiés nitrox.</summary>
+    Nitrox,
+
+    /// <summary>Désactivés (ne sortent plus de matériel).</summary>
+    Desactives,
 }
 
 /// <summary>Carte d'un adhérent : matériel encore dehors et matériel jamais rendu.</summary>
 public sealed record FicheAdherent(Adherent Adherent, int NbDehors, int NbNonRendus);
 
-/// <summary>Onglet Adhérents : les cartes filtrées et le nombre d'adhérents de chaque filtre.</summary>
-public sealed record ListeAdherents(IReadOnlyList<FicheAdherent> Fiches, int Tous, int MaterielDehors, int NonRendu);
+/// <summary>Onglet Adhérents : les cartes filtrées et le nombre d'adhérents de chaque filtre (après recherche et niveau).</summary>
+public sealed record ListeAdherents(IReadOnlyList<FicheAdherent> Fiches, int Tous, int MaterielDehors, int NonRendu, int Nitrox = 0, int Desactives = 0);
 
 /// <summary>Une sortie nominative d'un adhérent : équipements pris, rendus, non rendus.</summary>
 public sealed record SortieAdherent(long SortieId, DateOnly Date, string Intitule, string Type, int NbEquipements, int NbNonRendus, bool EnCours)
