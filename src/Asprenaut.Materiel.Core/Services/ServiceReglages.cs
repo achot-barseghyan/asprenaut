@@ -194,6 +194,20 @@ public sealed class ServiceReglages(Reglages reglages, IStockageReglages stockag
     /// Menu latéral réduit aux icônes ou complet. Simple confort d'affichage (pas un paramètre du club) : libre, même en
     /// mode consultation.
     /// </summary>
+    /// <summary>
+    /// Note une sauvegarde complète réussie (date et dossier, proposé la fois suivante) : libre, comme faire une sauvegarde.
+    /// </summary>
+    public void NoterSauvegardeComplete(DateTime quand, string? dossier)
+    {
+        reglages.DerniereSauvegardeComplete = quand;
+        reglages.DossierSauvegardeComplete = string.IsNullOrWhiteSpace(dossier) ? reglages.DossierSauvegardeComplete : dossier;
+        stockage.Enregistrer(reglages);
+    }
+
+    /// <summary>Rappel de la sauvegarde complète hebdomadaire (écran Sorties, Paramètres).</summary>
+    public EtatSauvegardeComplete EtatSauvegardeComplete(DateTime maintenant) =>
+        RappelSauvegarde.Etat(reglages.DerniereSauvegardeComplete, maintenant);
+
     public ResultatOperation ChangerMenuReduit(bool reduit)
     {
         if (reglages.MenuReduit != reduit)

@@ -3,6 +3,7 @@ using Asprenaut.Materiel.App.Controles;
 using Asprenaut.Materiel.App.Navigation;
 using Asprenaut.Materiel.Core.Abstractions;
 using Asprenaut.Materiel.Core.Modeles;
+using Asprenaut.Materiel.Core.Resultats;
 using Asprenaut.Materiel.Core.Services;
 
 namespace Asprenaut.Materiel.App.Ecrans;
@@ -13,6 +14,11 @@ public sealed class EcranSorties : EcranBase
     private readonly ServiceSortie _sorties;
     private readonly IHorloge _horloge;
     private readonly INavigation _navigation;
+    private readonly ServiceReglages _reglages;
+
+    // Rappel de la sauvegarde complète hebdomadaire (stockage externe), visible seulement quand elle est à faire.
+    private readonly BandeauMessage _rappelSauvegarde = new() { Height = 76, Margin = Padding.Empty };
+    private readonly TableLayoutPanel _ligneRappel;
     private readonly Label _date = Ui.Libelle("", Theme.PoliceTitre(9.75f), Theme.AccentClair);
     private readonly Label _resume = Ui.Libelle("", Theme.Police(11.25f), Theme.TexteDoux);
     private readonly GrilleAdaptative _cartes = new() { LargeurMin = 400, HauteurElement = 196, Ecart = 18, RangeesVisibles = 1, Margin = new Padding(0, 0, 0, 30) };
@@ -24,11 +30,22 @@ public sealed class EcranSorties : EcranBase
     private readonly BoutonArrondi _suivante = new("Suivantes ›", StyleBouton.Secondaire) { AccessibleName = "Sorties clôturées suivantes (plus anciennes)" };
     private PageSorties? _pageCloturees;
 
-    public EcranSorties(ServiceSortie sorties, IHorloge horloge, INavigation navigation)
+    public EcranSorties(ServiceSortie sorties, IHorloge horloge, INavigation navigation, ServiceReglages reglages)
     {
         _sorties = sorties;
+        _reglages = reglages;
         _horloge = horloge;
         _navigation = navigation;
+
+        var faire = new BoutonArrondi("Faire la sauvegarde ›", StyleBouton.Secondaire, Icones.Telecharger) { Margin = new Padding(14, 0, 0, 0) };
+        faire.AccessibleDescription = "Ouvre Paramètres, sur les sauvegardes";
+        faire.Click += (_, _) => _navigation.AllerA<EcranParametres>(EcranParametres.VersSauvegardes);
+        _ligneRappel = Ui.Colonnes((_rappelSauvegarde, SizeType.Percent, 100), (faire, SizeType.AutoSize, 0));
+        _ligneRappel.Height = 76;
+        _ligneRappel.Margin = new Padding(0, 0, 0, 24);
+        faire.Dock = DockStyle.None;
+        faire.Anchor = AnchorStyles.Right;
+        _ligneRappel.Visible = false;
 
         Theme.AppliquerGrille(_cloturees);
         Tableaux.AjouterColonne(_cloturees, "date", "Date", 70);
@@ -103,6 +120,7 @@ public sealed class EcranSorties : EcranBase
 
         var colonne = Ui.Colonne(
             (CreerBandeau(), SizeType.Absolute, 230 + 30),
+            (_ligneRappel, SizeType.AutoSize, 0),
             (Ui.Rangee(true, titreEnCours, precision), SizeType.AutoSize, 0),
             (_cartes, SizeType.Absolute, 196 + 30),
             (Ui.TitreSection("Sorties clôturées"), SizeType.AutoSize, 0),
@@ -134,6 +152,14 @@ public sealed class EcranSorties : EcranBase
         }
 
         _date.Text = _horloge.AujourdHui.ToString("dddd d MMMM", Libelles.Culture).ToUpper(Libelles.Culture);
+
+        // Sauvegarde complète de la semaine : rappel tant qu'elle n'est pas faite.
+        var sauvegarde = _reglages.EtatSauvegardeComplete(_horloge.MaintenantUtc.ToLocalTime());
+        _ligneRappel.Visible = sauvegarde.AFaire;
+        if (sauvegarde.AFaire)
+        {
+            _rappelSauvegarde.Afficher(NiveauResultat.Avertissement, sauvegarde.Message, RappelSauvegarde.Conseil, detailEnCode: false);
+        }
         var dehors = enCours.Sum(s => s.NbDehors);
         _resume.Text = enCours.Count == 0
             ? "Aucune sortie en cours : tout le matériel est rangé."

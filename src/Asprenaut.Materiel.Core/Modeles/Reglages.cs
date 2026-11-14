@@ -109,6 +109,12 @@ public sealed class Reglages
     /// <summary>Dossier des sauvegardes ; null = "Sauvegardes" à côté de la base.</summary>
     public string? DossierSauvegardes { get; set; }
 
+    /// <summary>Date et heure (locales) de la dernière sauvegarde complète réussie ; null = jamais (rappel sur l'écran Sorties).</summary>
+    public DateTime? DerniereSauvegardeComplete { get; set; }
+
+    /// <summary>Dossier de la dernière sauvegarde complète (clé USB…), proposé la fois suivante ; propre au PC.</summary>
+    public string? DossierSauvegardeComplete { get; set; }
+
     // --- Sécurité · mode gestion (voir ServiceGestion) ---
 
     public static readonly int[] MinutesDeverrouillagePossibles = [5, 15, 30, 60];

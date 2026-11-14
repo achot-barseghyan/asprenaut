@@ -417,6 +417,15 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     « certificat médical »…), texte jj/mm/aaaa ou date Excel (`ServiceAdherents.LireDate`) ; vide = inchangé, illisible = inchangé et
     compté dans le message ; dans le modèle à remplir. Export : colonnes CACI dans adherents.csv.
 
+37. Sauvegarde complète hebdomadaire (`RappelSauvegarde`, `RappelSauvegardeTests`) : conseil d'une sauvegarde complète par semaine
+    (`JoursEntreSauvegardes` = 7) sur un stockage externe. `Reglages.DerniereSauvegardeComplete` (notée par
+    `ServiceReglages.NoterSauvegardeComplete`, libre, après chaque sauvegarde complète réussie) et `DossierSauvegardeComplete`
+    (proposé la fois suivante s'il est branché ; propre au PC, gardé à la restauration). `EtatSauvegardeComplete` : à faire si
+    jamais faite ou il y a 7 jours ou plus (dates, pas heures). Écran Sorties : bandeau jaune sous l'accueil + « Faire la
+    sauvegarde › » → `AllerA<EcranParametres>(EcranParametres.VersSauvegardes)` (page placée sur « Données et sauvegardes »),
+    masqué sinon ; Paramètres : état sous « Sauvegarde complète » (jaune + conseil, ou vert + prochaine date et dossier). Fichier sur
+    le même lecteur que la base (`MemeDisque`, racines comparées ; réseau et autre lecteur = externes) : confirmation avant d'enregistrer.
+
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
 à côté de la base d'essai : les essais ne touchent jamais les réglages réels. Préfixe des étiquettes : `CodeScanne.Nettoyer(brut, prefixe)`.

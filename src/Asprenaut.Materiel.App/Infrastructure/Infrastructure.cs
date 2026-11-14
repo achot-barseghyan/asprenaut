@@ -122,6 +122,7 @@ public sealed class ReglagesSauvegardables(ParametresApplication parametres) : I
     {
         var nouveaux = JsonSerializer.Deserialize<Reglages>(json) ?? throw new JsonException("Réglages vides.");
         nouveaux.DossierSauvegardes = parametres.Reglages.DossierSauvegardes;
+        nouveaux.DossierSauvegardeComplete = parametres.Reglages.DossierSauvegardeComplete;
         nouveaux.DeverrouilleAuDemarrage = false;
         if (File.Exists(parametres.Fichier))
         {

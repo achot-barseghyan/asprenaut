@@ -30,6 +30,12 @@ public sealed class EcranParametres : EcranBase
     /// <summary>Paramètre de navigation : rouvrir l'écran sur la carte « Affichage » (après un changement de thème).</summary>
     public const string VersAffichage = "affichage";
 
+    /// <summary>Paramètre de navigation : ouvrir l'écran sur la carte « Données et sauvegardes » (rappel de l'écran Sorties).</summary>
+    public const string VersSauvegardes = "sauvegardes";
+
+    private CarteSection? _carteDonnees;
+    private readonly BandeauMessage _etatComplete = new() { Height = 72, Margin = new Padding(0, 0, 0, 12) };
+
     private readonly ServiceGestion _gestion;
     private readonly GardeGestion _garde;
     private readonly ServiceExport _export;
@@ -168,11 +174,17 @@ public sealed class EcranParametres : EcranBase
     protected override async Task ChargerAsync(object? parametre)
     {
         AfficherEtatSauvegarde();
-        if (parametre is VersAffichage && _carteAffichage is { } carte)
+        // Carte à montrer : « Affichage » (écran recréé dans le nouveau thème) ou « Données et sauvegardes » (rappel de l'accueil).
+        var visee = parametre switch
         {
-            // L'écran vient d'être recréé dans le nouveau thème : on revient sur la carte du choix, une fois que
-            // les cartes ont pris leur hauteur (ajustements différés), et avant que l'écran soit montré.
-            _versAffichage = true;
+            VersAffichage => _carteAffichage,
+            VersSauvegardes => _carteDonnees,
+            _ => null,
+        };
+        if (visee is { } carte)
+        {
+            // On va sur la carte une fois que les cartes ont pris leur hauteur (ajustements différés), avant que l'écran soit montré.
+            _carteVisee = carte;
             for (var i = 0; i < 4 && !IsDisposed; i++)
             {
                 await Task.Yield();
@@ -183,15 +195,15 @@ public sealed class EcranParametres : EcranBase
         }
     }
 
-    private bool _versAffichage;
+    private Control? _carteVisee;
 
-    /// <summary>Une fois l'écran en place (Dock = Fill), on vérifie qu'il est bien positionné sur la carte « Affichage ».</summary>
+    /// <summary>Une fois l'écran en place (Dock = Fill), on vérifie qu'il est bien positionné sur la carte visée.</summary>
     protected override void OnDockChanged(EventArgs e)
     {
         base.OnDockChanged(e);
-        if (_versAffichage && Dock == DockStyle.Fill && _carteAffichage is { } carte && IsHandleCreated)
+        if (_carteVisee is { } carte && Dock == DockStyle.Fill && IsHandleCreated)
         {
-            _versAffichage = false;
+            _carteVisee = null;
             BeginInvoke(() => AllerALaCarteAffichage(carte));
         }
     }
@@ -891,6 +903,7 @@ public sealed class EcranParametres : EcranBase
     private CarteSection CarteDonnees()
     {
         var carte = new CarteSection("Données et sauvegardes", Icones.Base, Theme.Retour);
+        _carteDonnees = carte;
         _etatSauvegarde.Height = 72;
         carte.Ajouter(_etatSauvegarde);
 
@@ -926,10 +939,12 @@ public sealed class EcranParametres : EcranBase
         var titreComplete = Ui.Libelle("Sauvegarde complète", Theme.PoliceTitre(10.5f), Theme.Texte);
         titreComplete.Margin = new Padding(0, 22, 0, 4);
         carte.Ajouter(titreComplete);
-        var aideComplete = Ui.Libelle("Un seul fichier .zip avec les données, tous les réglages et les manuels. « Restaurer… » le reprend en entier, par exemple pour installer un autre PC.",
+        var aideComplete = Ui.Libelle("Un seul fichier .zip avec les données, tous les réglages et les manuels. « Restaurer… » le reprend en entier, par exemple pour installer un autre PC. "
+            + "À faire chaque semaine sur une clé USB ou un disque externe, gardé hors du local : si le PC tombe en panne, rien n'est perdu.",
             Theme.Police(9.75f), Theme.TexteSecondaire);
         aideComplete.Margin = new Padding(0, 0, 0, 12);
         carte.Ajouter(aideComplete);
+        carte.Ajouter(_etatComplete);
         var complete = new BoutonArrondi("Faire une sauvegarde complète…", StyleBouton.Secondaire, Icones.Telecharger) { AutoSize = false, Margin = Padding.Empty };
         complete.Click += (_, _) => Executer(SauvegarderCompleteAsync); // Libre, comme une sauvegarde simple.
         var ligneComplete = Ui.Colonnes((complete, SizeType.Percent, 100));
@@ -950,6 +965,11 @@ public sealed class EcranParametres : EcranBase
         {
             _etatSauvegarde.Afficher(NiveauResultat.Avertissement, "Aucune sauvegarde pour l'instant", detail, detailEnCode: false);
         }
+
+        // Sauvegarde complète : une par semaine sur un stockage externe (rappel aussi sur l'écran Sorties).
+        var complete = _reglages.EtatSauvegardeComplete(DateTime.Now);
+        _etatComplete.Afficher(complete.AFaire ? NiveauResultat.Avertissement : NiveauResultat.Succes, complete.Message,
+            complete.AFaire ? RappelSauvegarde.Conseil : _reglages.Actuels.DossierSauvegardeComplete, detailEnCode: !complete.AFaire);
     }
 
     /// <summary>
@@ -1090,10 +1110,21 @@ public sealed class EcranParametres : EcranBase
             Title = "Enregistrer la sauvegarde complète",
             FileName = _complete.NomPropose(),
             Filter = "Sauvegarde complète (*.zip)|*.zip",
-            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            // Le dossier de la dernière fois (clé USB) s'il est branché, sinon Documents.
+            InitialDirectory = _reglages.Actuels.DossierSauvegardeComplete is { } dossier && Directory.Exists(dossier)
+                ? dossier
+                : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             OverwritePrompt = true,
         };
         if (dialogue.ShowDialog(FindForm()) != DialogResult.OK)
+        {
+            return;
+        }
+
+        // Sur le disque des données, la copie serait perdue avec le PC : on le dit, sans l'interdire.
+        if (RappelSauvegarde.MemeDisque(dialogue.FileName, _parametres.CheminBase) && !Dialogues.Confirmer(FindForm(),
+            "Ce fichier sera sur le même disque que les données : si le PC tombe en panne, la sauvegarde sera perdue aussi.\n\n" +
+            "Mieux vaut une clé USB ou un disque externe. Enregistrer ici quand même ?"))
         {
             return;
         }
@@ -1104,6 +1135,9 @@ public sealed class EcranParametres : EcranBase
             Dialogues.Erreur(FindForm(), resultat.Message);
             return;
         }
+
+        _reglages.NoterSauvegardeComplete(DateTime.Now, Path.GetDirectoryName(dialogue.FileName));
+        AfficherEtatSauvegarde();
 
         if (Dialogues.Confirmer(FindForm(), resultat.Message + "\n\nOuvrir le dossier ?"))
         {
