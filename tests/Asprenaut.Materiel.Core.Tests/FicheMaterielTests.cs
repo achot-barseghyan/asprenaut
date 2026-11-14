@@ -124,4 +124,16 @@ public class FicheMaterielTests
 
         Assert.Equal("A05", (await _ctx.Inventaire.ListerAsync("0614500681", null)).Single().Code);
     }
+
+    // La prochaine révision est calculée dès que la dernière est connue (formulaire), comme à l'enregistrement.
+    [Fact]
+    public void La_prochaine_revision_est_la_derniere_plus_le_delai_de_la_categorie()
+    {
+        var derniere = new DateOnly(2026, 3, 10);
+        Assert.Equal(new DateOnly(2028, 3, 10), _ctx.Inventaire.ProchaineRevisionCalculee("Détendeurs", derniere)); // 24 mois.
+        Assert.Equal(24, _ctx.Inventaire.DelaiRevision("Détendeurs"));
+        Assert.Equal(new DateOnly(2027, 3, 10), _ctx.Inventaire.ProchaineRevisionCalculee("Masques", derniere)); // Délai général : 12 mois.
+        Assert.Null(_ctx.Inventaire.ProchaineRevisionCalculee("Gilets", derniere)); // Pas de date obligatoire.
+        Assert.Null(_ctx.Inventaire.ProchaineRevisionCalculee("Blocs", derniere)); // TIV, pas de révision.
+    }
 }

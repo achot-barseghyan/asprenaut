@@ -201,6 +201,9 @@ public static class FormulaireEquipement
 
             c.Aide.MaximumSize = new Size(460, 0);
 
+            // Dernière révision tapée (ou choisie dans le calendrier) : la prochaine est calculée tout de suite.
+            c.DerniereRevision.DateChangee += (_, _) => c.CalculerProchaineRevision();
+
             // Changement de catégorie : nouveau code proposé (ajout, si l'utilisateur ne l'a pas tapé), champs et libellés adaptés.
             var dernierePropose = "";
             async Task CategorieChangeeAsync()
@@ -364,13 +367,26 @@ public static class FormulaireEquipement
                 FenetreFormulaire.Libelles(dates).Droite.Text = bloc ? "Prochaine TIV" : detendeur ? "À réviser avant" : "Prochaine révision";
             }
 
+            var delai = _inventaire?.DelaiRevision(categorie) ?? 0;
+            var duree = delai % 12 == 0 ? (delai == 12 ? "chaque année" : $"tous les {delai / 12} ans") : $"tous les {delai} mois";
             Aide.Text = bloc
                 ? "Bloc : indiquez la date de la prochaine TIV et celle de la prochaine requalification, si vous les connaissez."
-                : detendeur
-                    ? "Détendeur : révision tous les 2 ans. Indiquez la date de la dernière révision : « À réviser avant » est calculée."
+                : delai > 0
+                    ? $"Révision {duree}. Indiquez la date de la dernière révision : « {(detendeur ? "À réviser avant" : "Prochaine révision")} » est calculée."
                     : ServiceInventaire.EstGilet(categorie)
-                        ? "Stab : pas de date de révision obligatoire. Notez la dernière révision si elle a été faite."
-                        : "Prochaine révision : date conseillée par le fabricant, si elle existe.";
+                        ? "Stab : pas de date de révision obligatoire. Notez la dernière révision si elle a été faite ; la prochaine se tape à la main si besoin."
+                        : "Pas de délai de révision pour cette catégorie : tapez la prochaine révision à la main si elle existe.";
+            CalculerProchaineRevision();
+        }
+
+        /// <summary>« Prochaine révision » = dernière révision + délai de la catégorie (même calcul qu'à l'enregistrement).</summary>
+        public void CalculerProchaineRevision()
+        {
+            if (_inventaire is { } inventaire && DerniereRevision.Date is { } derniere
+                && inventaire.ProchaineRevisionCalculee(NomCategorie, derniere) is { } prochaine)
+            {
+                Revision.Date = prochaine;
+            }
         }
 
         public void Remplir(Equipement e, DateOnly? derniereRevision)

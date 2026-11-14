@@ -457,10 +457,20 @@ public sealed class ServiceInventaire(
             return (null, null, ResultatOperation.Echec($"Une révision plus récente est déjà enregistrée (le {Libelles.Date(connue)})."));
         }
 
-        var mois = ServiceRevisions.MoisRevision(reglages, categorie);
-        var prochaine = mois > 0 ? date.AddMonths(mois) : prochaineTapee;
+        var prochaine = ProchaineRevisionCalculee(categorie, date) ?? prochaineTapee;
         return (prochaine, date == derniere ? null : date, null);
     }
+
+    /// <summary>
+    /// Prochaine révision d'après la dernière : + le délai de la catégorie (24 mois pour un détendeur, voir
+    /// <see cref="ServiceRevisions.MoisRevision"/>). Null pour un bloc (TIV) ou une catégorie sans délai (gilets : pas de date
+    /// obligatoire). Le formulaire l'affiche dès que la date est tapée ; l'enregistrement fait le même calcul.
+    /// </summary>
+    public DateOnly? ProchaineRevisionCalculee(string categorie, DateOnly derniere) =>
+        !ServiceRevisions.EstBloc(categorie) && DelaiRevision(categorie) is > 0 and var mois ? derniere.AddMonths(mois) : null;
+
+    /// <summary>Délai entre deux révisions de la catégorie, en mois (0 = pas de date obligatoire).</summary>
+    public int DelaiRevision(string categorie) => ServiceRevisions.MoisRevision(reglages, categorie);
 
     /// <summary>La révision saisie devient un contrôle « révision conforme » (historique, registre, compteur d'utilisation).</summary>
     private async Task EnregistrerRevisionAsync(long equipementId, DateOnly? date, CancellationToken ct)

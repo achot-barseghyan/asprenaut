@@ -230,6 +230,8 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     autres catégories (`ServiceInventaire.Fiche`). « Date de la dernière révision » saisie dans la fiche (hors blocs) : pas dans le
     futur, pas avant une révision déjà enregistrée ; elle devient un contrôle « révision conforme » (note « Saisie dans l'inventaire »)
     et fixe « à réviser avant » (+ délai de la catégorie, même déjà passé) ; gilets : la date tapée est gardée.
+    Calcul commun `ServiceInventaire.ProchaineRevisionCalculee` (et `DelaiRevision`) : le formulaire remplit « Prochaine révision » /
+    « À réviser avant » dès que la dernière révision change (`ChampDate.DateChangee`) ou que la catégorie change ; l'aide donne le délai.
     Identification calculée (`ServiceInventaire.Identification`) : « (Stab) S01 taille XL {NomClub} {NumeroClub} »,
     « (Detendeur) A01 … » ; `Reglages.NumeroClub` dans Paramètres › Club. Recherche aussi par marque, modèle et numéros de série.
     Inventaire : colonnes selon la catégorie choisie (générales, Gilets, Détendeurs en largeur fixe avec défilement horizontal),
