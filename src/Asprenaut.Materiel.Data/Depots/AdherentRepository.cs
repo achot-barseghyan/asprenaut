@@ -8,7 +8,7 @@ namespace Asprenaut.Materiel.Data.Depots;
 /// <summary>Adhérents du club (table adherent, migration 014) et le matériel qu'ils ont pris (sortie_equipement.adherent_id).</summary>
 public sealed class AdherentRepository(FabriqueConnexion fabrique) : IAdherentRepository
 {
-    private const string Colonnes = "id, nom, prenom, niveau, licence, telephone, actif, nitrox";
+    private const string Colonnes = "id, nom, prenom, niveau, licence, telephone, actif, nitrox, caci, caci_expiration";
 
     public async Task<IReadOnlyList<Adherent>> ListerAsync(bool actifsSeulement, CancellationToken ct = default)
     {
@@ -31,8 +31,8 @@ public sealed class AdherentRepository(FabriqueConnexion fabrique) : IAdherentRe
         await using var cx = await fabrique.OuvrirAsync(ct);
         adherent.Id = await cx.ExecuteScalarAsync<long>(new CommandDefinition(
             """
-            INSERT INTO adherent (nom, prenom, niveau, licence, telephone, actif, nitrox)
-            VALUES (@Nom, @Prenom, @Niveau, @Licence, @Telephone, @Actif, @Nitrox) RETURNING id;
+            INSERT INTO adherent (nom, prenom, niveau, licence, telephone, actif, nitrox, caci, caci_expiration)
+            VALUES (@Nom, @Prenom, @Niveau, @Licence, @Telephone, @Actif, @Nitrox, @Caci, @CaciExpiration) RETURNING id;
             """,
             Parametres(adherent), cancellationToken: ct));
         return adherent.Id;
@@ -43,7 +43,7 @@ public sealed class AdherentRepository(FabriqueConnexion fabrique) : IAdherentRe
         await using var cx = await fabrique.OuvrirAsync(ct);
         await cx.ExecuteAsync(new CommandDefinition(
             """
-            UPDATE adherent SET nom = @Nom, prenom = @Prenom, niveau = @Niveau, licence = @Licence, telephone = @Telephone, actif = @Actif, nitrox = @Nitrox
+            UPDATE adherent SET nom = @Nom, prenom = @Prenom, niveau = @Niveau, licence = @Licence, telephone = @Telephone, actif = @Actif, nitrox = @Nitrox, caci = @Caci, caci_expiration = @CaciExpiration
             WHERE id = @Id;
             """,
             Parametres(adherent), cancellationToken: ct));
@@ -93,5 +93,7 @@ public sealed class AdherentRepository(FabriqueConnexion fabrique) : IAdherentRe
         a.Telephone,
         Actif = a.Actif ? 1 : 0,
         Nitrox = a.Nitrox ? 1 : 0,
+        Caci = a.Caci ? 1 : 0,
+        CaciExpiration = FormatIso.Ecrire(a.CaciExpiration),
     };
 }

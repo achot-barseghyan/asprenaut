@@ -38,10 +38,15 @@ public sealed class EcranMoniteurs : EcranBase
 
     // Onglet Adhérents : recherche par nom, filtres, adhérent choisi.
     private readonly BarreRecherche _recherche = new("Rechercher un adhérent…", "nom ou prénom") { Margin = new Padding(0, 0, 14, 0) };
-    private readonly Bascule _filtreAdherents = new("Tous", "Matériel dehors", "Non rendu", "Nitrox", "Désactivés");
+    private static readonly string[] PucesAdherents = ["Matériel dehors", "Non rendu", "Nitrox", "Désactivés"];
 
     // Onglet Moniteurs : mêmes recherche et puces (pas pour les classes, peu nombreuses).
-    private readonly Bascule _filtreMoniteurs = new("Tous", "Actifs", "Inspecteurs TIV", "Matériel dehors", "Inactifs");
+    private static readonly string[] PucesMoniteurs = ["Actifs", "Inspecteurs TIV", "Matériel dehors", "Inactifs"];
+
+    // Puces « Tous 12 / Actifs 9… » (même dessin que les filtres de catégories) ; choix gardé pour chaque onglet.
+    private readonly FiltreCategories _filtre = new(Theme.AccentClair) { LibelleTout = "Tous", Margin = new Padding(0, 10, 0, 8) };
+    private FiltreAdherents _choixAdherents = FiltreAdherents.Tous;
+    private FiltreMoniteurs _choixMoniteurs = FiltreMoniteurs.Tous;
     private readonly ListeDeroulante _niveau = new() { AccessibleName = "Filtrer par niveau", Width = 220 };
     private readonly System.Windows.Forms.Timer _attenteRecherche = new() { Interval = 300 };
     private readonly TableLayoutPanel _page;
@@ -69,10 +74,19 @@ public sealed class EcranMoniteurs : EcranBase
         _onglets.Margin = new Padding(0, 0, 0, 22);
         _onglets.Changement += (_, _) => Executer(AfficherGenreAsync);
 
-        _filtreAdherents.AccessibleName = "Filtrer les adhérents";
-        _filtreAdherents.Changement += (_, _) => Executer(AfficherAdherentsAsync);
-        _filtreMoniteurs.AccessibleName = "Filtrer les moniteurs";
-        _filtreMoniteurs.Changement += (_, _) => Executer(AfficherGenreAsync);
+        _filtre.Changement += (_, _) =>
+        {
+            if (Adherents)
+            {
+                _choixAdherents = (FiltreAdherents)(Array.IndexOf(PucesAdherents, _filtre.Selection) + 1);
+            }
+            else
+            {
+                _choixMoniteurs = (FiltreMoniteurs)(Array.IndexOf(PucesMoniteurs, _filtre.Selection) + 1);
+            }
+
+            Executer(AfficherGenreAsync);
+        };
 
         // Niveau : tous, ceux de la liste du club, ou non renseigné.
         _niveau.Items.Add(new Choix<string?>(null, "Tous les niveaux"));
@@ -105,11 +119,9 @@ public sealed class EcranMoniteurs : EcranBase
         // seulement, elles gardaient la hauteur nulle de la rangée masquée au départ).
         _recherche.Margin = new Padding(0, 0, 14, 0);
         var ligneRecherche = Ui.Colonnes((_recherche, SizeType.Percent, 100), (_niveau, SizeType.AutoSize, 0));
-        var puces = Ui.Rangee(true, _filtreAdherents, _filtreMoniteurs);
-        puces.Margin = new Padding(0, 10, 0, 0);
         var filtres = Ui.Colonne(
             (ligneRecherche, SizeType.Absolute, 54),
-            (puces, SizeType.Absolute, Theme.HauteurCliquable + 8 + 10));
+            (_filtre, SizeType.Absolute, Theme.HauteurCliquable + 8 + 10));
         filtres.Margin = new Padding(0, 0, 0, 20);
         _page = Ui.Colonne(
             (Ui.Entete(Ui.Pile(Ui.Titre(Titre), Ui.SousTitre("Les responsables de sortie, les adhérents du club et le matériel encore dehors.")), _ajouter, _importer, _modele), SizeType.AutoSize, 0),
@@ -172,8 +184,8 @@ public sealed class EcranMoniteurs : EcranBase
             _page.RowStyles[2].Height = avecFiltres ? Dessin.Echelle(this, HauteurFiltres) : 0;
         }
 
-        _filtreAdherents.Visible = _niveau.Visible = Adherents;
-        _filtreMoniteurs.Visible = !Adherents;
+        _niveau.Visible = Adherents;
+        _filtre.Unite = Adherents ? "adhérent" : "moniteur";
         var indicatif = Adherents ? "Rechercher un adhérent…" : "Rechercher un moniteur (nom, niveau, téléphone)…";
         if (_recherche.Champ.PlaceholderText != indicatif)
         {
@@ -202,12 +214,9 @@ public sealed class EcranMoniteurs : EcranBase
         }
         else
         {
-            var filtrees = ServiceMoniteurs.Filtrer(duGenre, _recherche.Champ.Text, (FiltreMoniteurs)_filtreMoniteurs.SelectedIndex);
-            _filtreMoniteurs.DefinirNombre(0, filtrees.Tous);
-            _filtreMoniteurs.DefinirNombre(1, filtrees.Actifs);
-            _filtreMoniteurs.DefinirNombre(2, filtrees.InspecteursTiv);
-            _filtreMoniteurs.DefinirNombre(3, filtrees.MaterielDehors);
-            _filtreMoniteurs.DefinirNombre(4, filtrees.Inactifs);
+            var filtrees = ServiceMoniteurs.Filtrer(duGenre, _recherche.Champ.Text, _choixMoniteurs);
+            _filtre.Selection = _choixMoniteurs == FiltreMoniteurs.Tous ? null : PucesMoniteurs[(int)_choixMoniteurs - 1];
+            _filtre.Afficher(filtrees.Tous, PucesMoniteurs.Zip([filtrees.Actifs, filtrees.InspecteursTiv, filtrees.MaterielDehors, filtrees.Inactifs]));
             _liste = filtrees.Fiches;
         }
         if (!_selection.TryGetValue(genre, out var choisi) || _liste.All(f => f.Moniteur.Id != choisi))
@@ -269,7 +278,7 @@ public sealed class EcranMoniteurs : EcranBase
         {
             if (ficheAdherent is null)
             {
-                Ligne(Ui.Libelle(_listeAdherents.Count == 0 && _recherche.Champ.Text.Trim().Length == 0 && _filtreAdherents.SelectedIndex == 0
+                Ligne(Ui.Libelle(_listeAdherents.Count == 0 && _recherche.Champ.Text.Trim().Length == 0 && _choixAdherents == FiltreAdherents.Tous
                     ? "Aucun adhérent. Importez la liste Excel du club ou cliquez sur « Ajouter un adhérent »."
                     : "Aucun adhérent ne correspond.", Theme.Police(11f), Theme.TexteSecondaireClair));
             }
@@ -377,18 +386,15 @@ public sealed class EcranMoniteurs : EcranBase
             return;
         }
 
-        var filtre = (FiltreAdherents)_filtreAdherents.SelectedIndex;
+        var filtre = _choixAdherents;
         var liste = await _adherents.ListerAsync(_recherche.Champ.Text, filtre, (_niveau.SelectedItem as Choix<string?>)?.Valeur);
-        if (IsDisposed)
+        if (IsDisposed || !Adherents)
         {
             return;
         }
 
-        _filtreAdherents.DefinirNombre(0, liste.Tous);
-        _filtreAdherents.DefinirNombre(1, liste.MaterielDehors);
-        _filtreAdherents.DefinirNombre(2, liste.NonRendu);
-        _filtreAdherents.DefinirNombre(3, liste.Nitrox);
-        _filtreAdherents.DefinirNombre(4, liste.Desactives);
+        _filtre.Selection = filtre == FiltreAdherents.Tous ? null : PucesAdherents[(int)filtre - 1];
+        _filtre.Afficher(liste.Tous, PucesAdherents.Zip([liste.MaterielDehors, liste.NonRendu, liste.Nitrox, liste.Desactives]));
         _listeAdherents = liste.Fiches;
         if (_adherentChoisi is null || _listeAdherents.All(f => f.Adherent.Id != _adherentChoisi))
         {
@@ -450,9 +456,16 @@ public sealed class EcranMoniteurs : EcranBase
                 Ui.Libelle(telephone, Theme.Police(9.75f), Theme.TexteDoux)));
         }
 
+        if (a.Caci && a.CaciExpiration is { } finCaci)
+        {
+            textes.Controls.Add(detail.CaciExpire
+                ? Ui.Libelle($"CACI expiré le {Libelles.Date(finCaci)} : ne sort plus de matériel", Theme.PoliceGrasse(9.75f), Theme.Erreur)
+                : Ui.Libelle($"CACI valable jusqu'au {Libelles.Date(finCaci)}", Theme.Police(9.75f), Theme.TexteDoux));
+        }
+
         var avatar = new AvatarAdherent(a, index, 72);
         var entete = Ui.Colonnes((avatar, SizeType.Absolute, 72 + 16), (textes, SizeType.Percent, 100));
-        entete.Height = 96;
+        entete.Height = textes.Controls.Count > 4 ? 120 : 96;
         entete.Margin = new Padding(0, 0, 0, 18);
         avatar.Dock = DockStyle.None;
         avatar.Anchor = AnchorStyles.Left;
@@ -506,7 +519,7 @@ public sealed class EcranMoniteurs : EcranBase
         var activer = new BoutonArrondi(a.Actif ? "Désactiver" : "Réactiver", StyleBouton.Secondaire, a.Actif ? Icones.Croix : Icones.Coche)
         {
             AutoSize = false,
-            Margin = Padding.Empty,
+            Margin = new Padding(0, 0, 12, 0), // Place pour le cadenas, qui déborde à droite (la fiche coupe au bord).
             AccessibleDescription = a.Actif ? "Il ne pourra plus sortir de matériel" : "Il pourra de nouveau sortir du matériel",
         };
         if (a.Actif)
@@ -586,6 +599,8 @@ public sealed class EcranMoniteurs : EcranBase
         var telephone = new ChampSaisie { Valeur = a?.Telephone ?? "", TexteIndicatif = "06 12 34 56 78" };
         var actif = new Interrupteur("Actif") { Checked = a?.Actif ?? true };
         var nitrox = new Interrupteur("Certifié nitrox") { Checked = a?.Nitrox ?? false };
+        var caci = new Interrupteur("CACI") { Checked = a?.Caci ?? false };
+        var caciExpiration = new ChampDate { Date = a?.CaciExpiration, AccessibleName = "CACI valable jusqu'au" };
         prenom.Champ.AccessibleName = "Prénom";
         nom.Champ.AccessibleName = "Nom";
        licence.Champ.AccessibleName = "Licence";
@@ -608,11 +623,19 @@ public sealed class EcranMoniteurs : EcranBase
             Telephone = telephone.Valeur,
             Actif = actif.Checked,
             Nitrox = nitrox.Checked,
+            Caci = caci.Checked,
+            CaciExpiration = caciExpiration.Date,
         }));
         fenetre.DeuxChamps("Prénom", prenom, "Nom", nom);
         fenetre.DeuxChamps("Niveau", niveau, "Licence", licence);
         fenetre.Champ("Téléphone", telephone);
         fenetre.Ajouter(new LigneReglage("Certifié nitrox", "Peut prendre un bloc ou un détendeur nitrox", nitrox, filet: false));
+
+        // CACI : case cochée, la date d'expiration apparaît ; une fois passée, il ne sort plus de matériel.
+        fenetre.Ajouter(new LigneReglage("CACI", "Date passée : ne peut plus sortir de matériel. Décoché : pas de contrôle", caci));
+        var rangeeCaci = fenetre.DeuxChamps("CACI valable jusqu'au", caciExpiration, "", new Panel { BackColor = Color.Transparent });
+        rangeeCaci.Visible = caci.Checked;
+        caci.CheckedChanged += (_, _) => rangeeCaci.Visible = caci.Checked;
         if (a is not null)
         {
             fenetre.Ajouter(new LigneReglage("Actif", "Désactivé : ne peut plus sortir de matériel ; son historique est gardé", actif));
@@ -1088,7 +1111,7 @@ private async Task EnregistrerModeleAsync()
             _fiche = fiche;
             _index = index;
             var a = fiche.Adherent;
-            AccessibleName = $"{a.NomComplet}{(a.Niveau is null ? "" : $", {a.Niveau}")}, {Libelles.Pluriel(fiche.NbDehors, "équipement")} dehors, {fiche.NbNonRendus} non rendu{(fiche.NbNonRendus > 1 ? "s" : "")}{(a.Nitrox ? ", certifié nitrox" : "")}{(a.Actif ? "" : ", désactivé")}";
+            AccessibleName = $"{a.NomComplet}{(a.Niveau is null ? "" : $", {a.Niveau}")}, {Libelles.Pluriel(fiche.NbDehors, "équipement")} dehors, {fiche.NbNonRendus} non rendu{(fiche.NbNonRendus > 1 ? "s" : "")}{(a.Nitrox ? ", certifié nitrox" : "")}{(fiche.CaciExpire ? ", CACI expiré" : "")}{(a.Actif ? "" : ", désactivé")}";
         }
 
         public long AdherentId => _fiche.Adherent.Id;
@@ -1160,6 +1183,11 @@ private async Task EnregistrerModeleAsync()
             if (a.Nitrox)
             {
                 px = Pastille(g, "NITROX", px, py, Theme.Retour) + E(6);
+            }
+
+            if (_fiche.CaciExpire)
+            {
+                px = Pastille(g, "CACI EXPIRÉ", px, py, Theme.Erreur) + E(6);
             }
 
             if (!a.Actif)

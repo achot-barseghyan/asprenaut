@@ -26,6 +26,18 @@ public sealed class Adherent
     /// <summary>Certifié nitrox : peut prendre un bloc ou un détendeur nitrox.</summary>
     public bool Nitrox { get; set; }
 
+    /// <summary>
+    /// CACI suivi (certificat d'absence de contre-indication) : avec <see cref="CaciExpiration"/>, l'adhérent ne sort plus de
+    /// matériel une fois la date passée. Faux : aucun contrôle.
+    /// </summary>
+    public bool Caci { get; set; }
+
+    /// <summary>Dernier jour de validité du CACI (null si <see cref="Caci"/> est faux).</summary>
+    public DateOnly? CaciExpiration { get; set; }
+
+    /// <summary>CACI coché et date d'expiration passée (le jour même est encore valable).</summary>
+    public bool CaciExpire(DateOnly aujourdhui) => Caci && CaciExpiration is { } fin && fin < aujourdhui;
+
     /// <summary>« Julie Martin ».</summary>
     public string NomComplet => $"{Prenom} {Nom}".Trim();
 
@@ -76,7 +88,7 @@ public enum FiltreAdherents
 }
 
 /// <summary>Carte d'un adhérent : matériel encore dehors et matériel jamais rendu.</summary>
-public sealed record FicheAdherent(Adherent Adherent, int NbDehors, int NbNonRendus);
+public sealed record FicheAdherent(Adherent Adherent, int NbDehors, int NbNonRendus, bool CaciExpire = false);
 
 /// <summary>Onglet Adhérents : les cartes filtrées et le nombre d'adhérents de chaque filtre (après recherche et niveau).</summary>
 public sealed record ListeAdherents(IReadOnlyList<FicheAdherent> Fiches, int Tous, int MaterielDehors, int NonRendu, int Nitrox = 0, int Desactives = 0);
@@ -93,7 +105,8 @@ public sealed record DetailAdherent(
     Adherent Adherent,
     IReadOnlyList<PassageAdherent> Dehors,
     IReadOnlyList<PassageAdherent> NonRendus,
-    IReadOnlyList<SortieAdherent> Sorties);
+    IReadOnlyList<SortieAdherent> Sorties,
+    bool CaciExpire = false);
 
 /// <summary>Adhérent récent d'une sortie (raccourcis du départ) : le plus récent d'abord.</summary>
 public sealed record AdherentRecent(long AdherentId, string Nom, int NbEquipements);

@@ -64,6 +64,8 @@ public static class Icones
     public const string ChevronGauche = "M15 6l-6 6 6 6";
     public const string ChevronDroite = "M9 6l6 6-6 6";
     public const string ChevronBas = "M6 9l6 6 6-6";
+    public const string ChevronsGauche = "M18 6l-6 6 6 6M11 6l-6 6 6 6";
+    public const string ChevronsDroite = "M6 6l6 6-6 6M13 6l6 6-6 6";
     public const string Exclamation = "M12 6v8M12 18v.01";
     public const string Recherche = "M11 5a6 6 0 1 0 0 12 6 6 0 0 0 0-12zM20 20l-4.5-4.5";
     public const string Telecharger = "M12 4v11M7 10l5 5 5-5M5 20h14";
@@ -84,6 +86,9 @@ public static class Icones
     public const string Telephone = "M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2";
     public const string Document = "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5";
     public const string Calendrier = "M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM3 10h18M8 3v4M16 3v4M12 13v5M9.5 15.5h5";
+
+    /// <summary>Calendrier sans le « + » : bouton qui ouvre le choix d'une date (champ de date).</summary>
+    public const string Agenda = "M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM3 10h18M8 3v4M16 3v4M8 14h2M14 14h2M8 17h2";
     public const string Info = "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v5M12 8h.01";
     public const string Lune = "M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z";
     public const string Soleil = "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4";

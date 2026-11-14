@@ -51,10 +51,11 @@ public sealed class ServiceAdherents(
 
     /// <summary>
     /// Pourquoi cet adhérent ne peut pas prendre cet équipement au départ, ou null s'il le peut :
-    /// désactivé (ne sort plus de matériel), ou équipement nitrox sans certification nitrox.
+    /// désactivé (ne sort plus de matériel), CACI coché et expiré, ou équipement nitrox sans certification nitrox.
     /// </summary>
-    public static string? RefusPour(Adherent a, bool equipementNitrox, string code) =>
+    public static string? RefusPour(Adherent a, bool equipementNitrox, string code, DateOnly aujourdhui) =>
         !a.Actif ? $"{a.NomComplet} est désactivé : il ne peut plus sortir de matériel."
+        : a.CaciExpire(aujourdhui) ? $"Le CACI de {a.NomComplet} a expiré le {Libelles.Date(a.CaciExpiration!.Value)} : pas de matériel tant qu'il n'est pas renouvelé."
         : equipementNitrox && !a.Nitrox ? $"{code} est un équipement nitrox : {a.NomComplet} n'a pas la certification nitrox."
         : null;
 
@@ -68,21 +69,25 @@ public sealed class ServiceAdherents(
             && l.Statut == StatutSortieEquipement.Dehors && string.Equals(l.Categorie.Trim(), ligne.Categorie.Trim(), StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
-    /// Pourquoi cet adhérent ne peut pas prendre cet équipement dans cette sortie, ou null : désactivé, nitrox sans certification,
-    /// ou déjà un équipement de la même catégorie (<see cref="DejaPris"/>, si la sortie le demande : <see cref="Sortie.UnParCategorie"/>).
+    /// Pourquoi cet adhérent ne peut pas prendre cet équipement dans cette sortie, ou null : désactivé, CACI expiré, nitrox sans
+    /// certification, ou déjà un équipement de la même catégorie (<see cref="DejaPris"/>, si la sortie le demande : <see cref="Sortie.UnParCategorie"/>).
     /// </summary>
-    public static string? RefusPour(Adherent a, LigneSortie ligne, IEnumerable<LigneSortie> lignesSortie, bool unParCategorie = true) =>
-        RefusPour(a, ligne.Nitrox, ligne.Code)
+    public static string? RefusPour(Adherent a, LigneSortie ligne, IEnumerable<LigneSortie> lignesSortie, DateOnly aujourdhui, bool unParCategorie = true) =>
+        RefusPour(a, ligne.Nitrox, ligne.Code, aujourdhui)
         ?? (unParCategorie && DejaPris(a.Id, ligne, lignesSortie) is { } deja
             ? $"{a.NomComplet} a déjà {deja.Code} ({deja.Categorie}) dans cette sortie : un seul équipement par catégorie."
             : null);
 
-    /// <summary>Motif court affiché sous le nom dans le panneau du départ (« Pas certifié nitrox », « A déjà A12 »), ou null.</summary>
-    public static string? MotifCourt(Adherent a, LigneSortie ligne, IEnumerable<LigneSortie> lignesSortie, bool unParCategorie = true) =>
+    /// <summary>Motif court affiché sous le nom dans le panneau du départ (« CACI expiré », « Pas certifié nitrox », « A déjà A12 »), ou null.</summary>
+    public static string? MotifCourt(Adherent a, LigneSortie ligne, IEnumerable<LigneSortie> lignesSortie, DateOnly aujourdhui, bool unParCategorie = true) =>
         !a.Actif ? "Désactivé"
+        : a.CaciExpire(aujourdhui) ? "CACI expiré"
         : ligne.Nitrox && !a.Nitrox ? "Pas certifié nitrox"
         : unParCategorie && DejaPris(a.Id, ligne, lignesSortie) is { } deja ? $"A déjà {deja.Code}"
         : null;
+
+    /// <summary>Date du jour (contrôle du CACI dans le panneau du départ).</summary>
+    public DateOnly AujourdHui => horloge.AujourdHui;
 
     // ---------------------------------------------------------------- Lecture
 
@@ -120,7 +125,7 @@ public sealed class ServiceAdherents(
         var situations = (await adherents.ListerSituationsAsync(ct)).ToDictionary(s => s.AdherentId);
         var fiches = Filtrer(await adherents.ListerAsync(actifsSeulement: false, ct), recherche)
             .Where(a => niveau is null || (niveau.Length == 0 ? string.IsNullOrWhiteSpace(a.Niveau) : string.Equals(a.Niveau?.Trim(), niveau, StringComparison.OrdinalIgnoreCase)))
-            .Select(a => situations.TryGetValue(a.Id, out var s) ? new FicheAdherent(a, s.NbDehors, s.NbManquants) : new FicheAdherent(a, 0, 0))
+            .Select(a => situations.TryGetValue(a.Id, out var s) ? new FicheAdherent(a, s.NbDehors, s.NbManquants, a.CaciExpire(horloge.AujourdHui)) : new FicheAdherent(a, 0, 0, a.CaciExpire(horloge.AujourdHui)))
             .OrderBy(f => !f.Adherent.Actif)
             .ToList();
         var filtrees = fiches.Where(f => filtre switch
@@ -157,7 +162,8 @@ public sealed class ServiceAdherents(
         return new DetailAdherent(adherent,
             passages.Where(p => p.Statut == StatutSortieEquipement.Dehors).ToList(),
             passages.Where(p => p.Statut == StatutSortieEquipement.Manquant).ToList(),
-            sorties);
+            sorties,
+            adherent.CaciExpire(horloge.AujourdHui));
     }
 
     // ---------------------------------------------------------------- Ajout et modification
@@ -263,6 +269,16 @@ public sealed class ServiceAdherents(
         if (a.Niveau?.Length > Adherent.LongueurMaxNiveau || a.Licence?.Length > Adherent.LongueurMaxLicence || a.Telephone?.Length > Adherent.LongueurMaxTelephone)
         {
             return ResultatOperation.Echec("Niveau, licence ou téléphone trop long (30 caractères au plus).");
+        }
+
+        // CACI : case cochée = date d'expiration obligatoire (une date déjà passée est acceptée : il ne sortira plus de matériel).
+        if (!a.Caci)
+        {
+            a.CaciExpiration = null;
+        }
+        else if (a.CaciExpiration is null)
+        {
+            return ResultatOperation.Echec("Indiquez la date d'expiration du CACI.");
         }
 
         return a.Licence is { } licence && tous.FirstOrDefault(x => x.Id != a.Id && string.Equals(x.Licence, licence, StringComparison.OrdinalIgnoreCase)) is { } autre

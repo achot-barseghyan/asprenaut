@@ -438,7 +438,7 @@ public sealed class ServiceSortie(
         var lignes = await sorties.ListerLignesAsync(sortieId, ct);
         var ligne = lignes.FirstOrDefault(l => l.EquipementId == equipementId);
         var code = ligne?.Code ?? "";
-        if ((ligne is null ? ServiceAdherents.RefusPour(adherent, false, code) : ServiceAdherents.RefusPour(adherent, ligne, lignes, sortie.UnParCategorie)) is { } refus)
+        if ((ligne is null ? ServiceAdherents.RefusPour(adherent, false, code, horloge.AujourdHui) : ServiceAdherents.RefusPour(adherent, ligne, lignes, horloge.AujourdHui, sortie.UnParCategorie)) is { } refus)
         {
             return ResultatOperation.Echec(refus);
         }

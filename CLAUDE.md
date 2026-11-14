@@ -72,11 +72,11 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   Moniteurs (page « Membres du club »), Historique, Bilan de saison, Révisions, Paramètres, Déverrouillage, Utilisations d'un équipement). Polices Sora/Manrope remplacées par Segoe UI Variable ; pas de fond dégradé ni de bulles animées.
 - **Briques d'interface** (`Controles/`) : `Carte`, `ControleDessine` (base des contrôles peints), `AnneauProgression`,
   `IndicateurEtapes`, `PastilleDate`, `Pastille`, `Picto`, `GrilleAdaptative` (colonnes auto, ajuste sa ligne de TableLayoutPanel),
-  `Tuile`, `FilAriane`, `BarreRecherche`, `ChampSaisie` (`Icone`, `ADroite` et `IndicatifSiFocus` optionnels), `ChampDate` (remplace le DateTimePicker, blanc et en anglais),
+  `Tuile`, `FilAriane`, `BarreRecherche`, `ChampSaisie` (`Icone`, `ADroite` et `IndicatifSiFocus` optionnels), `ChampDate` (remplace le DateTimePicker, blanc et en anglais : saisie jj/mm/aaaa ou `Calendrier` déroulant dessiné, bouton agenda, Alt + ↓ ou F4 ; lundi en premier, « Aujourd'hui » / « Effacer », au-dessus du champ si la place manque),
   `ListeDeroulante` (cadre et bouton repeints par-dessus Windows dans `WndProc`), `ListeMateriel` (styles Depart / ARendre / Rendu),
   `ScanInput` + `BandeauMessage` (scan réussi : `Ressources/Sons/ScanReussi.wav`, ressource `Sons.ScanReussi.wav`, PCM 16 bits mono
   car `SoundPlayer` ne lit pas tous les WAV ; avertissement / erreur : sons de Windows ; réglage `SonsActifs`), `BandeauAccueil`, `Logo`, `CarteScanner`, `Tableaux` (pastilles et pictogrammes dans les DataGridView),
-  `FiltreCategories` (puces « Tout 12 / Blocs 3 », `CouleurPoint` et `Unite` optionnels), `FenetreFormulaire` (fenêtre modale sombre ;
+  `FiltreCategories` (puces « Tout 12 / Blocs 3 », `CouleurPoint`, `Unite` et `LibelleTout` optionnels ; aussi les filtres de Membres), `FenetreFormulaire` (fenêtre modale sombre ;
   la validation passe par un service et ne ferme qu'en cas de succès), `Interrupteur`, `SelecteurNombre`, `Bascule` (options côte à côte, nombres), `ChoixResponsable`, `CarteSection`, `LigneReglage`,
   `ListeChoix` (liste de choix dessinée, badge + titre + détail, clic ou flèches), `JournalHistorique` (journal par jour dessiné dans un seul contrôle défilant : seule la partie visible est peinte, le clic sur un
   code est retrouvé par calcul — à préférer à un contrôle par ligne dès qu'une liste peut compter des milliers d'éléments).
@@ -403,6 +403,13 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     Journal `RevisionEtape`. App : bouton « Ajouter une intervention » de Révisions, onglets « À prévoir » (choix de l'équipement,
     « À faire », description) / « Déjà faite » (panneau d'intervention). Export : interventions_prevues.csv.
 
+36. CACI des adhérents (migration 019, `CaciTests`) : case « CACI » + « CACI valable jusqu'au » dans le formulaire de l'adhérent
+    (`Adherent.Caci`, `CaciExpiration` ; cochée = date obligatoire, décochée = date effacée et aucun contrôle). `CaciExpire(aujourdhui)` :
+    cochée et date passée (le jour même reste valable). Au départ d'une sortie nominative, `ServiceAdherents.RefusPour` refuse un
+    CACI expiré (après « désactivé », avant nitrox) ; panneau : motif « CACI expiré » (`MotifCourt`, date du jour donnée par
+    `ServiceAdherents.AujourdHui`). Carte : pastille « CACI EXPIRÉ » (`FicheAdherent.CaciExpire`) ; fiche : « CACI valable jusqu'au … »
+    ou « CACI expiré le … » en rouge (`DetailAdherent.CaciExpire`). Pas dans l'import Excel. Export : colonnes CACI dans adherents.csv.
+
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
 à côté de la base d'essai : les essais ne touchent jamais les réglages réels. Préfixe des étiquettes : `CodeScanne.Nettoyer(brut, prefixe)`.
@@ -446,11 +453,12 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   017 : sortie.un_par_categorie (0/1, 1 par défaut, sorties existantes comprises).
   018 : intervention_prevue (equipement_id, motif, description, prevue_le, close_le, annulee 0/1 ; une ouverte par équipement
   `ux_intervention_prevue_ouverte`).
+  019 : adherent.caci (0/1) et adherent.caci_expiration (date, null si pas de CACI).
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/019_xxx.sql`, sans jamais modifier un script déjà livré
+- Nouvelle migration : ajouter `Migrations/020_xxx.sql`, sans jamais modifier un script déjà livré
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.

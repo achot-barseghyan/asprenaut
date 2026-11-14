@@ -132,7 +132,7 @@ public sealed class EcranDepart : EcranScanBase
                 return;
             }
 
-            _panneau.Afficher(attente, lignes, resume.UnParCategorie, ServiceSortie.AdherentsRecents(lignes), tous);
+            _panneau.Afficher(attente, lignes, resume.UnParCategorie, ServiceSortie.AdherentsRecents(lignes), tous, _adherents.AujourdHui);
             _valider.Enabled = false;
             _valider.Text = $"Attribuez {attente.Code} avant de valider";
             _valider.Icone = Icones.Cadenas;

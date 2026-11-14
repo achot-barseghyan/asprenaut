@@ -48,6 +48,29 @@ public class AdherentsDepotsTests : IAsyncLifetime
         Assert.Equal(0L, await cx.ExecuteScalarAsync<long>("SELECT actif FROM adherent WHERE id = @id;", new { id = julie.Id }));
     }
 
+    // 019 : CACI de l'adhérent (case et date d'expiration), format brut stocké.
+    [Fact]
+    public async Task Le_caci_est_enregistre_et_relu()
+    {
+        var depot = new AdherentRepository(_base.Fabrique);
+        var julie = new Adherent { Nom = "Martin", Prenom = "Julie", Caci = true, CaciExpiration = new DateOnly(2027, 3, 15) };
+        await depot.AjouterAsync(julie);
+        var thomas = new Adherent { Nom = "Bernard", Prenom = "Thomas" };
+        await depot.AjouterAsync(thomas);
+
+        var lu = (await depot.ObtenirAsync(julie.Id))!;
+        Assert.Equal((true, new DateOnly(2027, 3, 15)), (lu.Caci, lu.CaciExpiration));
+        Assert.Equal((false, (DateOnly?)null), ((await depot.ObtenirAsync(thomas.Id))!.Caci, (await depot.ObtenirAsync(thomas.Id))!.CaciExpiration));
+
+        lu.CaciExpiration = new DateOnly(2028, 1, 2);
+        await depot.MettreAJourAsync(lu);
+        Assert.Equal(new DateOnly(2028, 1, 2), (await depot.ListerAsync(actifsSeulement: true)).Single(a => a.Id == julie.Id).CaciExpiration);
+
+        await using var cx = await _base.Fabrique.OuvrirAsync();
+        Assert.Equal((1L, "2028-01-02"), await cx.QuerySingleAsync<(long, string)>(
+            "SELECT caci, caci_expiration FROM adherent WHERE id = @id;", new { id = julie.Id }));
+    }
+
     // 015 : nitrox de l'adhérent et de l'équipement, relus par les dépôts (inventaire, lignes de sortie).
     [Fact]
     public async Task Le_nitrox_est_enregistre_pour_l_adherent_et_l_equipement()

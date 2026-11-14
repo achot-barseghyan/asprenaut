@@ -259,16 +259,16 @@ public sealed class ListeDeroulante : ComboBox
 }
 
 /// <summary>
-/// Champ de date sombre : saisie "jj/mm/aaaa", jour de la semaine en français, flèches jour précédent / suivant.
-/// (Le DateTimePicker de Windows reste blanc et suit la langue du système.)
+/// Champ de date sombre : saisie "jj/mm/aaaa" ou calendrier déroulant (<see cref="Calendrier"/> : bouton, Alt + flèche bas
+/// ou F4), jour de la semaine en français. (Le DateTimePicker de Windows reste blanc et suit la langue du système.)
 /// </summary>
 public sealed class ChampDate : Panel
 {
     private static readonly string[] Formats = ["dd/MM/yyyy", "d/M/yyyy", "dd/MM/yy", "d/M/yy", "ddMMyyyy"];
     private readonly TextBox _texte = new();
     private readonly Label _jour = Ui.Libelle("", Theme.Police(10.5f), Theme.TexteSecondaire);
-    private readonly BoutonArrondi _precedent = new("Jour précédent", StyleBouton.Icone, Icones.ChevronGauche) { Margin = Padding.Empty };
-    private readonly BoutonArrondi _suivant = new("Jour suivant", StyleBouton.Icone, Icones.ChevronDroite) { Margin = Padding.Empty };
+    private readonly BoutonArrondi _calendrier = new("Choisir dans le calendrier", StyleBouton.Icone, Icones.Agenda) { Margin = Padding.Empty };
+    private ToolStripDropDown? _ouvert;
     private DateOnly? _date;
 
     public ChampDate()
@@ -285,8 +285,15 @@ public sealed class ChampDate : Panel
         _texte.AccessibleName = "Date";
         _jour.AutoSize = false;
         _jour.TextAlign = ContentAlignment.MiddleRight;
-        _precedent.Click += (_, _) => Decaler(-1);
-        _suivant.Click += (_, _) => Decaler(1);
+        _calendrier.Click += (_, _) => OuvrirCalendrier();
+        _texte.KeyDown += (_, e) =>
+        {
+            if (e.KeyCode == Keys.F4 || (e.Alt && e.KeyCode == Keys.Down))
+            {
+                e.Handled = e.SuppressKeyPress = true;
+                OuvrirCalendrier();
+            }
+        };
         _texte.TextChanged += (_, _) => Lire();
         _texte.Leave += (_, _) =>
         {
@@ -298,7 +305,7 @@ public sealed class ChampDate : Panel
         _texte.Enter += (_, _) => Invalidate();
         _texte.Leave += (_, _) => Invalidate();
         Click += (_, _) => _texte.Focus();
-        Controls.AddRange([_texte, _jour, _precedent, _suivant]);
+        Controls.AddRange([_texte, _jour, _calendrier]);
     }
 
     /// <summary>Date saisie, ou null si le texte n'est pas une date.</summary>
@@ -327,29 +334,55 @@ public sealed class ChampDate : Panel
     protected override void OnLayout(LayoutEventArgs levent)
     {
         base.OnLayout(levent);
-        if (_suivant is null)
+        if (_calendrier is null)
         {
             return;
         }
 
         var marge = (int)Dessin.Echelle(this, 4);
         var cote = Height - (2 * marge);
-        _suivant.SetBounds(Width - marge - cote, marge, cote, cote);
-        _precedent.SetBounds(_suivant.Left - cote, marge, cote, cote);
+        _calendrier.SetBounds(Width - marge - cote, marge, cote, cote);
         // Champ étroit : le jour de la semaine laisse la place à la date.
         var largeurJour = Width >= Dessin.Echelle(this, 330) ? (int)Dessin.Echelle(this, 130) : 0;
         _jour.Visible = largeurJour > 0;
-        _jour.SetBounds(_precedent.Left - largeurJour - marge, 0, largeurJour, Height);
+        _jour.SetBounds(_calendrier.Left - largeurJour - marge, 0, largeurJour, Height);
         var gauche = (int)Dessin.Echelle(this, 16);
         _texte.SetBounds(gauche, (Height - _texte.Height) / 2, Math.Max(20, _jour.Left - gauche), _texte.Height);
     }
 
     protected override void OnPaintBackground(PaintEventArgs e) =>
-        Dessin.PeindreFondArrondi(this, e.Graphics, BackColor, _texte.Focused ? Theme.Accent : Theme.BordureForte, Theme.RayonBouton, 1.2f);
+        Dessin.PeindreFondArrondi(this, e.Graphics, BackColor, _texte.Focused || _ouvert is not null ? Theme.Accent : Theme.BordureForte, Theme.RayonBouton, 1.2f);
 
-    private void Decaler(int jours)
+    protected override void Dispose(bool disposing)
     {
-        Date = (_date ?? DateOnly.FromDateTime(DateTime.Today)).AddDays(jours);
+        if (disposing)
+        {
+            _ouvert?.Dispose();
+        }
+
+        base.Dispose(disposing);
+    }
+
+    /// <summary>Calendrier sous le champ, sur la date saisie (ou aujourd'hui) ; « Effacer » vide le champ.</summary>
+    private void OuvrirCalendrier()
+    {
+        if (_ouvert is not null || !Enabled)
+        {
+            return;
+        }
+
+        _ouvert = Calendrier.Ouvrir(this, _date, d =>
+        {
+            Date = d;
+            _texte.Focus();
+            _texte.SelectionStart = _texte.TextLength;
+        });
+        _ouvert.Closed += (_, _) =>
+        {
+            _ouvert = null;
+            Invalidate();
+        };
+        Invalidate();
     }
 
     private void Lire()

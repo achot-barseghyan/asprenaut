@@ -87,7 +87,7 @@ public class NitroxTests
 
         // Correction : A12 passe à Thomas, qui a déjà A13 → refusé ; motif court pour le panneau.
         var lignes = await new SortieRepositoryMemoire(_ctx.Db).ListerLignesAsync(sortie);
-        Assert.Equal("A déjà A13", ServiceAdherents.MotifCourt(thomas, lignes.Single(l => l.Code == "A12"), lignes));
+        Assert.Equal("A déjà A13", ServiceAdherents.MotifCourt(thomas, lignes.Single(l => l.Code == "A12"), lignes, _ctx.Horloge.AujourdHui));
         Assert.False((await _ctx.Sorties.AttribuerAdherentAsync(sortie, a12.Id, thomas.Id)).Reussi);
     }
 

@@ -58,8 +58,8 @@ public sealed class ExportRepository(FabriqueConnexion fabrique) : IExportReposi
              new("Statut", GenreColonne.StatutSortieEquipement), new("Parti le", GenreColonne.Horodatage), new("Rentré le", GenreColonne.Horodatage),
              new("Adhérent")]),
         ("adherents.csv",
-            "SELECT nom, prenom, niveau, licence, telephone, nitrox, actif FROM adherent ORDER BY nom, prenom",
-            [new("Nom"), new("Prénom"), new("Niveau"), new("Licence"), new("Téléphone"), new("Certifié nitrox", GenreColonne.OuiNon), new("Actif", GenreColonne.OuiNon)]),
+            "SELECT nom, prenom, niveau, licence, telephone, nitrox, caci, caci_expiration, actif FROM adherent ORDER BY nom, prenom",
+            [new("Nom"), new("Prénom"), new("Niveau"), new("Licence"), new("Téléphone"), new("Certifié nitrox", GenreColonne.OuiNon), new("CACI", GenreColonne.OuiNon), new("CACI valable jusqu'au", GenreColonne.Date), new("Actif", GenreColonne.OuiNon)]),
         ("controles.csv",
             $"""
             SELECT ct.date_controle, e.code, e.libelle, ct.type, ct.resultat, {Moniteur}, ct.notes, ct.saisi_le

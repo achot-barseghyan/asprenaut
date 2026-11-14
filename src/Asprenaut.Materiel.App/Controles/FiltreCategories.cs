@@ -33,9 +33,13 @@ public sealed class FiltreCategories : Panel
     /// <summary>La sélection a changé (clic sur une puce).</summary>
     public event EventHandler? Changement;
 
-    /// <summary>Catégorie choisie ; null = « Tout ».</summary>
+    /// <summary>Catégorie choisie ; null = « Tout ». Modifiée par le code, elle est montrée au prochain <see cref="Afficher"/>.</summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public string? Selection { get; private set; }
+    public string? Selection { get; set; }
+
+    /// <summary>Libellé de la première puce (sans filtre) : « Tout » ou « Tous ».</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public string LibelleTout { get; set; } = "Tout";
 
     /// <summary>Unité lue par le lecteur d'écran : « Blocs : 3 équipements ».</summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -66,7 +70,7 @@ public sealed class FiltreCategories : Panel
             puce.Dispose();
         }
 
-        Ajouter("Tout", null, total);
+        Ajouter(LibelleTout, null, total);
         foreach (var (categorie, nombre) in liste)
         {
             Ajouter(categorie, categorie, nombre);

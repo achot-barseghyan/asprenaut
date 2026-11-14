@@ -42,6 +42,7 @@ public sealed class PanneauAdherent : Carte
     private LigneSortie? _ligne;
     private IReadOnlyList<LigneSortie> _lignesSortie = [];
     private bool _unParCategorie = true;
+    private DateOnly _aujourdhui; // Donné par Afficher (horloge du service).
     private bool _effacement;
 
     public PanneauAdherent()
@@ -111,13 +112,14 @@ public sealed class PanneauAdherent : Carte
     /// Équipement à attribuer (« À qui est ce détendeur ? »), raccourcis de la sortie et adhérents actifs.
     /// Garde la recherche si c'est le même équipement (rechargement après un refus).
     /// </summary>
-    public void Afficher(LigneSortie ligne, IReadOnlyList<LigneSortie> lignesSortie, bool unParCategorie, IReadOnlyList<AdherentRecent> recents, IReadOnlyList<Adherent> tous)
+    public void Afficher(LigneSortie ligne, IReadOnlyList<LigneSortie> lignesSortie, bool unParCategorie, IReadOnlyList<AdherentRecent> recents, IReadOnlyList<Adherent> tous, DateOnly aujourdhui)
     {
         var nouveau = ligne.Code != _code;
         _code = ligne.Code;
         _ligne = ligne;
         _lignesSortie = lignesSortie;
         _unParCategorie = unParCategorie;
+        _aujourdhui = aujourdhui; // Contrôle du CACI.
         _tous = tous;
         _nitrox = ligne.Nitrox;
         var question = $"À qui est {Article(ligne.Categorie)} ?";
@@ -381,7 +383,7 @@ public sealed class PanneauAdherent : Carte
     }
 
     /// <summary>Pourquoi cet adhérent ne peut pas prendre l'équipement en attente (« A déjà A12 »), ou null.</summary>
-    private string? Motif(Adherent a) => _ligne is null ? null : ServiceAdherents.MotifCourt(a, _ligne, _lignesSortie, _unParCategorie);
+    private string? Motif(Adherent a) => _ligne is null ? null : ServiceAdherents.MotifCourt(a, _ligne, _lignesSortie, _aujourdhui, _unParCategorie);
 
     private void Filtrer()
     {
