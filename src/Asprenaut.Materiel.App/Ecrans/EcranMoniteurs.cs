@@ -11,7 +11,7 @@ using Asprenaut.Materiel.Core.Services;
 namespace Asprenaut.Materiel.App.Ecrans;
 
 /// <summary>
-/// Membres du club : onglets « Moniteurs | Classes | Adhérents ». Moniteurs et classes : une carte par responsable de
+/// Membres du club : onglets « Adhérents | Moniteurs | Classes » (Adhérents ouvert à l'arrivée). Moniteurs et classes : une carte par responsable de
 /// sortie (sorties de la saison, matériel dehors) et sa fiche (matériel dehors sous sa responsabilité, dernières sorties,
 /// modifier, créer une sortie). Une classe (Niveau 1, Niveau 2…) est responsable d'une sortie comme un moniteur ; elle a une
 /// pastille carrée (N2). Adhérents : ceux qui prennent du matériel lors d'une sortie nominative (recherche, filtres, import
@@ -19,7 +19,8 @@ namespace Asprenaut.Materiel.App.Ecrans;
 /// </summary>
 public sealed class EcranMoniteurs : EcranBase
 {
-    private const int OngletAdherents = 2;
+    // Onglets, dans l'ordre affiché : Adhérents (ouvert à l'arrivée), Moniteurs, Classes.
+    private const int OngletAdherents = 0, OngletMoniteurs = 1, OngletClasses = 2;
 
     private readonly ServiceMoniteurs _moniteurs;
     private readonly ServiceAdherents _adherents;
@@ -27,7 +28,7 @@ public sealed class EcranMoniteurs : EcranBase
     private readonly GrilleAdaptative _cartes = new() { LargeurMin = 250, HauteurElement = 176, Ecart = 14, Margin = new Padding(0, 0, 22, 0) };
     private readonly Panel _fiche = new() { AutoScroll = true, BackColor = Theme.Surface, Margin = Padding.Empty };
     private readonly Carte _carteFiche = new() { Padding = new Padding(24), CouleurBordure = Theme.BordureForte };
-    private readonly Bascule _onglets = new("Moniteurs", "Classes", "Adhérents");
+    private readonly Bascule _onglets = new("Adhérents", "Moniteurs", "Classes");
     private readonly BoutonArrondi _ajouter = new("Ajouter un moniteur", StyleBouton.Principal, Icones.Plus);
     private readonly BoutonArrondi _importer = new("Importer la liste Excel", StyleBouton.Secondaire, Icones.Document) { Visible = false };
     private readonly BoutonArrondi _modele = new("Modèle Excel à remplir", StyleBouton.Secondaire, Icones.Telecharger) { Visible = false };
@@ -147,7 +148,7 @@ public sealed class EcranMoniteurs : EcranBase
     /// <summary>Hauteur de la zone recherche + puces (pixels logiques) : 54 + puces + marges.</summary>
     private const int HauteurFiltres = 54 + Theme.HauteurCliquable + 8 + 10 + 20;
 
-    private GenreResponsable Genre => _onglets.SelectedIndex == 1 ? GenreResponsable.Classe : GenreResponsable.Moniteur;
+    private GenreResponsable Genre => _onglets.SelectedIndex == OngletClasses ? GenreResponsable.Classe : GenreResponsable.Moniteur;
 
     private bool Classes => Genre == GenreResponsable.Classe && !Adherents;
 
@@ -174,8 +175,8 @@ public sealed class EcranMoniteurs : EcranBase
             return;
         }
 
-        _onglets.DefinirNombre(0, _tous.Count(f => !f.Moniteur.EstClasse));
-        _onglets.DefinirNombre(1, _tous.Count(f => f.Moniteur.EstClasse));
+        _onglets.DefinirNombre(OngletMoniteurs, _tous.Count(f => !f.Moniteur.EstClasse));
+        _onglets.DefinirNombre(OngletClasses, _tous.Count(f => f.Moniteur.EstClasse));
         _onglets.DefinirNombre(OngletAdherents, adherents.Tous);
         await AfficherGenreAsync();
     }

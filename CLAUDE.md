@@ -250,7 +250,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     unique sans tenir compte des majuscules, 30 caractères au plus ; abréviation de la pastille (`Abrege`, 4 au plus, proposée par
     `ServiceMoniteurs.AbregeDe` : « Niveau 2 » → « N2 ») ; ni téléphone, ni niveau, ni TIV (jamais inspecteur). Le genre ne change
     pas à la modification. Journal `ClasseCreee` / `ClasseModifiee`. Afficher `SortieResume.LibelleResponsable`
-    (« Moniteur : … » / « Classe : … »). App : onglets `Bascule` dans `EcranMoniteurs`, `ChoixResponsable` (Moniteur | Classe
+    (« Moniteur : … » / « Classe : … »). App : onglets `Bascule` dans `EcranMoniteurs` (ordre : Adhérents, ouvert à l'arrivée, puis Moniteurs et Classes ; `OngletAdherents` / `OngletMoniteurs` / `OngletClasses`), `ChoixResponsable` (Moniteur | Classe
     puis la liste) dans Nouvelle sortie et Modifier la sortie. Filtres de l'écran Membres (`FiltresMembresTests`) : onglet Moniteurs, recherche (prénom, nom, niveau, téléphone, accents ignorés) et puces Tous / Actifs / Inspecteurs TIV / Matériel dehors / Inactifs (`ServiceMoniteurs.Filtrer` → `ListeMoniteurs`, nombres après la recherche) ; onglet Adhérents, recherche, liste Niveau (tous, ceux du club, « Sans niveau » = `ServiceAdherents.SansNiveau`) et puces Tous / Matériel dehors / Non rendu / Nitrox / Désactivés ; pas de filtre pour les classes ; chaque onglet a sa recherche. Données de démo : chargées si aucun moniteur (genre Moniteur).
 25. Manuels (`ServiceManuels`, migration 009, écran `EcranManuels`, maquette « Manuels ») : consultation libre ; ajouter, modifier,
     retirer = action protégée Matériel. Le PDF est copié dans `Manuels\` à côté de la base (`IStockageManuels`, nom déjà pris →
