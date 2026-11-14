@@ -133,7 +133,7 @@ public sealed class PastilleVerrou : IDisposable
             Rafraichir();
         }
 
-        Dessiner(g, _controle, new RectangleF(0, 0, _controle.Width, _controle.Height));
+        Dessiner(g, new RectangleF(0, 0, _controle.Width, _controle.Height));
     }
 
     public void Dispose()
@@ -278,13 +278,54 @@ public sealed class PastilleVerrou : IDisposable
         }
 
         var e = Dessin.Echelle(_controle, 1);
-        var (cx, cy) = Centre(b, e);
+        var (cx, cy) = Centre(b);
         var rayon = (int)Math.Ceiling(((Diametre / 2) + Lisere + Halo) * e) + 2;
         return Rectangle.FromLTRB((int)cx - rayon, (int)cy - rayon, (int)cx + rayon, (int)cy + rayon + (int)(4 * e));
     }
 
-    private static (float X, float Y) Centre(RectangleF bornes, float e) =>
-        (bornes.Right + ((Debord - (Diametre / 2)) * e), bornes.Top - ((Debord - (Diametre / 2)) * e));
+    /// <summary>
+    /// Centre de la pastille pour un contrôle placé en <paramref name="bornes"/> : sur son coin haut droit, débordant de
+    /// <see cref="Debord"/>, sauf si ce débord sortirait de la vue d'un conteneur défilant (qui le couperait : bouton collé
+    /// au bord d'une fiche) ; la pastille rentre alors juste assez pour rester entière.
+    /// </summary>
+    private (float X, float Y) Centre(RectangleF bornes)
+    {
+        var e = Dessin.Echelle(_controle, 1);
+        var x = _controle.Width + ((Debord - (Diametre / 2)) * e);
+        var y = -((Debord - (Diametre / 2)) * e);
+        if (VueLocale() is { } vue)
+        {
+            var marge = ((Diametre / 2) + Lisere) * e;
+            x = Math.Max(Math.Min(x, vue.Right - marge), marge);
+            y = Math.Min(Math.Max(y, vue.Top + marge), _controle.Height - marge);
+        }
+
+        return (bornes.X + x, bornes.Y + y);
+    }
+
+    /// <summary>
+    /// Contenu des conteneurs défilants parents (il défile avec le contrôle : la pastille ne bouge pas au défilement),
+    /// dans le repère du contrôle ; null s'il n'y en a pas.
+    /// </summary>
+    private RectangleF? VueLocale()
+    {
+        RectangleF? vue = null;
+        var decalage = Point.Empty; // Position du contrôle dans le parent courant.
+        for (var c = _controle; c.Parent is { } p; c = p)
+        {
+            decalage.Offset(c.Location);
+            if (p is ScrollableControl { AutoScroll: true })
+            {
+                // DisplayRectangle retire la marge intérieure (Padding), qui reste visible : on la rajoute.
+                var d = p.DisplayRectangle;
+                var contenu = Rectangle.FromLTRB(d.Left - p.Padding.Left, d.Top - p.Padding.Top, d.Right + p.Padding.Right, d.Bottom + p.Padding.Bottom);
+                var visible = new RectangleF(contenu.X - decalage.X, contenu.Y - decalage.Y, contenu.Width, contenu.Height);
+                vue = vue is { } v ? RectangleF.Intersect(v, visible) : visible;
+            }
+        }
+
+        return vue;
+    }
 
     private void PeindreSurHote(object? sender, PaintEventArgs e)
     {
@@ -304,7 +345,7 @@ public sealed class PastilleVerrou : IDisposable
                 e.Graphics.IntersectClip(vue);
             }
 
-            Dessiner(e.Graphics, _controle, b);
+            Dessiner(e.Graphics, b);
             e.Graphics.Restore(etat);
 
             // Retenir où elle est réellement peinte : c'est cette zone qu'il faudra effacer.
@@ -319,10 +360,11 @@ public sealed class PastilleVerrou : IDisposable
     }
 
     /// <summary>Halo doré, liseré de la couleur du fond, rond jaune et cadenas foncé, centrés sur le coin haut droit.</summary>
-    private static void Dessiner(Graphics g, Control controle, RectangleF bornes)
+    private void Dessiner(Graphics g, RectangleF bornes)
     {
+        var controle = _controle;
         var e = Dessin.Echelle(controle, 1);
-        var (cx, cy) = Centre(bornes, e);
+        var (cx, cy) = Centre(bornes);
         var r = Diametre / 2 * e;
         RectangleF Rond(float rayon, float decalageY = 0) => new(cx - rayon, cy - rayon + decalageY, 2 * rayon, 2 * rayon);
         var qualite = g.SmoothingMode;

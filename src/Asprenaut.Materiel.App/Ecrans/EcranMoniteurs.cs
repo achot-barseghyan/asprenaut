@@ -519,7 +519,7 @@ public sealed class EcranMoniteurs : EcranBase
         var activer = new BoutonArrondi(a.Actif ? "Désactiver" : "Réactiver", StyleBouton.Secondaire, a.Actif ? Icones.Croix : Icones.Coche)
         {
             AutoSize = false,
-            Margin = new Padding(0, 0, 12, 0), // Place pour le cadenas, qui déborde à droite (la fiche coupe au bord).
+            Margin = Padding.Empty, // Au bord de la fiche défilante : la pastille du cadenas rentre d'elle-même (PastilleVerrou).
             AccessibleDescription = a.Actif ? "Il ne pourra plus sortir de matériel" : "Il pourra de nouveau sortir du matériel",
         };
         if (a.Actif)

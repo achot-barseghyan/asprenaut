@@ -183,6 +183,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     `DialogueDeverrouillage`, chiffres lus d'après le caractère tapé : AZERTY), `CarteModeGestion` dans le menu, `FiltreActivite`.
     Visuel « verrouillé » : `GardeGestion.Lier(controle, action)` met `Verrouille` à jour à chaque changement de mode —
     `PastilleVerrou` (rond jaune au cadenas foncé accroché au coin haut droit, débord de 9 px peint par les parents opaques,
+    rentré juste assez pour rester entier si le débord sortirait d'un conteneur défilant (`Centre`, `VueLocale` : bouton au bord d'une fiche),
     info-bulle « Code gestionnaire requis ») sur un `BoutonArrondi` ou un `SelecteurNombre` (qui prend aussi une bordure dorée ;
     compteur de Nouvelle sortie et de Modifier la sortie : le clic demande le code), badge « Code requis » d'une `CarteSection`,
     `BandeauConsultation` (bandeau doré + bouton « Déverrouiller ») sous le titre des pages presque entièrement protégées
