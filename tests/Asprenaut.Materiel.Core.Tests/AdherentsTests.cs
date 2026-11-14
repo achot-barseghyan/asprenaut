@@ -267,6 +267,48 @@ public class AdherentsTests
         Assert.Equal("JM", liste[1].Initiales);
     }
 
+    // Formulaire : puces rangées Plongeur / Encadrant, « Niveau 2 » affiché « N2 ».
+    [Fact]
+    public void Les_niveaux_sont_ranges_plongeur_ou_encadrant()
+    {
+        var encadrants = Reglages.NiveauxParDefaut.Where(ServiceAdherents.EstEncadrant).ToList();
+        Assert.Equal(["Initiateur", "MF1", "MF2"], encadrants);
+        Assert.True(ServiceAdherents.EstEncadrant("E3"));
+        Assert.True(ServiceAdherents.EstEncadrant("Moniteur fédéral"));
+        Assert.False(ServiceAdherents.EstEncadrant("Niveau 4"));
+        Assert.Equal("N2", ServiceAdherents.NiveauCourt("Niveau 2"));
+        Assert.Equal("PA20", ServiceAdherents.NiveauCourt("PA20"));
+        Assert.Equal("Débutant", ServiceAdherents.NiveauCourt("Débutant"));
+    }
+
+    // Formulaire : mise en forme pendant la saisie et aperçu de l'en-tête.
+    [Fact]
+    public void La_saisie_est_mise_en_forme()
+    {
+        Assert.Equal("Jean-Pierre Le Goff", ServiceAdherents.MajusculesMots("  jean-pierre le goff "));
+        Assert.Equal("D'Artagnan", ServiceAdherents.MajusculesMots("d'artagnan"));
+        Assert.Equal("06 12 34 56 78", ServiceAdherents.FormaterTelephone("0612345678"));
+        Assert.Equal("06 12 3", ServiceAdherents.FormaterTelephone("06.12.3"));
+        Assert.Equal("+33 6 12 34 56 78", ServiceAdherents.FormaterTelephone("+33 6 12 34 56 78"));
+        Assert.Equal("CM", ServiceAdherents.Initiales(" camille", "martin"));
+        Assert.Equal("M", ServiceAdherents.Initiales("", "martin"));
+        Assert.Equal("", ServiceAdherents.Initiales(" ", ""));
+    }
+
+    // Pastille du CACI dans le formulaire : mêmes règles que le départ (le dernier jour reste valable).
+    [Fact]
+    public void L_etat_du_caci_suit_la_date_saisie()
+    {
+        var jour = new DateOnly(2026, 11, 14);
+        Assert.Null(ServiceAdherents.EtatCaciSaisi(false, jour, jour));
+        Assert.Equal(NiveauCaci.ASaisir, ServiceAdherents.EtatCaciSaisi(true, null, jour)!.Niveau);
+        var expire = ServiceAdherents.EtatCaciSaisi(true, jour.AddDays(-1), jour)!;
+        Assert.Equal((NiveauCaci.Expire, "Expiré depuis le 13/11/2026", "CACI expiré"), (expire.Niveau, expire.Texte, expire.Etiquette));
+        Assert.Equal(NiveauCaci.Bientot, ServiceAdherents.EtatCaciSaisi(true, jour, jour)!.Niveau);
+        Assert.Equal("Expire dans 17 j", ServiceAdherents.EtatCaciSaisi(true, jour.AddDays(17), jour)!.Texte);
+        Assert.Equal(NiveauCaci.Valide, ServiceAdherents.EtatCaciSaisi(true, jour.AddDays(ServiceAdherents.JoursAvantFinCaci + 1), jour)!.Niveau);
+    }
+
     // Niveaux : une liste (Paramètres), le formulaire n'accepte qu'un niveau de la liste, l'import ramène les abréviations.
     [Fact]
     public async Task Le_niveau_est_pris_dans_la_liste()

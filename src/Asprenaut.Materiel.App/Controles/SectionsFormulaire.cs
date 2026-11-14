@@ -1,0 +1,679 @@
+using System.ComponentModel;
+using System.Drawing.Drawing2D;
+using Asprenaut.Materiel.App.Apparence;
+using Asprenaut.Materiel.Core.Modeles;
+
+namespace Asprenaut.Materiel.App.Controles;
+
+// Briques des formulaires en sections (maquette « Ajouter un adhérent ») : sections numérotées, puces de choix,
+// cartes d'autorisation avec interrupteur, avatar de l'en-tête, libellé « obligatoire ».
+
+/// <summary>Libellé suivi (ou précédé) d'une étoile de couleur : « Prénom * », « * champs obligatoires ».</summary>
+public sealed class LibelleObligatoire : Label
+{
+    private readonly bool _etoileDevant;
+
+    public LibelleObligatoire(string texte, Font police, Color couleur, bool etoileDevant = false)
+    {
+        _etoileDevant = etoileDevant;
+        Text = texte;
+        Font = police;
+        ForeColor = couleur;
+        AutoSize = true;
+        BackColor = Color.Transparent;
+        UseMnemonic = false;
+        Margin = Padding.Empty;
+    }
+
+    private Font PoliceEtoile => Theme.PoliceGrasse(Font.SizeInPoints);
+
+    private int LargeurEtoile => TextRenderer.MeasureText("*", PoliceEtoile, Size.Empty, TextFormatFlags.NoPadding).Width + (int)Dessin.Echelle(this, 4);
+
+    public override Size GetPreferredSize(Size proposedSize)
+    {
+        var texte = TextRenderer.MeasureText(Text, Font, Size.Empty, TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
+        return new Size(texte.Width + LargeurEtoile + 2, texte.Height + 2);
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        const TextFormatFlags drapeaux = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix;
+        var largeurTexte = TextRenderer.MeasureText(Text, Font, Size.Empty, drapeaux).Width;
+        var xTexte = _etoileDevant ? LargeurEtoile : 0;
+        var xEtoile = _etoileDevant ? 0 : largeurTexte + (int)Dessin.Echelle(this, 4);
+        TextRenderer.DrawText(e.Graphics, Text, Font, new Point(xTexte, 1), ForeColor, drapeaux);
+        TextRenderer.DrawText(e.Graphics, "*", PoliceEtoile, new Point(xEtoile, 1), Theme.AccentClair, drapeaux);
+    }
+}
+
+/// <summary>Rond teinté au bord pointillé, pictogramme au centre (en-tête d'un formulaire).</summary>
+public sealed class AvatarEntete : ControleDessine
+{
+    private string _icone = "";
+
+    public AvatarEntete()
+    {
+        Size = new Size(52, 52);
+        TabStop = false; // Décoratif : un Control prend le focus par défaut (Tab s'y arrêtait).
+    }
+
+    private string _initiales = "";
+
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public string Icone { get => _icone; set => Invalider(ref _icone, value); }
+
+    /// <summary>Initiales (« CM ») : rond plein en dégradé à la place du pictogramme ; vide = pictogramme.</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public string Initiales { get => _initiales; set => Invalider(ref _initiales, value); }
+
+    protected override void Peindre(Graphics g)
+    {
+        var r = new RectangleF(E(1), E(1), Width - E(2) - 1, Height - E(2) - 1);
+        if (_initiales.Length > 0)
+        {
+            using var degrade = new LinearGradientBrush(r, Theme.AccentClair, Theme.Retour, 45f);
+            g.FillEllipse(degrade, r);
+            Dessin.Texte(g, _initiales, Theme.PoliceGrasse(14f), Rectangle.Round(r), Theme.TexteSurAccent, centre: true);
+            return;
+        }
+
+        using (var fond = new SolidBrush(Theme.Teinte(Theme.Accent, 0.16f)))
+        {
+            g.FillEllipse(fond, r);
+        }
+
+        using (var stylo = new Pen(Theme.Teinte(Theme.Accent, 0.55f), E(1.2f)) { DashStyle = DashStyle.Dash })
+        {
+            g.DrawEllipse(stylo, r);
+        }
+
+        if (_icone.Length > 0)
+        {
+            Icones.Dessiner(g, _icone, RectangleF.Inflate(r, -Width * 0.29f, -Height * 0.29f), Theme.AccentClair);
+        }
+    }
+}
+
+/// <summary>Petit carré arrondi avec le numéro d'une section (« 1 », « 2 »...).</summary>
+public sealed class NumeroSection : ControleDessine
+{
+    private readonly string _numero;
+
+    public NumeroSection(int numero)
+    {
+        _numero = numero.ToString(Libelles.Culture);
+        TabStop = false; // Décoratif : un Control prend le focus par défaut (Tab s'y arrêtait).
+        Size = new Size(24, 24);
+    }
+
+    protected override void Peindre(Graphics g)
+    {
+        var r = new RectangleF(0, 0, Width - 1, Height - 1);
+        using (var chemin = Dessin.Arrondi(r, E(7)))
+        using (var fond = new SolidBrush(Theme.Teinte(Theme.Accent, 0.2f)))
+        {
+            g.FillPath(fond, chemin);
+        }
+
+        Dessin.Texte(g, _numero, Theme.PoliceGrasse(9f), new Rectangle(0, 0, Width, Height), Theme.AccentClair, centre: true);
+    }
+}
+
+/// <summary>
+/// Section numérotée d'un formulaire : « 1 IDENTITÉ » (+ texte à droite, « non renseigné »), puis son contenu.
+/// Se place dans une <see cref="FenetreFormulaire"/> par <see cref="FenetreFormulaire.Ajouter"/> ; sa hauteur suit son contenu.
+/// </summary>
+public sealed class SectionFormulaire : Carte
+{
+    private readonly TableLayoutPanel _contenu;
+    private readonly Label _droite = Ui.Libelle("", Theme.Police(9f), Theme.TexteSecondaire);
+
+    public SectionFormulaire(int numero, string titre)
+    {
+        Padding = new Padding(16, 16, 16, 4);
+        Margin = new Padding(0, 0, 0, 14);
+        Rayon = 18;
+        // Maquette : section un peu plus sombre que la fenêtre, bord discret.
+        BackColor = Theme.Sur(Theme.Surface, Theme.Fond, 0.3f);
+        CouleurBordure = Theme.Bordure;
+        AccessibleName = titre;
+        // Sinon le TableLayoutPanel parent garde la hauteur actuelle au lieu de GetPreferredSize ; GrowAndShrink : une mesure
+        // faite à une largeur provisoire étroite (textes à la ligne) ne doit pas rester.
+        AutoSize = true;
+        AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        _contenu = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 1,
+            BackColor = Color.Transparent,
+            Margin = Padding.Empty,
+        };
+        _contenu.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        Controls.Add(_contenu);
+
+        var badge = new NumeroSection(numero) { Margin = new Padding(0, 0, 10, 0) };
+        var libelle = Ui.Libelle(titre.ToUpper(Libelles.Culture), Theme.PoliceGrasse(9.75f), Theme.Texte);
+        libelle.Margin = new Padding(0, 3, 0, 0);
+        var gauche = Ui.Rangee(true, badge, libelle);
+        gauche.Margin = Padding.Empty;
+        _droite.Anchor = AnchorStyles.Right;
+        _droite.Margin = Padding.Empty;
+        var entete = Ui.Colonnes((gauche, SizeType.Percent, 100), (_droite, SizeType.AutoSize, 0));
+        entete.AutoSize = true;
+        entete.Margin = new Padding(0, 0, 0, 14);
+        Ajouter(entete);
+
+        _contenu.SizeChanged += (_, _) => Parent?.PerformLayout(this, nameof(Height));
+    }
+
+    /// <summary>Texte discret à droite du titre (« non renseigné », « Niveau 2 »).</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public string TexteDroite
+    {
+        get => _droite.Text;
+        set => _droite.Text = value;
+    }
+
+    /// <summary>Couleur du texte de droite.</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Color CouleurDroite
+    {
+        get => _droite.ForeColor;
+        set => _droite.ForeColor = value;
+    }
+
+    /// <summary>Ajoute une ligne pleine largeur.</summary>
+    public T Ajouter<T>(T controle)
+        where T : Control
+    {
+        FenetreFormulaire.AjouterLigne(_contenu, controle, SizeType.AutoSize, 0);
+        return controle;
+    }
+
+    /// <summary>Champ pleine largeur, libellé au-dessus (« Nom * » : étoile).</summary>
+    public T Champ<T>(string libelle, T controle, int hauteur = Theme.HauteurChamp)
+        where T : Control
+    {
+        FenetreFormulaire.AjouterChamp(_contenu, libelle, controle, hauteur);
+        return controle;
+    }
+
+    /// <summary>Deux champs côte à côte (voir <see cref="FenetreFormulaire.DeuxChamps"/>).</summary>
+    public TableLayoutPanel DeuxChamps(string libelle1, Control champ1, string libelle2, Control champ2, int hauteur = Theme.HauteurChamp) =>
+        Ajouter(FenetreFormulaire.RangeeDeuxChamps(libelle1, champ1, libelle2, champ2, hauteur, 7));
+
+    public override Size GetPreferredSize(Size proposedSize)
+    {
+        var largeur = MesureFormulaire.Largeur(this, proposedSize);
+        var hauteur = _contenu.GetPreferredSize(new Size(Math.Max(1, largeur - Padding.Horizontal), 0)).Height;
+        return new Size(largeur, hauteur + Padding.Vertical);
+    }
+}
+
+/// <summary>
+/// Puces à choix unique, rangées par groupes (« Plongeur » : Débutant N1 N2… ; « Encadrant » : E1 MF1…), titre du groupe à gauche,
+/// retour à la ligne si la place manque. Un clic sur la puce choisie la retire (aucun choix). Clavier : flèches, Espace.
+/// Un seul contrôle dessiné.
+/// </summary>
+public sealed class ChoixPuces : ControleDessine
+{
+    private const int LargeurTitre = 92;
+    private const int HauteurPuce = 40;
+    private const int EcartPuces = 6;
+    private const int EcartLignes = 10;
+
+    private readonly List<(string Titre, Color Couleur, List<(string Valeur, string Texte)> Puces)> _groupes = [];
+    private readonly List<(RectangleF Zone, string Valeur, string Texte, Color Couleur)> _zones = [];
+    private readonly List<(RectangleF Zone, string Titre)> _titres = [];
+    private readonly ToolTip _bulle = new();
+    private string? _valeur;
+    private int _survol = -1;
+    private int _focus;
+    private int _largeurPlacee = -1;
+    private int _hauteur;
+
+    public ChoixPuces()
+    {
+        SetStyle(ControlStyles.Selectable, true);
+        TabStop = true;
+        Cursor = Cursors.Hand;
+        Height = HauteurPuce;
+        AutoSize = true;
+    }
+
+    /// <summary>Valeur choisie, ou null.</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public string? Valeur
+    {
+        get => _valeur;
+        set
+        {
+            if (_valeur == value)
+            {
+                return;
+            }
+
+            _valeur = value;
+            Invalidate();
+            ValeurChangee?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>La puce choisie a changé (clic, clavier ou code).</summary>
+    public event EventHandler? ValeurChangee;
+
+    /// <summary>Ajoute un groupe de puces (valeur, texte affiché).</summary>
+    public void Groupe(string titre, IEnumerable<(string Valeur, string Texte)> puces, Color? couleur = null)
+    {
+        var liste = puces.ToList();
+        if (liste.Count == 0)
+        {
+            return;
+        }
+
+        _groupes.Add((titre, couleur ?? Theme.Accent, liste));
+        _largeurPlacee = -1;
+        PerformLayout();
+    }
+
+    public override Size GetPreferredSize(Size proposedSize)
+    {
+        var largeur = MesureFormulaire.Largeur(this, proposedSize);
+        Placer(largeur);
+        return new Size(largeur, _hauteur);
+    }
+
+    protected override void OnSizeChanged(EventArgs e)
+    {
+        base.OnSizeChanged(e);
+        Placer(Width);
+        if (_hauteur > 0 && Height != _hauteur)
+        {
+            Parent?.PerformLayout(this, nameof(Height));
+        }
+    }
+
+    private void Placer(int largeur)
+    {
+        if (largeur == _largeurPlacee || largeur <= 0)
+        {
+            return;
+        }
+
+        _largeurPlacee = largeur;
+        _zones.Clear();
+        _titres.Clear();
+        var police = Theme.PoliceGrasse(10f);
+        var gauche = E(LargeurTitre);
+        var hauteur = E(HauteurPuce);
+        var y = 0f;
+        foreach (var (titre, couleur, puces) in _groupes)
+        {
+            _titres.Add((new RectangleF(0, y, gauche, hauteur), titre));
+            var x = gauche;
+            foreach (var (valeur, texte) in puces)
+            {
+                var l = Math.Max(E(52), TextRenderer.MeasureText(texte, police).Width + E(22));
+                if (x > gauche && x + l > largeur)
+                {
+                    x = gauche;
+                    y += hauteur + E(EcartPuces);
+                }
+
+                _zones.Add((new RectangleF(x, y, l, hauteur), valeur, texte, couleur));
+                x += l + E(EcartPuces);
+            }
+
+            y += hauteur + E(EcartLignes);
+        }
+
+        _hauteur = (int)Math.Ceiling(Math.Max(hauteur, y - E(EcartLignes))) + 2;
+        Invalidate();
+    }
+
+    protected override void Peindre(Graphics g)
+    {
+        Placer(Width);
+        var police = Theme.PoliceGrasse(10f);
+        foreach (var (zone, titre) in _titres)
+        {
+            Dessin.Texte(g, titre, Theme.Police(9.75f), Rectangle.Round(zone), Theme.TexteSecondaire);
+        }
+
+        for (var i = 0; i < _zones.Count; i++)
+        {
+            var (zone, valeur, texte, couleur) = _zones[i];
+            var choisie = valeur == _valeur;
+            var r = new RectangleF(zone.X + 0.5f, zone.Y + 0.5f, zone.Width - 1, zone.Height - 1);
+            using var chemin = Dessin.Arrondi(r, E(10));
+            using (var fond = new SolidBrush(choisie ? couleur : ChampSaisie.FondChamp))
+            {
+                g.FillPath(fond, chemin);
+            }
+
+            var focus = Focused && i == _focus;
+            var bordure = choisie ? couleur : focus || i == _survol ? Theme.AccentClair : Theme.BordureForte;
+            using (var stylo = new Pen(bordure, focus ? E(2) : E(1)))
+            {
+                g.DrawPath(stylo, chemin);
+            }
+
+            Dessin.Texte(g, texte, police, Rectangle.Round(zone), choisie ? Theme.TexteSurAccent : Theme.Texte, centre: true);
+        }
+    }
+
+    private int Sous(Point p) => _zones.FindIndex(z => z.Zone.Contains(p));
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        var i = Sous(e.Location);
+        Cursor = i >= 0 ? Cursors.Hand : Cursors.Default;
+        if (i != _survol)
+        {
+            _survol = i;
+            Invalidate();
+            var texte = i >= 0 && _zones[i].Texte != _zones[i].Valeur ? _zones[i].Valeur : null;
+            _bulle.SetToolTip(this, texte); // « N2 » : la bulle donne le niveau entier.
+        }
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        base.OnMouseLeave(e);
+        _survol = -1;
+        Invalidate();
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e);
+        Focus();
+        if (Sous(e.Location) is var i and >= 0)
+        {
+            _focus = i;
+            Basculer(i);
+        }
+    }
+
+    private void Basculer(int i) => Valeur = _zones[i].Valeur == _valeur ? null : _zones[i].Valeur;
+
+    protected override bool IsInputKey(Keys keyData) =>
+        keyData is Keys.Left or Keys.Right or Keys.Up or Keys.Down || base.IsInputKey(keyData);
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (_zones.Count == 0)
+        {
+            return;
+        }
+
+        switch (e.KeyCode)
+        {
+            case Keys.Left or Keys.Up:
+                _focus = Math.Max(0, _focus - 1);
+                break;
+            case Keys.Right or Keys.Down:
+                _focus = Math.Min(_zones.Count - 1, _focus + 1);
+                break;
+            case Keys.Space:
+                Basculer(_focus);
+                break;
+            default:
+                return;
+        }
+
+        e.Handled = true;
+        Invalidate();
+    }
+
+    protected override void OnGotFocus(EventArgs e)
+    {
+        base.OnGotFocus(e);
+        var choisie = _zones.FindIndex(z => z.Valeur == _valeur);
+        _focus = choisie >= 0 ? choisie : Math.Min(_focus, Math.Max(0, _zones.Count - 1));
+        Invalidate();
+    }
+
+    protected override void OnLostFocus(EventArgs e)
+    {
+        base.OnLostFocus(e);
+        Invalidate();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _bulle.Dispose();
+        }
+
+        base.Dispose(disposing);
+    }
+}
+
+/// <summary>Carré arrondi teinté avec un pictogramme ou un texte court (« O₂ »).</summary>
+public sealed class TuileIcone : ControleDessine
+{
+    private readonly string? _icone;
+    private readonly string? _texte;
+    private readonly Color _couleur;
+
+    public TuileIcone(string? icone, string? texte, Color couleur, int taille = 42)
+    {
+        _icone = icone;
+        _texte = texte;
+        _couleur = couleur;
+        Size = new Size(taille, taille);
+        TabStop = false; // Décoratif : un Control prend le focus par défaut (Tab s'y arrêtait).
+    }
+
+    protected override void Peindre(Graphics g)
+    {
+        var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
+        using (var chemin = Dessin.Arrondi(r, E(10)))
+        {
+            using var fond = new SolidBrush(Theme.Teinte(_couleur, 0.16f));
+            g.FillPath(fond, chemin);
+            using var stylo = new Pen(Theme.Teinte(_couleur, 0.45f), E(1));
+            g.DrawPath(stylo, chemin);
+        }
+
+        if (_icone is not null)
+        {
+            Icones.Dessiner(g, _icone, RectangleF.Inflate(r, -Width * 0.27f, -Height * 0.27f), _couleur);
+        }
+        else if (_texte is not null)
+        {
+            Dessin.Texte(g, _texte, Theme.PoliceGrasse(10.5f), new Rectangle(0, 0, Width, Height), _couleur, centre: true);
+        }
+    }
+}
+
+/// <summary>
+/// Carte d'une autorisation : tuile colorée, titre, description, interrupteur à droite ; contenu facultatif dessous
+/// (date du CACI quand il est contrôlé). Un clic sur la carte bascule l'interrupteur.
+/// </summary>
+public sealed class CarteAutorisation : Carte
+{
+    private readonly TableLayoutPanel _table;
+    private readonly Label _description = Ui.Libelle("", Theme.Police(9f), Theme.TexteSecondaire);
+    private Control? _dessous;
+    private bool _dessousALEchelle;
+    private readonly Color _couleur;
+
+    public CarteAutorisation(TuileIcone tuile, string titre, string description, Interrupteur interrupteur, Color couleur)
+    {
+        Padding = new Padding(16, 12, 16, 12);
+        Margin = new Padding(0, 0, 0, 12);
+        Rayon = 14;
+        BackColor = ChampSaisie.FondChamp;
+        CouleurBordure = Theme.Bordure;
+        Interrupteur = interrupteur;
+        _couleur = couleur;
+        interrupteur.CouleurActive = couleur;
+        interrupteur.CheckedChanged += (_, _) => AppliquerEtat();
+        AutoSize = true;
+        AutoSizeMode = AutoSizeMode.GrowAndShrink;
+
+        var libelle = Ui.Libelle(titre, Theme.PoliceTitre(10.5f));
+        libelle.Margin = new Padding(0, 0, 0, 2);
+        _description.Text = description;
+        _description.Margin = Padding.Empty;
+        var textes = Ui.Pile(libelle, _description);
+        textes.Anchor = AnchorStyles.Left;
+        textes.Margin = new Padding(14, 0, 12, 0);
+        tuile.Anchor = AnchorStyles.Left;
+        interrupteur.Anchor = AnchorStyles.Right;
+        interrupteur.Margin = Padding.Empty;
+
+        _table = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 3,
+            BackColor = Color.Transparent,
+            Margin = Padding.Empty,
+        };
+        _table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        _table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        _table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        _table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        _table.Controls.Add(tuile, 0, 0);
+        _table.Controls.Add(textes, 1, 0);
+        _table.Controls.Add(interrupteur, 2, 0);
+        Controls.Add(_table);
+
+        foreach (var c in new Control[] { this, _table, textes, libelle, _description, tuile })
+        {
+            c.Click += (_, _) => interrupteur.Checked = !interrupteur.Checked;
+            c.Cursor = Cursors.Hand;
+        }
+
+        _table.SizeChanged += (_, _) => Parent?.PerformLayout(this, nameof(Height));
+        AppliquerEtat();
+    }
+
+    // Maquette : carte activée teintée de sa couleur (nitrox citron, CACI vert).
+    private void AppliquerEtat()
+    {
+        BackColor = Interrupteur.Checked ? Theme.Sur(ChampSaisie.FondChamp, _couleur, 0.07f) : ChampSaisie.FondChamp;
+        CouleurBordure = Interrupteur.Checked ? Theme.Sur(ChampSaisie.FondChamp, _couleur, 0.5f) : Theme.Bordure;
+        Invalidate(true);
+    }
+
+    /// <summary>Interrupteur de la carte.</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Interrupteur Interrupteur { get; }
+
+    /// <summary>Description sous le titre (peut changer avec l'interrupteur).</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public string Description
+    {
+        get => _description.Text;
+        set => _description.Text = value;
+    }
+
+    /// <summary>Contenu sous la carte, toute largeur, après un trait pointillé (masquable : <see cref="DessousVisible"/>).</summary>
+    public T Dessous<T>(T controle)
+        where T : Control
+    {
+        _table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        controle.Margin = new Padding(0, 18, 0, 0);
+        controle.Dock = DockStyle.Fill;
+        _dessous = controle;
+        DessousVisible = true;
+        return controle;
+    }
+
+    /// <summary>
+    /// Montre ou cache le contenu de <see cref="Dessous"/>. Il est retiré de la carte plutôt que masqué : masqué, il comptait
+    /// encore dans la hauteur de la section (taille préférée gardée en cache).
+    /// </summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool DessousVisible
+    {
+        get => _dessous is not null && _table.Contains(_dessous);
+        set
+        {
+            if (_dessous is null || value == DessousVisible)
+            {
+                return;
+            }
+
+            if (value)
+            {
+                // Retiré avant l'affichage, il a manqué la mise à l'échelle de la fenêtre : une seule fois, ici.
+                if (_table.IsHandleCreated && !_dessousALEchelle)
+                {
+                    Dessin.MettreALEchelle(_dessous, this);
+                    _dessousALEchelle = true;
+                }
+
+                _table.Controls.Add(_dessous, 0, 1);
+                _table.SetColumnSpan(_dessous, 3);
+            }
+            else
+            {
+                _dessousALEchelle |= _table.IsHandleCreated; // Déjà affiché : déjà à l'échelle.
+                _table.Controls.Remove(_dessous);
+            }
+        }
+    }
+
+    public override Size GetPreferredSize(Size proposedSize)
+    {
+        var largeur = MesureFormulaire.Largeur(this, proposedSize);
+        var hauteur = _table.GetPreferredSize(new Size(Math.Max(1, largeur - Padding.Horizontal), 0)).Height;
+        return new Size(largeur, hauteur + Padding.Vertical);
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        if (_dessous is null || !DessousVisible)
+        {
+            return;
+        }
+
+        // Trait pointillé entre la carte et son contenu (maquette : bas de la carte CACI).
+        var y = _table.Top + _dessous.Top - (int)Dessin.Echelle(this, 9);
+        using var stylo = new Pen(Theme.Sur(BackColor, _couleur, 0.35f), Dessin.Echelle(this, 1)) { DashStyle = DashStyle.Dash };
+        e.Graphics.DrawLine(stylo, 1, y, Width - 2, y);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing && _dessous is not null && !DessousVisible)
+        {
+            _dessous.Dispose(); // Retiré de la carte : personne d'autre ne le libère.
+        }
+
+        base.Dispose(disposing);
+    }
+}
+
+/// <summary>Largeur à laquelle mesurer un contrôle de ces formulaires.</summary>
+internal static class MesureFormulaire
+{
+    /// <summary>
+    /// La largeur proposée ; sinon (0 ou illimitée) celle que lui laisse son parent. Repartir de <c>Width</c> donnait une
+    /// largeur provisoire étroite : textes à la ligne, section bien trop haute.
+    /// </summary>
+    public static int Largeur(Control controle, Size proposee)
+    {
+        // Un TableLayoutPanel sonde ses lignes avec une largeur de 1 : à cette largeur les puces se mettent une par ligne
+        // et la mesure gonflait toute la fenêtre (le surplus allait à la dernière section).
+        if (proposee.Width is > 1 and < int.MaxValue)
+        {
+            return proposee.Width;
+        }
+
+        var parent = controle.Parent is { } p ? p.DisplayRectangle.Width - p.Padding.Horizontal - controle.Margin.Horizontal : 0;
+        return Math.Max(controle.Width, parent);
+    }
+}

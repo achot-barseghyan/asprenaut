@@ -44,6 +44,79 @@ public sealed class ServiceAdherents(
         return abrege.Success ? niveaux.FirstOrDefault(n => Cle(n) == $"niveau{abrege.Groups[2].Value}") : null;
     }
 
+    /// <summary>
+    /// Niveau d'encadrant (formulaire de l'adhérent : rangée « Encadrant ») : E1 à E4, Initiateur, MF1, MF2, moniteur, BEES, DEJEPS…
+    /// Les autres niveaux (Débutant, Niveau 1, PA20, PE40…) sont des niveaux de plongeur.
+    /// </summary>
+    public static bool EstEncadrant(string niveau)
+    {
+        var cle = new string(Simplifier(niveau).Where(char.IsLetterOrDigit).ToArray());
+        return System.Text.RegularExpressions.Regex.IsMatch(cle, "^(e[1-5]|mf[12]|initiateur|moniteur|encadrant|bees|dejeps|desjeps|instructeur)");
+    }
+
+    /// <summary>Texte de la puce d'un niveau : « Niveau 2 » → « N2 » ; les autres restent entiers (« PA20 », « Débutant »).</summary>
+    public static string NiveauCourt(string niveau)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(niveau.Trim(), @"^niveau\s*(\d)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return m.Success ? $"N{m.Groups[1].Value}" : niveau.Trim();
+    }
+
+    /// <summary>Majuscule au début de chaque mot (« jean-pierre le goff » → « Jean-Pierre Le Goff ») ; le reste est gardé tel quel.</summary>
+    public static string MajusculesMots(string texte)
+    {
+        var lettres = texte.Trim().ToCharArray();
+        for (var i = 0; i < lettres.Length; i++)
+        {
+            if (char.IsLetter(lettres[i]) && (i == 0 || lettres[i - 1] is ' ' or '-' or '\''))
+            {
+                lettres[i] = char.ToUpper(lettres[i], Libelles.Culture);
+            }
+        }
+
+        return new string(lettres);
+    }
+
+    /// <summary>
+    /// Téléphone tapé à la française mis en forme par paires (« 0612345678 » → « 06 12 34 56 78 ») ; un numéro avec
+    /// autre chose que des chiffres, espaces, points ou tirets (« +33… ») est gardé tel quel.
+    /// </summary>
+    public static string FormaterTelephone(string saisie)
+    {
+        if (saisie.Any(c => !char.IsDigit(c) && c is not (' ' or '.' or '-')))
+        {
+            return saisie;
+        }
+
+        var chiffres = new string(saisie.Where(char.IsDigit).Take(10).ToArray());
+        return string.Join(' ', chiffres.Chunk(2).Select(p => new string(p)));
+    }
+
+    /// <summary>Initiales de l'avatar (« Camille », « Martin » → « CM ») ; vide si rien n'est tapé.</summary>
+    public static string Initiales(string prenom, string nom) =>
+        string.Concat(new[] { prenom, nom }.Select(t => t.Trim()).Where(t => t.Length > 0).Select(t => char.ToUpper(t[0], Libelles.Culture)));
+
+    /// <summary>
+    /// État du CACI pendant la saisie (formulaire de l'adhérent) : null si le CACI n'est pas contrôlé. Mêmes règles que
+    /// <see cref="Adherent.CaciExpire"/> (le dernier jour reste valable) et <see cref="Adherent.CaciBientot"/> (<see cref="JoursAvantFinCaci"/>).
+    /// </summary>
+    public static EtatCaci? EtatCaciSaisi(bool controle, DateOnly? fin, DateOnly aujourdhui)
+    {
+        if (!controle)
+        {
+            return null;
+        }
+
+        if (fin is not { } date)
+        {
+            return new EtatCaci(NiveauCaci.ASaisir, "Date à saisir", null);
+        }
+
+        var jours = date.DayNumber - aujourdhui.DayNumber;
+        return jours < 0 ? new EtatCaci(NiveauCaci.Expire, $"Expiré depuis le {date.ToString("dd/MM/yyyy", Libelles.Culture)}", "CACI expiré")
+            : jours <= JoursAvantFinCaci ? new EtatCaci(NiveauCaci.Bientot, jours == 0 ? "Expire ce soir" : $"Expire dans {jours} j", "CACI bientôt")
+            : new EtatCaci(NiveauCaci.Valide, "Valide", "CACI valide");
+    }
+
     /// <summary>Dernières sorties nominatives montrées sur la fiche.</summary>
     public const int NombreSortiesFiche = 5;
 

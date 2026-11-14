@@ -598,33 +598,33 @@ public sealed class EcranMoniteurs : EcranBase
             return;
         }
 
-        var prenom = new ChampSaisie { Valeur = a?.Prenom ?? "" };
-        var nom = new ChampSaisie { Valeur = a?.Nom ?? "" };
-        // Niveau : la liste du club (Paramètres › Configuration du club) ; un ancien niveau hors liste reste proposé.
-        var niveau = new ListeDeroulante { AccessibleName = "Niveau" };
-        niveau.Items.Add(new Choix<string>("", "Non renseigné"));
-        foreach (var n in _adherents.Niveaux)
+        var prenom = new ChampSaisie { Valeur = a?.Prenom ?? "", TexteIndicatif = "Ex. Camille" };
+        var nom = new ChampSaisie { Valeur = a?.Nom ?? "", TexteIndicatif = "Ex. Martin" };
+        // Niveau : puces de la liste du club (Paramètres › Configuration du club), Plongeur puis Encadrant ;
+        // un ancien niveau hors liste reste proposé.
+        var niveaux = _adherents.Niveaux.ToList();
+        if (a?.Niveau is { Length: > 0 } actuel && !niveaux.Contains(actuel))
         {
-            niveau.Items.Add(new Choix<string>(n, n));
+            niveaux.Add(actuel);
         }
 
-        if (a?.Niveau is { Length: > 0 } actuel && !_adherents.Niveaux.Contains(actuel))
-        {
-            niveau.Items.Add(new Choix<string>(actuel, $"{actuel} (hors liste)"));
-        }
-
-        niveau.SelectedItem = niveau.Items.OfType<Choix<string>>().FirstOrDefault(c => c.Valeur == (a?.Niveau ?? "")) ?? niveau.Items[0];
-        var licence = new ChampSaisie { Valeur = a?.Licence ?? "", TexteIndicatif = "A-12-345678" };
-        var telephone = new ChampSaisie { Valeur = a?.Telephone ?? "", TexteIndicatif = "06 12 34 56 78" };
+        string Puce(string n) => _adherents.Niveaux.Contains(n) ? ServiceAdherents.NiveauCourt(n) : $"{n} (hors liste)";
+        var niveau = new ChoixPuces { AccessibleName = "Niveau de plongée", Margin = new Padding(0, 0, 0, 10) };
+        niveau.Groupe("Plongeur", niveaux.Where(n => !ServiceAdherents.EstEncadrant(n)).Select(n => (n, Puce(n))));
+        niveau.Groupe("Encadrant", niveaux.Where(ServiceAdherents.EstEncadrant).Select(n => (n, Puce(n))), Theme.Encadrant);
+        niveau.Valeur = a?.Niveau is { Length: > 0 } n0 ? n0 : null;
+        var licence = new ChampSaisie { Valeur = a?.Licence ?? "", TexteIndicatif = "A-12-345678", Icone = Icones.CarteLicence };
+        var telephone = new ChampSaisie { Valeur = a?.Telephone ?? "", TexteIndicatif = "06 12 34 56 78", Icone = Icones.Telephone };
         var actif = new Interrupteur("Actif") { Checked = a?.Actif ?? true };
         var nitrox = new Interrupteur("Certifié nitrox") { Checked = a?.Nitrox ?? false };
-        var caci = new Interrupteur("CACI") { Checked = a?.Caci ?? false };
+        var caci = new Interrupteur("Contrôler le CACI") { Checked = a?.Caci ?? false };
         var caciExpiration = new ChampDate { Date = a?.CaciExpiration, AccessibleName = "CACI valable jusqu'au" };
         prenom.Champ.AccessibleName = "Prénom";
         nom.Champ.AccessibleName = "Nom";
-       licence.Champ.AccessibleName = "Licence";
+        licence.Champ.AccessibleName = "Licence";
         licence.Champ.CharacterCasing = CharacterCasing.Upper;
         telephone.Champ.AccessibleName = "Téléphone";
+        licence.Champ.Font = telephone.Champ.Font = Theme.PoliceCode(11f);
         foreach (var (champ, max) in new[] { (prenom, Adherent.LongueurMaxNom), (nom, Adherent.LongueurMaxNom),
             (licence, Adherent.LongueurMaxLicence), (telephone, Adherent.LongueurMaxTelephone) })
         {
@@ -632,49 +632,169 @@ public sealed class EcranMoniteurs : EcranBase
         }
 
         ResultatOperation? enregistre = null;
-        using var fenetre = new FenetreFormulaire(titre, a is null ? "Ajouter" : "Enregistrer", async () => enregistre = await _adherents.EnregistrerAsync(new Adherent
+        using var fenetre = new FenetreFormulaire(titre, a is null ? "Ajouter" : "Enregistrer", async () =>
         {
-            Id = a?.Id ?? 0,
-            Prenom = prenom.Valeur,
-            Nom = nom.Valeur,
-            Niveau = (niveau.SelectedItem as Choix<string>)?.Valeur,
-            Licence = licence.Valeur,
-            Telephone = telephone.Valeur,
-            Actif = actif.Checked,
-            Nitrox = nitrox.Checked,
-            Caci = caci.Checked,
-            CaciExpiration = caciExpiration.Date,
-        }));
-        fenetre.DeuxChamps("Prénom", prenom, "Nom", nom);
-        fenetre.DeuxChamps("Niveau", niveau, "Licence", licence);
-        fenetre.Champ("Téléphone", telephone);
-        fenetre.Ajouter(new LigneReglage("Certifié nitrox", "Peut prendre un bloc ou un détendeur nitrox", nitrox, filet: false));
+            // Champs obligatoires vides : bordure rouge (le service refuse et donne le message).
+            prenom.Erreur = prenom.Valeur.Trim().Length == 0;
+            nom.Erreur = nom.Valeur.Trim().Length == 0;
+            enregistre = await _adherents.EnregistrerAsync(new Adherent
+            {
+                Id = a?.Id ?? 0,
+                Prenom = prenom.Valeur,
+                Nom = nom.Valeur,
+                Niveau = niveau.Valeur,
+                Licence = licence.Valeur,
+                Telephone = telephone.Valeur,
+                Actif = actif.Checked,
+                Nitrox = nitrox.Checked,
+                Caci = caci.Checked,
+                CaciExpiration = caciExpiration.Date,
+            });
+            if (!enregistre.Reussi && (prenom.Erreur || nom.Erreur))
+            {
+                (prenom.Erreur ? prenom : nom).Champ.Focus();
+            }
 
-        // CACI : case cochée, la date d'expiration apparaît ; une fois passée, il ne sort plus de matériel.
-        fenetre.Ajouter(new LigneReglage("CACI", "Date passée : ne peut plus sortir de matériel. Décoché : pas de contrôle", caci));
-        // À droite de la date : son effet, dès qu'elle est choisie (passée : bloqué ; bientôt : à renouveler).
-        var etatCaci = Ui.Libelle("", Theme.PoliceGrasse(9.75f), Theme.TexteSecondaire);
-        etatCaci.AutoSize = false;
-        etatCaci.TextAlign = ContentAlignment.MiddleLeft;
-        void AfficherEtatCaci()
+            return enregistre;
+        }, largeur: 660, marge: 24);
+
+        // Maquette « Ajouter un adhérent » : en-tête qui montre la fiche pendant la saisie, trois sections numérotées.
+        fenetre.EnTete(a is null ? "Nouvelle fiche membre" : "Fiche membre", icone: Icones.Personne);
+        fenetre.Note("champs obligatoires");
+        fenetre.Separations = true;
+        if (a is null)
         {
-            var essai = new Adherent { Caci = true, CaciExpiration = caciExpiration.Date };
-            var aujourdhui = _adherents.AujourdHui;
-            (etatCaci.Text, etatCaci.ForeColor) = caciExpiration.Date is null ? ("", Theme.TexteSecondaire)
-                : essai.CaciExpire(aujourdhui) ? ("Date passée : il ne pourra pas sortir de matériel.", Theme.Erreur)
-                : essai.CaciBientot(aujourdhui, ServiceAdherents.JoursAvantFinCaci) ? ("À renouveler bientôt.", Theme.Avertissement)
-                : ("Valable.", Theme.Retour);
+            fenetre.Valider.Icone = Icones.Plus;
         }
 
-        var rangeeCaci = fenetre.DeuxChamps("CACI valable jusqu'au", caciExpiration, "", etatCaci);
-        rangeeCaci.Visible = caci.Checked;
-        caci.CheckedChanged += (_, _) => rangeeCaci.Visible = caci.Checked;
-        caciExpiration.DateChangee += (_, _) => AfficherEtatCaci();
-        AfficherEtatCaci();
+        var identite = new SectionFormulaire(1, "Identité");
+        identite.DeuxChamps("Prénom *", prenom, "Nom *", nom);
+        identite.DeuxChamps("Téléphone", telephone, "N° de licence", licence);
+        fenetre.Ajouter(identite);
+
+        var sectionNiveau = new SectionFormulaire(2, "Niveau de plongée");
+        sectionNiveau.Ajouter(niveau);
+        var aideNiveau = sectionNiveau.Ajouter(Ui.Libelle("Touche à nouveau un niveau pour le retirer.", Theme.Police(9f), Theme.TexteSecondaire));
+        aideNiveau.Margin = new Padding(0, 0, 0, 12);
+        fenetre.Ajouter(sectionNiveau);
+
+        var autorisations = new SectionFormulaire(3, "Autorisations matériel");
+        autorisations.Ajouter(new CarteAutorisation(new TuileIcone(null, "O₂", Theme.Nitrox), "Certifié nitrox",
+            "Peut prendre un bloc ou un détendeur nitrox.", nitrox, Theme.Nitrox));
+
+        // CACI : interrupteur activé, la date de fin apparaît sous la carte ; une fois passée, il ne sort plus de matériel.
+        var carteCaci = autorisations.Ajouter(new CarteAutorisation(new TuileIcone(Icones.CoeurPouls, null, Theme.Retour), "Contrôler le CACI", "", caci, Theme.Retour));
+        var etatCaci = new Pastille("", Theme.Surface, Theme.TexteSecondaire, point: Theme.TexteSecondaire, police: Theme.PoliceGrasse(9.75f), hauteur: Theme.HauteurChamp)
+        {
+            Anchor = AnchorStyles.Left,
+            Margin = new Padding(12, 0, 0, 0),
+            TabStop = false,
+        };
+        caciExpiration.Dock = DockStyle.Fill;
+        caciExpiration.Margin = Padding.Empty;
+        var unAn = new BoutonArrondi("Délivré aujourd'hui (+1 an)", StyleBouton.Lien) { Anchor = AnchorStyles.Left, Margin = new Padding(0, 8, 0, 0) };
+        unAn.Click += (_, _) => caciExpiration.Date = _adherents.AujourdHui.AddYears(1);
+        var aideCaci = Ui.Libelle("Date passée : l'adhérent ne peut plus sortir de matériel.", Theme.Police(9f), Theme.TexteSecondaire);
+        aideCaci.Margin = new Padding(0, 4, 0, 0);
+        var libelleCaci = FenetreFormulaire.LibelleChamp("Valide jusqu'au *");
+        var blocCaci = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, BackColor = Color.Transparent };
+        blocCaci.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 230));
+        blocCaci.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        blocCaci.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        blocCaci.RowStyles.Add(new RowStyle(SizeType.Absolute, Theme.HauteurChamp));
+        blocCaci.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        blocCaci.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        blocCaci.Controls.Add(libelleCaci, 0, 0);
+        blocCaci.Controls.Add(caciExpiration, 0, 1);
+        blocCaci.Controls.Add(etatCaci, 1, 1);
+        blocCaci.Controls.Add(unAn, 0, 2);
+        blocCaci.Controls.Add(aideCaci, 0, 3);
+        blocCaci.SetColumnSpan(libelleCaci, 2);
+        blocCaci.SetColumnSpan(unAn, 2);
+        blocCaci.SetColumnSpan(aideCaci, 2);
+        carteCaci.Dessous(blocCaci);
+
         if (a is not null)
         {
-            fenetre.Ajouter(new LigneReglage("Actif", "Désactivé : ne peut plus sortir de matériel ; son historique est gardé", actif));
+            var carteActif = autorisations.Ajouter(new CarteAutorisation(new TuileIcone(Icones.Personne, null, Theme.AccentClair), "Adhérent actif", "", actif, Theme.Accent));
+            void AfficherActif() => carteActif.Description = actif.Checked
+                ? "Peut sortir du matériel."
+                : "Désactivé : ne peut plus sortir de matériel ; son historique est gardé.";
+            actif.CheckedChanged += (_, _) => AfficherActif();
+            AfficherActif();
         }
+
+        fenetre.Ajouter(autorisations);
+
+        // Aperçu : initiales et nom dans l'en-tête, étiquettes niveau / NITROX / CACI.
+        void Afficher()
+        {
+            var aujourdhui = _adherents.AujourdHui;
+            var etat = ServiceAdherents.EtatCaciSaisi(caci.Checked, caciExpiration.Date, aujourdhui);
+            var couleurCaci = etat?.Niveau switch
+            {
+                NiveauCaci.Valide => Theme.Retour,
+                NiveauCaci.Bientot => Theme.Avertissement,
+                NiveauCaci.Expire => Theme.Erreur,
+                _ => Theme.TexteSecondaire,
+            };
+
+            sectionNiveau.TexteDroite = niveau.Valeur ?? "non renseigné";
+            sectionNiveau.CouleurDroite = niveau.Valeur is null ? Theme.TexteSecondaire : Theme.AccentClair;
+            carteCaci.DessousVisible = caci.Checked;
+            carteCaci.Description = caci.Checked
+                ? "Le matériel est bloqué si le certificat est périmé."
+                : "Désactivé : aucun contrôle du certificat médical.";
+            if (etat is not null)
+            {
+                etatCaci.Definir(etat.Texte, Theme.Teinte(couleurCaci, 0.12f), couleurCaci, couleurCaci);
+            }
+
+            var p = ServiceAdherents.MajusculesMots(prenom.Valeur);
+            var n = ServiceAdherents.MajusculesMots(nom.Valeur);
+            fenetre.Avatar.Initiales = ServiceAdherents.Initiales(p, n);
+            fenetre.Titre(p.Length + n.Length > 0 ? $"{p} {n}".Trim() : titre);
+            var etiquettes = new List<(string, Color)>();
+            if (niveau.Valeur is { } nv)
+            {
+                etiquettes.Add((nv, Theme.AccentClair));
+            }
+
+            if (nitrox.Checked)
+            {
+                etiquettes.Add(("Nitrox", Theme.Nitrox));
+            }
+
+            if (etat?.Etiquette is { } tag)
+            {
+                etiquettes.Add((tag, couleurCaci));
+            }
+
+            fenetre.Etiquettes(etiquettes);
+        }
+
+        foreach (var champ in new[] { prenom, nom })
+        {
+            champ.Champ.TextChanged += (_, _) => Afficher();
+            champ.Champ.Leave += (_, _) => champ.Valeur = ServiceAdherents.MajusculesMots(champ.Valeur); // « camille » → « Camille ».
+        }
+
+        // 0612345678 → 06 12 34 56 78 pendant la frappe (curseur gardé en fin de saisie).
+        telephone.Champ.TextChanged += (_, _) =>
+        {
+            var forme = ServiceAdherents.FormaterTelephone(telephone.Valeur);
+            if (forme != telephone.Valeur && telephone.Champ.SelectionStart == telephone.Valeur.Length)
+            {
+                telephone.Valeur = forme;
+                telephone.Champ.SelectionStart = forme.Length;
+            }
+        };
+        niveau.ValeurChangee += (_, _) => Afficher();
+        nitrox.CheckedChanged += (_, _) => Afficher();
+        caci.CheckedChanged += (_, _) => Afficher();
+        caciExpiration.DateChangee += (_, _) => Afficher();
+        Afficher();
+        fenetre.Shown += (_, _) => prenom.Champ.Focus();
 
         if (fenetre.ShowDialog(FindForm()) == DialogResult.OK && enregistre?.Id is { } id)
         {
@@ -683,11 +803,8 @@ public sealed class EcranMoniteurs : EcranBase
         }
     }
 
-    /// <summary>
-    /// « Importer la liste Excel » (.xlsx ou .csv) : les colonnes Nom et Prénom sont obligatoires, Niveau, Licence et
-    /// Téléphone facultatives. Un adhérent de même licence est mis à jour ; les autres sont ajoutés.
-    /// </summary>
-private async Task EnregistrerModeleAsync()
+    /// <summary>« Modèle Excel à remplir » : classeur vide aux colonnes de l'import, à donner au club puis à réimporter.</summary>
+    private async Task EnregistrerModeleAsync()
     {
         // Couleur de l'en-tête : celle du logo du club (fixe dans les deux thèmes).
         var c = Theme.LogoFonce;

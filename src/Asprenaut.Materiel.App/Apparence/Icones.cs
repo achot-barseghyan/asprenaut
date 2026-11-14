@@ -85,6 +85,11 @@ public static class Icones
     public const string Moins = "M5 12h14";
     public const string Telephone = "M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2";
     public const string Document = "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5";
+
+    // Formulaire de l'adhérent (maquette « Ajouter un adhérent »).
+    public const string Personne = "M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM4.5 21a7.5 7.5 0 0 1 15 0";
+    public const string CarteLicence = "M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM6 10h5M6 14h3M14 9h4v6h-4z";
+    public const string CoeurPouls = "M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7zM3.5 12H9l1-2 2 4.5 2-7 1.5 4.5h5";
     public const string Calendrier = "M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM3 10h18M8 3v4M16 3v4M12 13v5M9.5 15.5h5";
 
     /// <summary>Calendrier sans le « + » : bouton qui ouvre le choix d'une date (champ de date).</summary>

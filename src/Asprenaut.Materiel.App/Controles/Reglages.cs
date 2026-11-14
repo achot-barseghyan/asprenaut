@@ -33,6 +33,10 @@ public sealed class Interrupteur : CheckBox, IVerrouillable
         }
     }
 
+    /// <summary>Couleur de la piste activée (null : vert « Retour »).</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Color? CouleurActive { get; set; }
+
     public Interrupteur(string nomAccessible)
     {
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
@@ -62,7 +66,7 @@ public sealed class Interrupteur : CheckBox, IVerrouillable
         var h = Dessin.Echelle(this, 30);
         var piste = new RectangleF(Width - l - 1, (Height - h) / 2, l, h);
         using (var chemin = Dessin.Arrondi(piste, h / 2))
-        using (var fond = new SolidBrush(Checked ? Theme.Retour : Theme.Teinte(Theme.AccentClair, 0.18f)))
+        using (var fond = new SolidBrush(Checked ? CouleurActive ?? Theme.Retour : Theme.Teinte(Theme.AccentClair, 0.18f)))
         {
             g.FillPath(fond, chemin);
             if (Focused && ShowFocusCues)

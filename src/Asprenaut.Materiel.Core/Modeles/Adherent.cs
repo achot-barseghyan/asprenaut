@@ -118,3 +118,18 @@ public sealed record DetailAdherent(
 
 /// <summary>Adhérent récent d'une sortie (raccourcis du départ) : le plus récent d'abord.</summary>
 public sealed record AdherentRecent(long AdherentId, string Nom, int NbEquipements);
+
+/// <summary>État du CACI pendant la saisie (pastille du formulaire, étiquette de l'en-tête).</summary>
+public enum NiveauCaci
+{
+    ASaisir,
+    Valide,
+    Bientot,
+    Expire,
+}
+
+/// <summary>
+/// <see cref="Services.ServiceAdherents.EtatCaciSaisi"/> : niveau, texte de la pastille (« Expire dans 17 j »),
+/// étiquette de l'en-tête (« CACI bientôt »), null tant que la date manque.
+/// </summary>
+public sealed record EtatCaci(NiveauCaci Niveau, string Texte, string? Etiquette);

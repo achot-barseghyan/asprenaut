@@ -32,6 +32,13 @@ public sealed class ChampSaisie : Panel
         Controls.Add(Champ);
         Champ.Enter += (_, _) => Invalidate();
         Champ.Leave += (_, _) => Invalidate();
+        Champ.TextChanged += (_, _) =>
+        {
+            if (_erreur && Champ.Text.Trim().Length > 0)
+            {
+                Erreur = false;
+            }
+        };
         Click += (_, _) => Champ.Focus();
     }
 
@@ -61,6 +68,20 @@ public sealed class ChampSaisie : Panel
     {
         get => Champ.PlaceholderText;
         set => Champ.PlaceholderText = value;
+    }
+
+    private bool _erreur;
+
+    /// <summary>Champ à corriger (obligatoire et vide) : bordure rouge, retirée dès qu'on tape.</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool Erreur
+    {
+        get => _erreur;
+        set
+        {
+            _erreur = value;
+            Invalidate();
+        }
     }
 
     /// <summary>Pictogramme à gauche du texte (champ mono-ligne), ou null.</summary>
@@ -112,7 +133,7 @@ public sealed class ChampSaisie : Panel
 
     protected override void OnPaintBackground(PaintEventArgs e)
     {
-        Dessin.PeindreFondArrondi(this, e.Graphics, BackColor, Champ.Focused ? Theme.Accent : Theme.BordureForte, Theme.RayonBouton, 1.2f);
+        Dessin.PeindreFondArrondi(this, e.Graphics, BackColor, Erreur ? Theme.Erreur : Champ.Focused ? Theme.Accent : Theme.BordureForte, Theme.RayonBouton, Erreur ? 1.8f : 1.2f);
         if (Icone is { } icone && !Champ.Multiline)
         {
             var t = Dessin.Echelle(this, 20);

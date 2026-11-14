@@ -77,7 +77,13 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   `ScanInput` + `BandeauMessage` (scan réussi : `Ressources/Sons/ScanReussi.wav`, ressource `Sons.ScanReussi.wav`, PCM 16 bits mono
   car `SoundPlayer` ne lit pas tous les WAV ; avertissement / erreur : sons de Windows ; réglage `SonsActifs`), `BandeauAccueil`, `Logo`, `CarteScanner`, `Tableaux` (pastilles et pictogrammes dans les DataGridView),
   `FiltreCategories` (puces « Tout 12 / Blocs 3 », `CouleurPoint`, `Unite` et `LibelleTout` optionnels ; aussi les filtres de Membres), `FenetreFormulaire` (fenêtre modale sombre ;
-  la validation passe par un service et ne ferme qu'en cas de succès), `Interrupteur`, `SelecteurNombre`, `Bascule` (options côte à côte, nombres), `ChoixResponsable`, `CarteSection`, `LigneReglage`,
+  la validation passe par un service et ne ferme qu'en cas de succès ; largeur et marge réglables ; libellé « Nom * » → étoile ;
+  `EnTete(sousTitre, badge, icone)`, `Avatar.Initiales`, `Titre`, `Etiquettes`, `Note`, `Separations` : filet d'en-tête et pied sombre),
+  `SectionsFormulaire.cs` (maquette « Ajouter un adhérent ») : `SectionFormulaire` (« 1 IDENTITÉ », texte à droite), `ChoixPuces`
+  (puces à choix unique par groupes, un seul contrôle dessiné, re-clic = aucun choix, flèches + Espace), `CarteAutorisation` (tuile, titre,
+  description, `Interrupteur` coloré, carte teintée si active, `Dessous` retiré / remis plutôt que masqué), `TuileIcone`, `AvatarEntete`,
+  `LibelleObligatoire`. Ces contrôles sont `AutoSize` + `GrowAndShrink` et se mesurent à la largeur du parent quand la largeur proposée
+  vaut 0 ou 1 (un TableLayoutPanel sonde avec 1 : les puces une par ligne gonflaient la fenêtre) ; les décoratifs ont `TabStop = false`, `Interrupteur`, `SelecteurNombre`, `Bascule` (options côte à côte, nombres), `ChoixResponsable`, `CarteSection`, `LigneReglage`,
   `ListeChoix` (liste de choix dessinée, badge + titre + détail, clic ou flèches), `JournalHistorique` (journal par jour dessiné dans un seul contrôle défilant : seule la partie visible est peinte, le clic sur un
   code est retrouvé par calcul — à préférer à un contrôle par ligne dès qu'une liste peut compter des milliers d'éléments).
   `EcranBilan` : cartes entièrement dessinées (classes imbriquées), placées par `PageBilan` selon la largeur (4/2 chiffres,
@@ -362,7 +368,9 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     pour être réactivé. Sortie non nominative : pas de contrôle nitrox.
     Niveaux (ServiceAdherents.Niveaux, Reglages.NiveauxAdherents, liste d'origine Reglages.NiveauxParDefaut FFESSM, réglée dans
     Paramètres › Configuration du club › Niveaux des adhérents, ServiceReglages.ChangerNiveauxAdherents : 1 à 30, 30 car., sans doublon) :
-    liste déroulante du formulaire ; EnregistrerAsync n'accepte qu'un niveau de la liste (NiveauReconnu : majuscules, accents,
+    puces du formulaire (maquette « Ajouter un adhérent » : rangées Plongeur / Encadrant d'après `ServiceAdherents.EstEncadrant`,
+    violet `Theme.Encadrant`, « Niveau 2 » affiché « N2 » par `NiveauCourt` ; en-tête qui montre initiales, nom et étiquettes pendant la
+    saisie ; `MajusculesMots`, `FormaterTelephone`, `Initiales`, `EtatCaciSaisi` → pastille « Expire dans 17 j », « Délivré aujourd'hui (+1 an) ») ; EnregistrerAsync n'accepte qu'un niveau de la liste (NiveauReconnu : majuscules, accents,
     espaces et ponctuation ignorés, « N2 » / « niv 2 » → « Niveau 2 ») ou l'ancien niveau inchangé (« hors liste ») ; l'import ramène
     le niveau à la liste, un inconnu est laissé vide (l'ancien gardé) et compté dans le message.
 
