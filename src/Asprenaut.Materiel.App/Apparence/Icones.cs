@@ -111,6 +111,13 @@ public static class Icones
     public const string Ordinateur = "M7 4h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM9 9h6M9 13h3";
     public const string Autre = "M5 12h.01M12 12h.01M19 12h.01";
 
+    // Catégories créées par le club (maquette « Ajouter un équipement »).
+    public const string Lampe = "M9 3h6l-1 7h-4zM10 10v11h4V10";
+    public const string Plomb = "M6 8h12l2 12H4zM9 8V5h6v3";
+    public const string Sac = "M5 8h14l-1 12H6zM9 8V5a3 3 0 0 1 6 0v3";
+    public const string Tuba = "M8 3v12a4 4 0 0 0 8 0V9";
+    public const string Paquet = "M4 8l8-4 8 4v8l-8 4-8-4zM4 8l8 4 8-4M12 12v8";
+
     // --- Types de sortie ---
     public const string Piscine = "M8 3v13M16 3v13M8 7h8M8 11h8M3 20c2 0 2-1.5 4.5-1.5S10 20 12 20s2-1.5 4.5-1.5S19 20 21 20";
     public const string Fosse = "M12 3v14M7 12l5 5 5-5M4 21h16";
@@ -185,17 +192,33 @@ public static class Icones
         _ => "Autre (points)",
     };
 
-    /// <summary>Pictogramme d'une catégorie d'après son nom (catégories de la migration 001).</summary>
-    public static string PourCategorie(string? nom) => (nom ?? "").Trim().ToUpperInvariant() switch
+    // Pictogramme choisi pour chaque catégorie (nom → clé), retenu quand les catégories sont lues.
+    private static Dictionary<string, string> _categories = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Retient le pictogramme de chaque catégorie (démarrage, inventaire, choix de la catégorie).</summary>
+    public static void RetenirCategories(IEnumerable<Core.Modeles.Categorie> categories) =>
+        _categories = categories.GroupBy(c => c.Nom.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().IconeEffective, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Pictogramme d'une catégorie : celui choisi à sa création, sinon d'après son nom.</summary>
+    public static string PourCategorie(string? nom) =>
+        DeCategorie(nom is not null && _categories.TryGetValue(nom.Trim(), out var cle) ? cle : Core.Modeles.Categorie.IconeParDefaut(nom));
+
+    /// <summary>Tracé d'une clé de pictogramme de catégorie (<see cref="Core.Modeles.Categorie.Icones"/>).</summary>
+    public static string DeCategorie(string cle) => cle switch
     {
-        var n when n.StartsWith("BLOC", StringComparison.Ordinal) => Bloc,
-        var n when n.StartsWith("GILET", StringComparison.Ordinal) || n.StartsWith("STAB", StringComparison.Ordinal) => Gilet,
-        var n when n.StartsWith("DÉTENDEUR", StringComparison.Ordinal) || n.StartsWith("DETENDEUR", StringComparison.Ordinal) => Detendeur,
-        var n when n.StartsWith("COMBI", StringComparison.Ordinal) => Combinaison,
-        var n when n.StartsWith("PALME", StringComparison.Ordinal) => Palmes,
-        var n when n.StartsWith("MASQUE", StringComparison.Ordinal) => Masque,
-        var n when n.StartsWith("ORDI", StringComparison.Ordinal) => Ordinateur,
-        _ => Autre,
+        "bloc" => Bloc,
+        "gilet" => Gilet,
+        "detendeur" => Detendeur,
+        "combinaison" => Combinaison,
+        "palme" => Palmes,
+        "masque" => Masque,
+        "ordinateur" => Ordinateur,
+        "lampe" => Lampe,
+        "plomb" => Plomb,
+        "sac" => Sac,
+        "tuba" => Tuba,
+        _ => Paquet,
     };
 
     /// <summary>Dessine le pictogramme centré dans <paramref name="zone"/> (carrée de préférence).</summary>

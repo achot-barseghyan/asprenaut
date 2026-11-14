@@ -112,6 +112,9 @@ internal static class Demarrage
             services.GetRequiredService<IHorloge>().AujourdHui);
 #endif
 
+        // Pictogramme choisi pour chaque catégorie (Lampes, Plombs…), utilisé partout où une catégorie est dessinée.
+        Apparence.Icones.RetenirCategories(await services.GetRequiredService<ServiceInventaire>().ListerCategoriesAsync());
+
         // Notices des fabricants livrées avec l'appli : installées une seule fois. Un échec ne bloque pas le démarrage.
         try
         {

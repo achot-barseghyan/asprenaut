@@ -179,6 +179,24 @@ public class DepotsTests : IAsyncLifetime
         Assert.DoesNotContain(await categories.ListerAsync(), c => c.Id == id);
     }
 
+    // 020 : pictogramme et couleur de la catégorie ; nombre d'équipements et de manuels de chaque catégorie.
+    [Fact]
+    public async Task Categorie_garde_son_pictogramme_et_sa_couleur_et_compte_son_materiel()
+    {
+        await DonneesDemo.ChargerSiVideAsync(_base.Fabrique, new DateOnly(2026, 11, 6));
+        var categories = new CategorieRepository(_base.Fabrique);
+        var id = await categories.AjouterAsync(new Categorie { Nom = "Lampes", Icone = "lampe", Couleur = "jaune" });
+
+        var lampes = (await categories.ListerAsync()).Single(c => c.Id == id);
+        Assert.Equal(("lampe", "jaune"), (lampes.Icone, lampes.Couleur));
+        Assert.Null((await categories.ListerAsync()).Single(c => c.Nom == "Blocs").Icone); // Catégories d'origine : d'après le nom.
+
+        var usages = await categories.ListerUsagesAsync();
+        Assert.Equal(await categories.ListerAsync().ContinueWith(t => t.Result.Count), usages.Count);
+        Assert.Equal((4, false), usages.Where(u => u.Categorie.Nom == "Blocs").Select(u => (u.NbEquipements, u.Supprimable)).Single());
+        Assert.Equal((0, 0, true, "jaune"), usages.Where(u => u.Categorie.Id == id).Select(u => (u.NbEquipements, u.NbManuels, u.Supprimable, u.Categorie.Couleur)).Single());
+    }
+
     [Fact]
     public async Task Categorie_utilisee_par_un_equipement_ne_se_supprime_pas()
     {

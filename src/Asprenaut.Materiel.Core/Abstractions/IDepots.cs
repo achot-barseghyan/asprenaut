@@ -14,6 +14,9 @@ public interface ICategorieRepository
     /// <summary>Nombre d'équipements et de manuels qui utilisent la catégorie (elle ne se supprime alors pas).</summary>
     Task<int> CompterUtilisationsAsync(long id, CancellationToken ct = default);
 
+    /// <summary>Toutes les catégories (ordre de création) avec leur nombre d'équipements et de manuels.</summary>
+    Task<IReadOnlyList<CategorieUsage>> ListerUsagesAsync(CancellationToken ct = default);
+
     /// <summary>Supprime la catégorie si aucun équipement ni manuel ne l'utilise ; faux sinon (rien n'est supprimé).</summary>
     Task<bool> SupprimerAsync(long id, CancellationToken ct = default);
 }

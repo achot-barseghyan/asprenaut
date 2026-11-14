@@ -269,9 +269,18 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     `ManuelsFournis` : noms des fichiers déjà installés ; une notice ajoutée dans une version suivante s'installe au lancement suivant), sans code, sans doublon (même marque et titre) : un manuel retiré ne revient pas.
 
 26. Catégories (`ServiceInventaire.AjouterCategorieAsync` / `SupprimerCategorieAsync`, action protégée Materiel) : depuis la fiche
-    d'un équipement (boutons + et corbeille à côté de la liste), nom obligatoire, unique sans tenir compte des majuscules, 30 caractères
+    d'un équipement, nom obligatoire (première lettre mise en majuscule), unique sans tenir compte des majuscules, 30 caractères
     au plus. Une catégorie utilisée par un équipement ou un manuel ne se supprime pas (la requête SQL re-vérifie) ; il en reste toujours
-    une. La liste est relue après chaque ajout / suppression (le code proposé suit la catégorie choisie).
+    une. Pictogramme et couleur (migration 020, `Categorie.Icone` / `Couleur`, clés de `Categorie.Icones` / `Couleurs`, null = d'après
+    le nom : `IconeEffective`, `CouleurEffective`, `IconeParDefaut`) ; `ListerCategoriesUsageAsync` → `CategorieUsage` (nombre
+    d'équipements et de manuels, `Supprimable`). App (maquette « Ajouter un équipement ») : `Controles/ChoixCategorie` — pastille
+    colorée + nom + « 3 équipements dans l'inventaire » ; liste déroulante (`ToolStripDropDown`) avec recherche (« 8 / 8 »), nombre,
+    coche, corbeille (vide) avec confirmation dans la ligne « Garder / Supprimer », ou cadenas (utilisée, dernière : info-bulle) ;
+    « Nouvelle catégorie » / « Créer « xyz » » : nom, 8 pictogrammes (`Categorie.IconesNouvelle`), 6 couleurs (`Theme.CouleurCategorie`),
+    « Créer et choisir ». Pas de MessageBox dans la liste (elle se fermerait) : erreurs écrites dedans. Dans le menu, un Button n'émet
+    pas Click (`BoutonListe` le déclenche au relâchement) ; le focus passe au champ avant de cacher le bouton cliqué ; le panneau
+    défilant (`PanneauDefilant`) ne remonte pas au focus. `Icones.PourCategorie` lit le pictogramme choisi (`RetenirCategories`,
+    au démarrage et à chaque lecture de la liste ; `Icones.DeCategorie`).
 
 27. Fiche de suivi EPI (maquette « Fiche de suivi EPI », migration 011) : clic sur le nom souligné, double-clic, Entrée ou bouton
     « Fiche de suivi EPI » (colonne Actions) de l'inventaire → `AllerA<EcranFicheSuivi>(idEquipement)` (fil d'Ariane « Inventaire › Fiche de suivi EPI · A05 »).
@@ -480,11 +489,12 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   018 : intervention_prevue (equipement_id, motif, description, prevue_le, close_le, annulee 0/1 ; une ouverte par équipement
   `ux_intervention_prevue_ouverte`).
   019 : adherent.caci (0/1) et adherent.caci_expiration (date, null si pas de CACI).
+  020 : categorie.icone et categorie.couleur (clés, null = d'après le nom).
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/020_xxx.sql`, sans jamais modifier un script déjà livré
+- Nouvelle migration : ajouter `Migrations/021_xxx.sql`, sans jamais modifier un script déjà livré
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.

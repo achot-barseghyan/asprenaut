@@ -549,8 +549,24 @@ public sealed class ServiceInventaire(
     /// Ajoute une catégorie (depuis la fiche d'un équipement). Nom obligatoire, unique sans tenir compte des majuscules,
     /// 30 caractères au plus. Action protégée (Matériel).
     /// </summary>
-    public async Task<ResultatOperation> AjouterCategorieAsync(string nom, CancellationToken ct = default)
+    public Task<ResultatOperation> AjouterCategorieAsync(string nom, CancellationToken ct = default) =>
+        AjouterCategorieAsync(nom, null, null, ct);
+
+    /// <summary>Catégories (ordre de création) avec leur nombre d'équipements et de manuels : choix de la catégorie d'un équipement.</summary>
+    public Task<IReadOnlyList<CategorieUsage>> ListerCategoriesUsageAsync(CancellationToken ct = default) =>
+        categories.ListerUsagesAsync(ct);
+
+    /// <summary>
+    /// Ajoute une catégorie avec son pictogramme et sa couleur (clés de <see cref="Categorie.Icones"/> et
+    /// <see cref="Categorie.Couleurs"/> ; null = d'après le nom). Mêmes contrôles que <see cref="AjouterCategorieAsync(string, CancellationToken)"/>.
+    /// </summary>
+    public async Task<ResultatOperation> AjouterCategorieAsync(string nom, string? icone, string? couleur, CancellationToken ct = default)
     {
+        if (icone is not null && !Categorie.Icones.Contains(icone) || couleur is not null && !Categorie.Couleurs.Contains(couleur))
+        {
+            return ResultatOperation.Echec("Choisissez une icône et une couleur dans la liste.");
+        }
+
         if (gestion?.Exiger(ActionProtegee.Materiel) is { Reussi: false } refus)
         {
             return refus;
@@ -573,7 +589,9 @@ public sealed class ServiceInventaire(
             return ResultatOperation.Echec($"La catégorie « {n} » existe déjà.");
         }
 
-        var id = await categories.AjouterAsync(new Categorie { Nom = n }, ct);
+        // Première lettre en majuscule (« lampes » → « Lampes »), comme les catégories d'origine.
+        n = char.ToUpper(n[0], Libelles.Culture) + n[1..];
+        var id = await categories.AjouterAsync(new Categorie { Nom = n, Icone = icone, Couleur = couleur }, ct);
         return ResultatOperation.Ok($"Catégorie « {n} » ajoutée.", id);
     }
 

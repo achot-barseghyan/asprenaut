@@ -11,7 +11,7 @@ public sealed class CategorieRepository(FabriqueConnexion fabrique) : ICategorie
     {
         await using var cx = await fabrique.OuvrirAsync(ct);
         var lignes = await cx.QueryAsync<Categorie>(new CommandDefinition(
-            "SELECT id, nom FROM categorie ORDER BY id;", cancellationToken: ct));
+            "SELECT id, nom, icone, couleur FROM categorie ORDER BY id;", cancellationToken: ct));
         return lignes.AsList();
     }
 
@@ -19,8 +19,24 @@ public sealed class CategorieRepository(FabriqueConnexion fabrique) : ICategorie
     {
         await using var cx = await fabrique.OuvrirAsync(ct);
         categorie.Id = await cx.ExecuteScalarAsync<long>(new CommandDefinition(
-            "INSERT INTO categorie (nom) VALUES (@Nom) RETURNING id;", new { categorie.Nom }, cancellationToken: ct));
+            "INSERT INTO categorie (nom, icone, couleur) VALUES (@Nom, @Icone, @Couleur) RETURNING id;",
+            new { categorie.Nom, categorie.Icone, categorie.Couleur }, cancellationToken: ct));
         return categorie.Id;
+    }
+
+    public async Task<IReadOnlyList<CategorieUsage>> ListerUsagesAsync(CancellationToken ct = default)
+    {
+        const string sql = """
+            SELECT c.id, c.nom, c.icone, c.couleur,
+                   (SELECT COUNT(*) FROM equipement e WHERE e.categorie_id = c.id) AS nb_equipements,
+                   (SELECT COUNT(*) FROM manuel m WHERE m.categorie_id = c.id) AS nb_manuels
+            FROM categorie c
+            ORDER BY c.id;
+            """;
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        var lignes = await cx.QueryAsync<(long Id, string Nom, string? Icone, string? Couleur, int NbEquipements, int NbManuels)>(
+            new CommandDefinition(sql, cancellationToken: ct));
+        return lignes.Select(l => new CategorieUsage(new Categorie { Id = l.Id, Nom = l.Nom, Icone = l.Icone, Couleur = l.Couleur }, l.NbEquipements, l.NbManuels)).ToList();
     }
 
     public async Task<int> CompterUtilisationsAsync(long id, CancellationToken ct = default)

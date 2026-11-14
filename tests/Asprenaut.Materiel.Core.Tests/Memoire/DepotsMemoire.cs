@@ -44,6 +44,10 @@ public sealed class CategorieRepositoryMemoire(BaseMemoire db) : ICategorieRepos
     public Task<int> CompterUtilisationsAsync(long id, CancellationToken ct = default) =>
         Task.FromResult(db.Equipements.Count(e => e.CategorieId == id));
 
+    public Task<IReadOnlyList<CategorieUsage>> ListerUsagesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CategorieUsage>>(db.Categories.OrderBy(c => c.Id)
+            .Select(c => new CategorieUsage(c, db.Equipements.Count(e => e.CategorieId == c.Id), 0)).ToList());
+
     public Task<bool> SupprimerAsync(long id, CancellationToken ct = default) =>
         Task.FromResult(!db.Equipements.Any(e => e.CategorieId == id) && db.Categories.RemoveAll(c => c.Id == id) == 1);
 }

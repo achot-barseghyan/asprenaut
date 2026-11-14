@@ -150,6 +150,20 @@ public static class Theme
     public static Color TexteSurPrestataire => _p.TexteSurPrestataire;
     public static Color Profondeur => _p.Profondeur;
 
+    /// <summary>
+    /// Couleur d'une catégorie de matériel (clé de <see cref="Core.Modeles.Categorie.Couleurs"/>) : rôles du thème, lisibles
+    /// dans les deux thèmes (cyan, vert, jaune, corail, violet, bleu).
+    /// </summary>
+    public static Color CouleurCategorie(string cle) => cle switch
+    {
+        "vert" => Retour,
+        "jaune" => Avertissement,
+        "corail" => DepartClair,
+        "violet" => Prestataire,
+        "bleu" => Materiel,
+        _ => Accent,
+    };
+
     /// <summary>Couleur d'un type de sortie (point du filtre, pastille du tableau « Utilisations »), d'après sa famille.</summary>
     public static Color CouleurTypeSortie(TypeSortie famille) => famille switch
     {
