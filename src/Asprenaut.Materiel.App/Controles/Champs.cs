@@ -324,6 +324,9 @@ public sealed class ChampDate : Panel
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool Valide => _date is not null || _texte.Text.Trim().Length == 0;
 
+    /// <summary><see cref="Date"/> a changé (saisie, calendrier ou code) ; aussi quand elle devient illisible ou vide.</summary>
+    public event EventHandler? DateChangee;
+
     protected override void OnEnabledChanged(EventArgs e)
     {
         base.OnEnabledChanged(e);
@@ -388,9 +391,14 @@ public sealed class ChampDate : Panel
     private void Lire()
     {
         var texte = _texte.Text.Trim().Replace('.', '/').Replace('-', '/');
+        var avant = _date;
         _date = DateOnly.TryParseExact(texte, Formats, Libelles.Culture, System.Globalization.DateTimeStyles.None, out var d) ? d : null;
         _jour.Text = _date?.ToString("dddd", Libelles.Culture) ?? (texte.Length == 0 ? "" : "date invalide");
         _jour.ForeColor = _date is null ? Theme.Erreur : Theme.TexteSecondaire;
+        if (_date != avant)
+        {
+            DateChangee?.Invoke(this, EventArgs.Empty);
+        }
     }
 }
 

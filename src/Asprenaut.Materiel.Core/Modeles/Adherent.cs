@@ -38,6 +38,10 @@ public sealed class Adherent
     /// <summary>CACI coché et date d'expiration passée (le jour même est encore valable).</summary>
     public bool CaciExpire(DateOnly aujourdhui) => Caci && CaciExpiration is { } fin && fin < aujourdhui;
 
+    /// <summary>CACI coché, encore valable, mais qui expire dans les <paramref name="jours"/> jours (à renouveler bientôt).</summary>
+    public bool CaciBientot(DateOnly aujourdhui, int jours) =>
+        Caci && CaciExpiration is { } fin && fin >= aujourdhui && fin <= aujourdhui.AddDays(jours);
+
     /// <summary>« Julie Martin ».</summary>
     public string NomComplet => $"{Prenom} {Nom}".Trim();
 
@@ -85,13 +89,16 @@ public enum FiltreAdherents
 
     /// <summary>Désactivés (ne sortent plus de matériel).</summary>
     Desactives,
+
+    /// <summary>CACI expiré ou qui expire bientôt (à relancer).</summary>
+    CaciARenouveler,
 }
 
 /// <summary>Carte d'un adhérent : matériel encore dehors et matériel jamais rendu.</summary>
-public sealed record FicheAdherent(Adherent Adherent, int NbDehors, int NbNonRendus, bool CaciExpire = false);
+public sealed record FicheAdherent(Adherent Adherent, int NbDehors, int NbNonRendus, bool CaciExpire = false, bool CaciBientot = false);
 
 /// <summary>Onglet Adhérents : les cartes filtrées et le nombre d'adhérents de chaque filtre (après recherche et niveau).</summary>
-public sealed record ListeAdherents(IReadOnlyList<FicheAdherent> Fiches, int Tous, int MaterielDehors, int NonRendu, int Nitrox = 0, int Desactives = 0);
+public sealed record ListeAdherents(IReadOnlyList<FicheAdherent> Fiches, int Tous, int MaterielDehors, int NonRendu, int Nitrox = 0, int Desactives = 0, int CaciARenouveler = 0);
 
 /// <summary>Une sortie nominative d'un adhérent : équipements pris, rendus, non rendus.</summary>
 public sealed record SortieAdherent(long SortieId, DateOnly Date, string Intitule, string Type, int NbEquipements, int NbNonRendus, bool EnCours)
@@ -106,7 +113,8 @@ public sealed record DetailAdherent(
     IReadOnlyList<PassageAdherent> Dehors,
     IReadOnlyList<PassageAdherent> NonRendus,
     IReadOnlyList<SortieAdherent> Sorties,
-    bool CaciExpire = false);
+    bool CaciExpire = false,
+    bool CaciBientot = false);
 
 /// <summary>Adhérent récent d'une sortie (raccourcis du départ) : le plus récent d'abord.</summary>
 public sealed record AdherentRecent(long AdherentId, string Nom, int NbEquipements);

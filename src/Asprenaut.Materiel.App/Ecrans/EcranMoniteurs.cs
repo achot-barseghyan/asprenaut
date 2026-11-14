@@ -38,7 +38,15 @@ public sealed class EcranMoniteurs : EcranBase
 
     // Onglet Adhérents : recherche par nom, filtres, adhérent choisi.
     private readonly BarreRecherche _recherche = new("Rechercher un adhérent…", "nom ou prénom") { Margin = new Padding(0, 0, 14, 0) };
-    private static readonly string[] PucesAdherents = ["Matériel dehors", "Non rendu", "Nitrox", "Désactivés"];
+    // Puces de l'onglet Adhérents (après « Tous »), dans l'ordre affiché.
+    private static readonly (string Libelle, FiltreAdherents Filtre)[] PucesAdherents =
+    [
+        ("Matériel dehors", FiltreAdherents.MaterielDehors),
+        ("Non rendu", FiltreAdherents.NonRendu),
+        ("Nitrox", FiltreAdherents.Nitrox),
+        ("CACI à renouveler", FiltreAdherents.CaciARenouveler),
+        ("Désactivés", FiltreAdherents.Desactives),
+    ];
 
     // Onglet Moniteurs : mêmes recherche et puces (pas pour les classes, peu nombreuses).
     private static readonly string[] PucesMoniteurs = ["Actifs", "Inspecteurs TIV", "Matériel dehors", "Inactifs"];
@@ -78,7 +86,7 @@ public sealed class EcranMoniteurs : EcranBase
         {
             if (Adherents)
             {
-                _choixAdherents = (FiltreAdherents)(Array.IndexOf(PucesAdherents, _filtre.Selection) + 1);
+                _choixAdherents = PucesAdherents.Where(p => p.Libelle == _filtre.Selection).Select(p => p.Filtre).FirstOrDefault(); // Tous si aucune.
             }
             else
             {
@@ -393,8 +401,15 @@ public sealed class EcranMoniteurs : EcranBase
             return;
         }
 
-        _filtre.Selection = filtre == FiltreAdherents.Tous ? null : PucesAdherents[(int)filtre - 1];
-        _filtre.Afficher(liste.Tous, PucesAdherents.Zip([liste.MaterielDehors, liste.NonRendu, liste.Nitrox, liste.Desactives]));
+        _filtre.Selection = PucesAdherents.FirstOrDefault(p => p.Filtre == filtre).Libelle; // Null pour « Tous ».
+        _filtre.Afficher(liste.Tous, PucesAdherents.Select(p => (p.Libelle, p.Filtre switch
+        {
+            FiltreAdherents.MaterielDehors => liste.MaterielDehors,
+            FiltreAdherents.NonRendu => liste.NonRendu,
+            FiltreAdherents.Nitrox => liste.Nitrox,
+            FiltreAdherents.CaciARenouveler => liste.CaciARenouveler,
+            _ => liste.Desactives,
+        })));
         _listeAdherents = liste.Fiches;
         if (_adherentChoisi is null || _listeAdherents.All(f => f.Adherent.Id != _adherentChoisi))
         {
@@ -458,9 +473,12 @@ public sealed class EcranMoniteurs : EcranBase
 
         if (a.Caci && a.CaciExpiration is { } finCaci)
         {
+            var jours = finCaci.DayNumber - _adherents.AujourdHui.DayNumber;
             textes.Controls.Add(detail.CaciExpire
                 ? Ui.Libelle($"CACI expiré le {Libelles.Date(finCaci)} : ne sort plus de matériel", Theme.PoliceGrasse(9.75f), Theme.Erreur)
-                : Ui.Libelle($"CACI valable jusqu'au {Libelles.Date(finCaci)}", Theme.Police(9.75f), Theme.TexteDoux));
+                : detail.CaciBientot
+                    ? Ui.Libelle($"CACI à renouveler : fin le {Libelles.Date(finCaci)} ({(jours == 0 ? "aujourd'hui" : jours == 1 ? "demain" : $"dans {jours} jours")})", Theme.PoliceGrasse(9.75f), Theme.Avertissement)
+                    : Ui.Libelle($"CACI valable jusqu'au {Libelles.Date(finCaci)}", Theme.Police(9.75f), Theme.TexteDoux));
         }
 
         var avatar = new AvatarAdherent(a, index, 72);
@@ -633,9 +651,25 @@ public sealed class EcranMoniteurs : EcranBase
 
         // CACI : case cochée, la date d'expiration apparaît ; une fois passée, il ne sort plus de matériel.
         fenetre.Ajouter(new LigneReglage("CACI", "Date passée : ne peut plus sortir de matériel. Décoché : pas de contrôle", caci));
-        var rangeeCaci = fenetre.DeuxChamps("CACI valable jusqu'au", caciExpiration, "", new Panel { BackColor = Color.Transparent });
+        // À droite de la date : son effet, dès qu'elle est choisie (passée : bloqué ; bientôt : à renouveler).
+        var etatCaci = Ui.Libelle("", Theme.PoliceGrasse(9.75f), Theme.TexteSecondaire);
+        etatCaci.AutoSize = false;
+        etatCaci.TextAlign = ContentAlignment.MiddleLeft;
+        void AfficherEtatCaci()
+        {
+            var essai = new Adherent { Caci = true, CaciExpiration = caciExpiration.Date };
+            var aujourdhui = _adherents.AujourdHui;
+            (etatCaci.Text, etatCaci.ForeColor) = caciExpiration.Date is null ? ("", Theme.TexteSecondaire)
+                : essai.CaciExpire(aujourdhui) ? ("Date passée : il ne pourra pas sortir de matériel.", Theme.Erreur)
+                : essai.CaciBientot(aujourdhui, ServiceAdherents.JoursAvantFinCaci) ? ("À renouveler bientôt.", Theme.Avertissement)
+                : ("Valable.", Theme.Retour);
+        }
+
+        var rangeeCaci = fenetre.DeuxChamps("CACI valable jusqu'au", caciExpiration, "", etatCaci);
         rangeeCaci.Visible = caci.Checked;
         caci.CheckedChanged += (_, _) => rangeeCaci.Visible = caci.Checked;
+        caciExpiration.DateChangee += (_, _) => AfficherEtatCaci();
+        AfficherEtatCaci();
         if (a is not null)
         {
             fenetre.Ajouter(new LigneReglage("Actif", "Désactivé : ne peut plus sortir de matériel ; son historique est gardé", actif));
@@ -1111,7 +1145,7 @@ private async Task EnregistrerModeleAsync()
             _fiche = fiche;
             _index = index;
             var a = fiche.Adherent;
-            AccessibleName = $"{a.NomComplet}{(a.Niveau is null ? "" : $", {a.Niveau}")}, {Libelles.Pluriel(fiche.NbDehors, "équipement")} dehors, {fiche.NbNonRendus} non rendu{(fiche.NbNonRendus > 1 ? "s" : "")}{(a.Nitrox ? ", certifié nitrox" : "")}{(fiche.CaciExpire ? ", CACI expiré" : "")}{(a.Actif ? "" : ", désactivé")}";
+            AccessibleName = $"{a.NomComplet}{(a.Niveau is null ? "" : $", {a.Niveau}")}, {Libelles.Pluriel(fiche.NbDehors, "équipement")} dehors, {fiche.NbNonRendus} non rendu{(fiche.NbNonRendus > 1 ? "s" : "")}{(a.Nitrox ? ", certifié nitrox" : "")}{(fiche.CaciExpire ? ", CACI expiré" : fiche.CaciBientot ? ", CACI à renouveler bientôt" : "")}{(a.Actif ? "" : ", désactivé")}";
         }
 
         public long AdherentId => _fiche.Adherent.Id;
@@ -1188,6 +1222,10 @@ private async Task EnregistrerModeleAsync()
             if (_fiche.CaciExpire)
             {
                 px = Pastille(g, "CACI EXPIRÉ", px, py, Theme.Erreur) + E(6);
+            }
+            else if (_fiche.CaciBientot)
+            {
+                px = Pastille(g, "CACI BIENTÔT", px, py, Theme.Avertissement) + E(6);
             }
 
             if (!a.Actif)

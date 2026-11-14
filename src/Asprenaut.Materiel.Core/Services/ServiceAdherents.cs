@@ -47,6 +47,9 @@ public sealed class ServiceAdherents(
     /// <summary>Dernières sorties nominatives montrées sur la fiche.</summary>
     public const int NombreSortiesFiche = 5;
 
+    /// <summary>Un CACI qui expire dans ce nombre de jours est « à renouveler » (pastille jaune, filtre).</summary>
+    public const int JoursAvantFinCaci = 30;
+
     // ---------------------------------------------------------------- Règles du départ
 
     /// <summary>
@@ -125,7 +128,9 @@ public sealed class ServiceAdherents(
         var situations = (await adherents.ListerSituationsAsync(ct)).ToDictionary(s => s.AdherentId);
         var fiches = Filtrer(await adherents.ListerAsync(actifsSeulement: false, ct), recherche)
             .Where(a => niveau is null || (niveau.Length == 0 ? string.IsNullOrWhiteSpace(a.Niveau) : string.Equals(a.Niveau?.Trim(), niveau, StringComparison.OrdinalIgnoreCase)))
-            .Select(a => situations.TryGetValue(a.Id, out var s) ? new FicheAdherent(a, s.NbDehors, s.NbManquants, a.CaciExpire(horloge.AujourdHui)) : new FicheAdherent(a, 0, 0, a.CaciExpire(horloge.AujourdHui)))
+            .Select(a => situations.TryGetValue(a.Id, out var s)
+                ? new FicheAdherent(a, s.NbDehors, s.NbManquants, a.CaciExpire(horloge.AujourdHui), a.CaciBientot(horloge.AujourdHui, JoursAvantFinCaci))
+                : new FicheAdherent(a, 0, 0, a.CaciExpire(horloge.AujourdHui), a.CaciBientot(horloge.AujourdHui, JoursAvantFinCaci)))
             .OrderBy(f => !f.Adherent.Actif)
             .ToList();
         var filtrees = fiches.Where(f => filtre switch
@@ -134,10 +139,11 @@ public sealed class ServiceAdherents(
             FiltreAdherents.NonRendu => f.NbNonRendus > 0,
             FiltreAdherents.Nitrox => f.Adherent.Nitrox,
             FiltreAdherents.Desactives => !f.Adherent.Actif,
+            FiltreAdherents.CaciARenouveler => f.CaciExpire || f.CaciBientot,
             _ => true,
         }).ToList();
         return new ListeAdherents(filtrees, fiches.Count, fiches.Count(f => f.NbDehors > 0), fiches.Count(f => f.NbNonRendus > 0),
-            fiches.Count(f => f.Adherent.Nitrox), fiches.Count(f => !f.Adherent.Actif));
+            fiches.Count(f => f.Adherent.Nitrox), fiches.Count(f => !f.Adherent.Actif), fiches.Count(f => f.CaciExpire || f.CaciBientot));
     }
 
     /// <summary>Fiche : matériel qu'il a en ce moment, matériel non rendu (manquant à la clôture), dernières sorties nominatives.</summary>
@@ -163,7 +169,8 @@ public sealed class ServiceAdherents(
             passages.Where(p => p.Statut == StatutSortieEquipement.Dehors).ToList(),
             passages.Where(p => p.Statut == StatutSortieEquipement.Manquant).ToList(),
             sorties,
-            adherent.CaciExpire(horloge.AujourdHui));
+            adherent.CaciExpire(horloge.AujourdHui),
+            adherent.CaciBientot(horloge.AujourdHui, JoursAvantFinCaci));
     }
 
     // ---------------------------------------------------------------- Ajout et modification
@@ -197,6 +204,8 @@ public sealed class ServiceAdherents(
             }
         }
 
+        // CACI avant modification (pour le journal), relevé avant que la saisie ne soit nettoyée.
+        var avant = tous.FirstOrDefault(a => a.Id == saisie.Id && saisie.Id != 0) is { } x ? (x.Caci, x.CaciExpiration) : (false, (DateOnly?)null);
         if (Normaliser(saisie, tous) is { } erreur)
         {
             return erreur;
@@ -205,7 +214,7 @@ public sealed class ServiceAdherents(
         if (saisie.Id == 0)
         {
             var id = await adherents.AjouterAsync(saisie, ct);
-            await JournaliserAsync(ActionsJournal.AdherentCree, $"Adhérent ajouté : {saisie.NomComplet}", ct);
+            await JournaliserAsync(ActionsJournal.AdherentCree, $"Adhérent ajouté : {saisie.NomComplet}{ChangementCaci(avant, saisie)}", ct);
             return ResultatOperation.Ok($"{saisie.NomComplet} ajouté.", id);
         }
 
@@ -215,9 +224,15 @@ public sealed class ServiceAdherents(
         }
 
         await adherents.MettreAJourAsync(saisie, ct);
-        await JournaliserAsync(ActionsJournal.AdherentModifie, $"Adhérent modifié : {saisie.NomComplet}{(saisie.Actif ? "" : " (inactif)")}", ct);
+        await JournaliserAsync(ActionsJournal.AdherentModifie, $"Adhérent modifié : {saisie.NomComplet}{(saisie.Actif ? "" : " (inactif)")}{ChangementCaci(avant, saisie)}", ct);
         return ResultatOperation.Ok($"{saisie.NomComplet} enregistré.", saisie.Id);
     }
+
+    /// <summary>Fin du texte du journal quand le CACI change : « · CACI jusqu'au 15/03/2027 », « · CACI retiré », sinon vide.</summary>
+    public static string ChangementCaci((bool Caci, DateOnly? Expiration) avant, Adherent apres) =>
+        apres.Caci && apres.CaciExpiration is { } fin && (!avant.Caci || avant.Expiration != fin) ? $" · CACI jusqu'au {Libelles.Date(fin)}"
+        : !apres.Caci && avant.Caci ? " · CACI retiré"
+        : "";
 
     /// <summary>
     /// Désactive (ne peut plus sortir de matériel, n'est plus proposé au départ ; son historique reste) ou réactive un adhérent.
@@ -292,7 +307,9 @@ public sealed class ServiceAdherents(
 
     /// <summary>Une ligne lue dans le fichier : l'adhérent, ou l'erreur qui la fait ignorer.</summary>
     /// <param name="Nitrox">Colonne « Nitrox » (oui / non) : null si le fichier ne l'a pas (le statut n'est alors pas changé).</param>
-    public sealed record LigneImport(int Numero, Adherent? Adherent, string? Erreur, bool? Nitrox = null);
+    /// <param name="Caci">Colonne « CACI valable jusqu'au » : null si absente, vide ou illisible (le CACI n'est alors pas changé).</param>
+    /// <param name="CaciIllisible">Case CACI remplie mais pas une date (signalé dans le message de l'import).</param>
+    public sealed record LigneImport(int Numero, Adherent? Adherent, string? Erreur, bool? Nitrox = null, DateOnly? Caci = null, bool CaciIllisible = false);
 
     // En-têtes reconnus (sans accents ni majuscules), dans l'ordre : nom, prénom, niveau, licence, téléphone.
     private static readonly string[][] EnTetes =
@@ -303,6 +320,8 @@ public sealed class ServiceAdherents(
         ["licence", "n licence", "no licence", "numero de licence", "num licence", "licence ffessm", "n de licence"],
         ["telephone", "tel", "portable", "mobile", "telephone portable"],
         ["nitrox", "certifie nitrox", "certification nitrox", "brevet nitrox"],
+        ["caci valable jusqu'au", "caci valable jusqu au", "caci", "caci jusqu'au", "date caci", "fin caci", "fin du caci", "expiration caci", "validite caci",
+            "certificat medical", "date certificat medical", "fin certificat medical"],
     ];
 
     /// <summary>Une colonne du modèle Excel à remplir par le club : en-tête (reconnu par l'import), aide, largeur, obligatoire.</summary>
@@ -320,6 +339,7 @@ public sealed class ServiceAdherents(
         new("Licence", "Numéro de licence FFESSM (sert à reconnaître l'adhérent à l'import suivant)", 18, false),
         new("Téléphone", "Ex. : 06 12 34 56 78", 18, false),
         new("Nitrox", "Oui si certifié nitrox, sinon Non", 12, false, ["Oui", "Non"]),
+        new("CACI valable jusqu'au", "Dernier jour de validité du certificat (jj/mm/aaaa). Vide : CACI inchangé", 20, false),
     ];
 
     /// <summary>Nom proposé pour le modèle : « Adhérents à remplir - Asprenaut.xlsx ».</summary>
@@ -335,7 +355,8 @@ public sealed class ServiceAdherents(
         "3. Ne changez pas la première ligne (les titres des colonnes) : l'application s'en sert pour lire le fichier.",
         "4. Licence : si elle est remplie, l'adhérent est reconnu à l'import suivant et mis à jour au lieu d'être ajouté en double.",
         "5. Niveau et Nitrox : choisissez dans la liste (flèche à droite de la case). Ne tapez pas d'autre niveau : il serait ignoré. Vide = inchangé.",
-        "6. Enregistrez en .xlsx et rapportez le fichier au responsable matériel : Membres › Adhérents › Importer la liste Excel.",
+        "6. CACI valable jusqu'au : date de fin du certificat, au format jj/mm/aaaa (ex. 15/09/2027). Passée cette date, l'adhérent ne sort plus de matériel. Vide = inchangé.",
+        "7. Enregistrez en .xlsx et rapportez le fichier au responsable matériel : Membres › Adhérents › Importer la liste Excel.",
         "Personne n'est retiré par l'import : les adhérents absents du fichier restent dans l'application.",
     ];
 
@@ -349,7 +370,7 @@ public sealed class ServiceAdherents(
         var colonnes = new int[EnTetes.Length];
         for (var i = 0; i < lignes.Count && entete < 0; i++)
         {
-            var cellules = lignes[i].Select(c => Simplifier(c).Replace(".", "", StringComparison.Ordinal).Replace("°", "", StringComparison.Ordinal).Trim()).ToList();
+            var cellules = lignes[i].Select(c => Simplifier(c).Replace(".", "", StringComparison.Ordinal).Replace("°", "", StringComparison.Ordinal).Replace('’', '\'').Trim()).ToList();
             for (var c = 0; c < EnTetes.Length; c++)
             {
                 colonnes[c] = cellules.FindIndex(x => EnTetes[c].Contains(x));
@@ -388,7 +409,15 @@ public sealed class ServiceAdherents(
             var celluleNitrox = colonnes[5] >= 0 ? Cellule(ligne, colonnes[5]) : null;
             var nitrox = string.IsNullOrWhiteSpace(celluleNitrox) ? (bool?)null : OuiNon(celluleNitrox);
             a.Nitrox = nitrox ?? false;
-            resultat.Add(Normaliser(a, []) is { } erreur ? new LigneImport(i + 1, null, erreur.Message) : new LigneImport(i + 1, a, null, nitrox));
+
+            // CACI : une date = CACI suivi jusqu'à ce jour ; vide = inchangé ; autre chose = signalé et inchangé.
+            var celluleCaci = colonnes[6] >= 0 ? Cellule(ligne, colonnes[6]) : null;
+            var caci = string.IsNullOrWhiteSpace(celluleCaci) ? null : LireDate(celluleCaci);
+            a.Caci = caci is not null;
+            a.CaciExpiration = caci;
+            resultat.Add(Normaliser(a, []) is { } erreur
+                ? new LigneImport(i + 1, null, erreur.Message)
+                : new LigneImport(i + 1, a, null, nitrox, caci, !string.IsNullOrWhiteSpace(celluleCaci) && caci is null));
         }
 
         return resultat;
@@ -416,7 +445,8 @@ public sealed class ServiceAdherents(
         var ignorees = lues.Where(l => l.Adherent is null).Select(l => l.Numero).ToList();
         var licencesVues = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var niveauxInconnus = new List<int>();
-        foreach (var lu in lues.Where(l => l.Adherent is not null).Select(l => (l.Numero, Adherent: l.Adherent!, l.Nitrox)))
+        var cacisIllisibles = lues.Where(l => l.CaciIllisible).Select(l => l.Numero).ToList();
+        foreach (var lu in lues.Where(l => l.Adherent is not null).Select(l => (l.Numero, Adherent: l.Adherent!, l.Nitrox, l.Caci)))
         {
             var nouveau = lu.Adherent;
 
@@ -454,6 +484,12 @@ public sealed class ServiceAdherents(
             existant.Licence = nouveau.Licence ?? existant.Licence;
             existant.Telephone = nouveau.Telephone ?? existant.Telephone;
             existant.Nitrox = lu.Nitrox ?? existant.Nitrox;
+            if (lu.Caci is { } finCaci)
+            {
+                existant.Caci = true;
+                existant.CaciExpiration = finCaci;
+            }
+
             existant.Actif = true;
             await adherents.MettreAJourAsync(existant, ct);
             misAJour++;
@@ -471,8 +507,39 @@ public sealed class ServiceAdherents(
                 $"(ligne{(niveauxInconnus.Count > 1 ? "s" : "")} {string.Join(", ", niveauxInconnus.Take(10))}{(niveauxInconnus.Count > 10 ? "…" : "")})";
         }
 
+        if (cacisIllisibles.Count > 0)
+        {
+            message += $", {Libelles.Pluriel(cacisIllisibles.Count, "date de CACI illisible laissée de côté", "dates de CACI illisibles laissées de côté")} " +
+                $"(ligne{(cacisIllisibles.Count > 1 ? "s" : "")} {string.Join(", ", cacisIllisibles.Take(10))}{(cacisIllisibles.Count > 10 ? "…" : "")})";
+        }
+
         await JournaliserAsync(ActionsJournal.AdherentsImportes, $"Import de la liste des adhérents : {message}", ct);
         return ResultatOperation.Ok($"Import terminé : {message}.", ajoutes + misAJour);
+    }
+
+    private static readonly string[] FormatsDate = ["dd/MM/yyyy", "d/M/yyyy", "dd/MM/yy", "d/M/yy", "yyyy-MM-dd", "dd-MM-yyyy", "dd.MM.yyyy"];
+
+    /// <summary>
+    /// Date d'une cellule : « 15/09/2027 », « 15/9/27 », « 2027-09-15 », ou nombre de jours d'Excel (cellule au format date,
+    /// 46645 = 15/09/2027) ; null si ce n'est pas une date.
+    /// </summary>
+    public static DateOnly? LireDate(string? cellule)
+    {
+        var texte = (cellule ?? "").Trim();
+        if (texte.Length == 0)
+        {
+            return null;
+        }
+
+        // Cellule date d'Excel : nombre de jours depuis le 30/12/1899 (années 1955 à 2119).
+        if (double.TryParse(texte, NumberStyles.Float, CultureInfo.InvariantCulture, out var serie) && serie is >= 20000 and <= 80000)
+        {
+            return DateOnly.FromDateTime(DateTime.FromOADate(Math.Floor(serie)));
+        }
+
+        // « 15/09/2027 00:00:00 » (CSV exporté) : la date seule.
+        var date = texte.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
+        return DateOnly.TryParseExact(date, FormatsDate, Libelles.Culture, DateTimeStyles.None, out var d) ? d : null;
     }
 
     /// <summary>« oui », « x », « 1 », « vrai »… → vrai ; cellule vide ou autre chose → faux.</summary>

@@ -201,9 +201,9 @@ public class NitroxTests
         lea.Licence = "L2";
         await _ctx.Adherents.EnregistrerAsync(lea);
         var entete = Core.Services.ServiceAdherents.ColonnesModele(_ctx.Adherents.Niveaux).Select(c => c.EnTete).ToList();
-        Assert.Equal(["Nom", "Prénom", "Niveau", "Licence", "Téléphone", "Nitrox"], entete);
+        Assert.Equal(["Nom", "Prénom", "Niveau", "Licence", "Téléphone", "Nitrox", "CACI valable jusqu'au"], entete);
 
-        var r = await _ctx.Adherents.ImporterAsync([entete, ["Dubois", "Léa", "Niveau 3", "L2", "", ""], ["Petit", "Hugo", "", "", "06 11 22 33 44", "Oui"]]);
+        var r = await _ctx.Adherents.ImporterAsync([entete, ["Dubois", "Léa", "Niveau 3", "L2", "", "", ""], ["Petit", "Hugo", "", "", "06 11 22 33 44", "Oui", ""]]);
 
         Assert.True(r.Reussi, r.Message);
         var relue = _ctx.Db.Adherents.Single(a => a.Licence == "L2");

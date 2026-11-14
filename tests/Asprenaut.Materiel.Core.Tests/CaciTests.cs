@@ -91,4 +91,72 @@ public class CaciTests
         Assert.Equal(["Julie"], liste.Fiches.Where(f => f.CaciExpire).Select(f => f.Adherent.Prenom));
         Assert.True((await _ctx.Adherents.ObtenirFicheAsync(julie.Id))!.CaciExpire);
     }
+
+    // À renouveler : expiré, ou valable encore 30 jours au plus (le dernier jour compte encore).
+    [Fact]
+    public async Task Le_filtre_a_renouveler_prend_les_caci_expires_et_ceux_qui_finissent_bientot()
+    {
+        var julie = await AdherentAsync("Julie", true, Aujourdhui.AddDays(-1));
+        var thomas = await AdherentAsync("Thomas", true, Aujourdhui.AddDays(ServiceAdherents.JoursAvantFinCaci));
+        await AdherentAsync("Hugo", true, Aujourdhui.AddDays(ServiceAdherents.JoursAvantFinCaci + 1));
+        await AdherentAsync("Léa", false, null);
+
+        var liste = await _ctx.Adherents.ListerAsync(null, FiltreAdherents.CaciARenouveler);
+        Assert.Equal(2, liste.CaciARenouveler);
+        Assert.Equal(["Julie", "Thomas"], liste.Fiches.Select(f => f.Adherent.Prenom).Order());
+        Assert.Equal((false, true), (liste.Fiches.Single(f => f.Adherent.Id == thomas.Id).CaciExpire, liste.Fiches.Single(f => f.Adherent.Id == thomas.Id).CaciBientot));
+        Assert.False(liste.Fiches.Single(f => f.Adherent.Id == julie.Id).CaciBientot); // Expiré, pas « bientôt ».
+        Assert.True((await _ctx.Adherents.ObtenirFicheAsync(thomas.Id))!.CaciBientot);
+    }
+
+    [Fact]
+    public async Task Le_journal_note_le_renouvellement_et_le_retrait_du_caci()
+    {
+        var julie = await AdherentAsync("Julie", true, Aujourdhui.AddDays(-1));
+        Assert.EndsWith($" · CACI jusqu'au {Libelles.Date(Aujourdhui.AddDays(-1))}", _ctx.Db.Journal.Last().Details, StringComparison.Ordinal);
+
+        var fin = Aujourdhui.AddYears(1);
+        Assert.True((await _ctx.Adherents.EnregistrerAsync(Copie(julie, true, fin))).Reussi);
+        Assert.Equal($"Adhérent modifié : Julie Martin · CACI jusqu'au {Libelles.Date(fin)}", _ctx.Db.Journal.Last().Details);
+
+        Assert.True((await _ctx.Adherents.EnregistrerAsync(Copie(julie, true, fin))).Reussi);
+        Assert.Equal("Adhérent modifié : Julie Martin", _ctx.Db.Journal.Last().Details); // Inchangé : rien de plus.
+
+        Assert.True((await _ctx.Adherents.EnregistrerAsync(Copie(julie, false, fin))).Reussi);
+        Assert.Equal("Adhérent modifié : Julie Martin · CACI retiré", _ctx.Db.Journal.Last().Details);
+    }
+
+    // Comme le formulaire : un nouvel objet, pas celui de la base.
+    private static Adherent Copie(Adherent a, bool caci, DateOnly? fin) =>
+        new() { Id = a.Id, Nom = a.Nom, Prenom = a.Prenom, Actif = a.Actif, Caci = caci, CaciExpiration = fin };
+
+    // Import : colonne « CACI valable jusqu'au » (texte ou date Excel) ; vide = inchangé ; illisible = signalé et inchangé.
+    [Fact]
+    public async Task L_import_lit_la_date_du_caci()
+    {
+        var julie = await AdherentAsync("Julie", true, new DateOnly(2026, 1, 31));
+        julie.Licence = "L1";
+        await _ctx.Adherents.EnregistrerAsync(julie);
+
+        var r = await _ctx.Adherents.ImporterAsync([
+            ["Nom", "Prénom", "Licence", "CACI valable jusqu’au"],
+            ["Martin", "Julie", "L1", ""],
+            ["Petit", "Hugo", "", "15/09/2027"],
+            ["Moreau", "Léo", "", "46645"],
+            ["Durand", "Zoé", "", "bientôt"],
+        ]);
+
+        Assert.True(r.Reussi, r.Message);
+        Assert.Contains("1 date de CACI illisible laissée de côté (ligne 5)", r.Message, StringComparison.Ordinal);
+        Assert.Equal((true, new DateOnly(2026, 1, 31)), (julie.Caci, julie.CaciExpiration)); // Vide : inchangé.
+        Assert.Equal((true, new DateOnly(2027, 9, 15)), Caci("Petit"));
+        Assert.Equal((true, new DateOnly(2027, 9, 15)), Caci("Moreau")); // Nombre de jours d'Excel.
+        Assert.Equal((false, (DateOnly?)null), Caci("Durand"));
+
+        Assert.True((await _ctx.Adherents.ImporterAsync([["Nom", "Prénom", "Licence", "CACI"], ["Martin", "Julie", "L1", "2028-03-01"]])).Reussi);
+        Assert.Equal(new DateOnly(2028, 3, 1), _ctx.Db.Adherents.Single(a => a.Licence == "L1").CaciExpiration);
+    }
+
+    private (bool, DateOnly?) Caci(string nom) =>
+        _ctx.Db.Adherents.Single(a => a.Nom == nom) is { } a ? (a.Caci, a.CaciExpiration) : default;
 }

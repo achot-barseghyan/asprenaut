@@ -409,7 +409,13 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     cochée et date passée (le jour même reste valable). Au départ d'une sortie nominative, `ServiceAdherents.RefusPour` refuse un
     CACI expiré (après « désactivé », avant nitrox) ; panneau : motif « CACI expiré » (`MotifCourt`, date du jour donnée par
     `ServiceAdherents.AujourdHui`). Carte : pastille « CACI EXPIRÉ » (`FicheAdherent.CaciExpire`) ; fiche : « CACI valable jusqu'au … »
-    ou « CACI expiré le … » en rouge (`DetailAdherent.CaciExpire`). Pas dans l'import Excel. Export : colonnes CACI dans adherents.csv.
+    ou « CACI expiré le … » en rouge (`DetailAdherent.CaciExpire`). À renouveler : expiré ou fin dans `JoursAvantFinCaci` (30) jours
+    (`Adherent.CaciBientot`, `FicheAdherent.CaciBientot`) : pastille jaune « CACI BIENTÔT », fiche « CACI à renouveler : fin le … (dans
+    17 jours) », puce « CACI à renouveler » (`FiltreAdherents.CaciARenouveler`, `ListeAdherents.CaciARenouveler`). Formulaire : état à
+    droite de la date dès qu'elle change (`ChampDate.DateChangee` : date passée / à renouveler bientôt / valable). Journal : « · CACI
+    jusqu'au … » ou « · CACI retiré » (`ChangementCaci`). Import Excel : colonne « CACI valable jusqu'au » (aussi « CACI », « date CACI »,
+    « certificat médical »…), texte jj/mm/aaaa ou date Excel (`ServiceAdherents.LireDate`) ; vide = inchangé, illisible = inchangé et
+    compté dans le message ; dans le modèle à remplir. Export : colonnes CACI dans adherents.csv.
 
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
