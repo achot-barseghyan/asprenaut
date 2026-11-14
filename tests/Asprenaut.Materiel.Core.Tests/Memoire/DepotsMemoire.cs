@@ -200,6 +200,21 @@ public sealed class SortieRepositoryMemoire(BaseMemoire db) : ISortieRepository
     public Task<int> CompterClotureesAsync(CancellationToken ct = default) =>
         Task.FromResult(db.Sorties.Count(s => s.Statut == StatutSortie.Cloturee));
 
+    public Task<IReadOnlyList<SortieResume>> ListerClotureesAsync(CritereSorties critere, int decalage, int nombre, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<SortieResume>>(critere.Trier(db.Sorties.Select(Resumer).Where(critere.Correspond))
+            .Skip(decalage).Take(nombre).ToList());
+
+    public Task<TotauxSorties> TotaliserClotureesAsync(CritereSorties critere, CancellationToken ct = default)
+    {
+        var resumes = db.Sorties.Select(Resumer).ToList();
+        var retenues = resumes.Where(critere.Correspond).ToList();
+        var parType = resumes.Where(critere.SansType().Correspond)
+            .GroupBy(s => s.TypeId)
+            .Select(g => new CompteTypeSortie(g.Key, g.First().LibelleType, g.First().Type, g.Count()))
+            .ToList();
+        return Task.FromResult(new TotauxSorties(retenues.Count, retenues.Sum(s => s.NbTotal), parType));
+    }
+
     public Task<IReadOnlyList<SortieResume>> ListerResumesAsync(bool cloturees, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<SortieResume>>(db.Sorties
             .Where(s => (s.Statut == StatutSortie.Cloturee) == cloturees)

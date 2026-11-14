@@ -2,8 +2,11 @@ namespace Asprenaut.Materiel.Core.Modeles;
 
 // Modèles de lecture (projections) pour les écrans. Remplis par les dépôts.
 
-/// <summary>Une page des sorties clôturées : ses sorties, le total, la page (à partir de 1).</summary>
-public sealed record PageSorties(IReadOnlyList<SortieResume> Sorties, int Total, int Page, int ParPage)
+/// <summary>
+/// Une page des sorties clôturées : ses sorties, le total, la page (à partir de 1) ; avec un filtre, le nombre d'équipements
+/// sortis et le nombre de sorties par type (sans tenir compte du filtre par type : puces « Piscine 2 »).
+/// </summary>
+public sealed record PageSorties(IReadOnlyList<SortieResume> Sorties, int Total, int Page, int ParPage, int NbEquipements = 0, IReadOnlyList<CompteTypeSortie>? ParType = null)
 {
     public int NbPages => Math.Max(1, (Total + ParPage - 1) / ParPage);
 
@@ -160,3 +163,103 @@ public sealed class LigneInventaire
         _ => StatutInventaire.Disponible,
     };
 }
+
+/// <summary>Période des sorties clôturées affichées (onglet « Clôturées » de l'écran Sorties).</summary>
+public enum PeriodeSorties
+{
+    /// <summary>Depuis le 1er septembre de la saison en cours.</summary>
+    Saison,
+    TrenteJours,
+    TroisMois,
+    Toutes,
+}
+
+/// <summary>Bilan des sorties clôturées : toutes, tout rendu, ou avec des manquants.</summary>
+public enum BilanSorties
+{
+    Tous,
+    ToutRendu,
+    Manquants,
+}
+
+/// <summary>Colonne de tri du tableau des sorties clôturées.</summary>
+public enum TriSorties
+{
+    Date,
+    Sortie,
+    Type,
+    Responsable,
+    Materiel,
+    Bilan,
+}
+
+/// <summary>Filtre et tri choisis à l'écran pour les sorties clôturées (par défaut : la saison, la plus récente d'abord).</summary>
+public sealed record FiltreSorties(
+    string? Recherche = null,
+    PeriodeSorties Periode = PeriodeSorties.Saison,
+    long? ResponsableId = null,
+    long? TypeId = null,
+    BilanSorties Bilan = BilanSorties.Tous,
+    TriSorties Tri = TriSorties.Date,
+    bool Descendant = true)
+{
+    /// <summary>Vrai si un filtre réduit la liste (« Effacer les filtres » visible) ; le tri n'en est pas un.</summary>
+    public bool Actif => !string.IsNullOrWhiteSpace(Recherche) || Periode != PeriodeSorties.Saison || ResponsableId is not null
+        || TypeId is not null || Bilan != BilanSorties.Tous;
+}
+
+/// <summary>
+/// Critères envoyés au dépôt : filtre avec la période traduite en date (<see cref="Depuis"/>, date de la sortie incluse).
+/// <see cref="Correspond"/> et <see cref="Trier"/> décrivent la même règle que la requête SQL (dépôt en mémoire des tests).
+/// </summary>
+public sealed record CritereSorties(
+    string? Recherche,
+    DateOnly? Depuis,
+    long? ResponsableId,
+    long? TypeId,
+    BilanSorties Bilan,
+    TriSorties Tri,
+    bool Descendant)
+{
+    /// <summary>Sans le type : nombre de sorties par type pour les puces.</summary>
+    public CritereSorties SansType() => this with { TypeId = null };
+
+    public bool Correspond(SortieResume s)
+    {
+        var motif = Recherche?.Trim();
+        return s.Statut == StatutSortie.Cloturee
+            && (Depuis is not { } d || s.DateSortie >= d)
+            && (ResponsableId is not { } r || s.MoniteurId == r)
+            && (TypeId is not { } t || s.TypeId == t)
+            && (Bilan != BilanSorties.ToutRendu || s.NbManquants == 0)
+            && (Bilan != BilanSorties.Manquants || s.NbManquants > 0)
+            && (string.IsNullOrEmpty(motif) || new[] { s.Intitule, s.Lieu, s.MoniteurNom }
+                .Any(x => x.Contains(motif, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    public IEnumerable<SortieResume> Trier(IEnumerable<SortieResume> sorties)
+    {
+        var tri = Tri switch
+        {
+            TriSorties.Sortie => sorties.OrderBy(s => s.Intitule, StringComparer.CurrentCultureIgnoreCase),
+            TriSorties.Type => sorties.OrderBy(s => s.LibelleType, StringComparer.CurrentCultureIgnoreCase),
+            TriSorties.Responsable => sorties.OrderBy(s => s.MoniteurNom, StringComparer.CurrentCultureIgnoreCase),
+            TriSorties.Materiel => sorties.OrderBy(s => s.NbTotal),
+            TriSorties.Bilan => sorties.OrderBy(s => s.NbManquants),
+            _ => sorties.OrderBy(s => s.DateSortie),
+        };
+        var ordre = tri.ThenBy(s => s.Id).ToList(); // Ordre stable : à égalité, la sortie créée en premier.
+        if (Descendant)
+        {
+            ordre.Reverse();
+        }
+
+        return ordre;
+    }
+}
+
+/// <summary>Nombre de sorties clôturées d'un type (puce du filtre « Piscine 2 »).</summary>
+public sealed record CompteTypeSortie(long? TypeId, string Nom, TypeSortie Famille, int Nombre);
+
+/// <summary>Totaux des sorties clôturées d'un filtre : sorties, équipements sortis, et sorties par type (filtre sans le type).</summary>
+public sealed record TotauxSorties(int NbSorties, int NbEquipements, IReadOnlyList<CompteTypeSortie> ParType);

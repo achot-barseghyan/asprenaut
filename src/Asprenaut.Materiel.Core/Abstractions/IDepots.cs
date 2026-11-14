@@ -79,6 +79,12 @@ public interface ISortieRepository
 
     Task<int> CompterClotureesAsync(CancellationToken ct = default);
 
+    /// <summary>Une page des sorties clôturées qui correspondent aux critères, dans l'ordre demandé.</summary>
+    Task<IReadOnlyList<SortieResume>> ListerClotureesAsync(CritereSorties critere, int decalage, int nombre, CancellationToken ct = default);
+
+    /// <summary>Nombre de sorties et d'équipements sortis des critères ; sorties par type sans le critère de type.</summary>
+    Task<TotauxSorties> TotaliserClotureesAsync(CritereSorties critere, CancellationToken ct = default);
+
     // --- Matériel d'une sortie (table sortie_equipement) ---
 
     Task<IReadOnlyList<LigneSortie>> ListerLignesAsync(long sortieId, CancellationToken ct = default);

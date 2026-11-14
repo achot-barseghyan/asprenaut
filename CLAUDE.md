@@ -455,6 +455,16 @@ Installer le PC du club : sauvegarde complète faite sur le PC de préparation, 
 Écran Sorties : les sorties clôturées sont paginées (`ServiceSortie.ListerClotureesAsync(page)` → `PageSorties`, `SortiesParPage` = 12,
 la plus récemment clôturée d'abord ; `ISortieRepository.ListerClotureesAsync(decalage, nombre)` ne lit que les sorties de la page,
 `CompterClotureesAsync` le total) : barre « Sorties 13 à 24 sur 143 · page 2 / 12 » et « ‹ Précédentes / Suivantes › » sous le tableau.
+Maquette « Sorties » (règle 38, `SortiesClotureesTests`, `SortiesClotureesDepotsTests`) : onglets `Bascule` « En cours N » (bandeau,
+rappel de sauvegarde, cartes de toutes les sorties en cours, la grille défile) / « Clôturées N » (+ « Nouvelle sortie » en haut à droite).
+Clôturées : titre + « 10 sorties · 119 équipements sortis » ; carte de filtres (recherche intitulé / lieu / responsable avec attente de
+300 ms, Période « Toute la saison » (1er septembre) / 30 derniers jours / 3 derniers mois / Toutes les sorties, Responsable (moniteurs
+puis classes, inactifs compris), « Effacer les filtres » si `FiltreSorties.Actif`) ; puces par type `FiltreCategories` (« Toutes »,
+nombres sans le filtre de type, point de `Theme.CouleurTypeSortie`) et `Bascule` bilan (Tous / Tout rendu / Manquants) ; tableau
+Date, Sortie (titre + lieu), Type (pastille), Responsable, Matériel, Bilan, « Détail › » ; clic sur un en-tête = tri (flèche ↓ ↑ dans
+l'en-tête ; même colonne = inverse ; dates et nombres du plus grand, textes de A à Z) ; clic ou Entrée sur une ligne = `EcranRetour`.
+`ServiceSortie.ListerClotureesAsync(FiltreSorties, page)` → `PageSorties` (+ `NbEquipements`, `ParType`) ; `Critere` traduit la période ;
+dépôt `ListerClotureesAsync(CritereSorties, decalage, nombre)` (tri par liste fermée de colonnes) et `TotaliserClotureesAsync`.
 
 Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnCours` (scan retour ; ajout de matériel encore possible)
 → `Cloturer` → `Cloturee` (scan retour encore possible pour les manquants).

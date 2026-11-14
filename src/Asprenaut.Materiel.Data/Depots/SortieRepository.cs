@@ -91,6 +91,72 @@ public sealed class SortieRepository(FabriqueConnexion fabrique) : ISortieReposi
         return lignes.AsList();
     }
 
+    // Critères des sorties clôturées (s = sortie, m = moniteur) ; le bilan passe par une sous-requête (pas d'agrégat dans WHERE).
+    private const string WhereCloturees = """
+        s.statut = 'Cloturee'
+          AND (@depuis IS NULL OR s.date_sortie >= @depuis)
+          AND (@responsableId IS NULL OR s.moniteur_id = @responsableId)
+          AND (@typeId IS NULL OR s.type_sortie_id = @typeId)
+          AND (@motif IS NULL OR s.intitule LIKE @motif OR s.lieu LIKE @motif OR TRIM(m.prenom || ' ' || m.nom) LIKE @motif)
+          AND (@bilan = 'Tous'
+               OR (@bilan = 'Manquants') = EXISTS (SELECT 1 FROM sortie_equipement x WHERE x.sortie_id = s.id AND x.statut = 'Manquant'))
+        """;
+
+    private static object ParametresCritere(CritereSorties c) => new
+    {
+        depuis = FormatIso.Ecrire(c.Depuis),
+        responsableId = c.ResponsableId,
+        typeId = c.TypeId,
+        motif = string.IsNullOrWhiteSpace(c.Recherche) ? null : $"%{c.Recherche.Trim()}%",
+        bilan = c.Bilan.ToString(),
+    };
+
+    public async Task<IReadOnlyList<SortieResume>> ListerClotureesAsync(CritereSorties critere, int decalage, int nombre, CancellationToken ct = default)
+    {
+        // Colonne de tri choisie dans une liste fermée (jamais de texte de l'utilisateur dans la requête).
+        var cle = critere.Tri switch
+        {
+            TriSorties.Sortie => "s.intitule COLLATE NOCASE",
+            TriSorties.Type => "COALESCE(ts.nom, s.type) COLLATE NOCASE",
+            TriSorties.Responsable => "moniteur_nom COLLATE NOCASE",
+            TriSorties.Materiel => "nb_total",
+            TriSorties.Bilan => "nb_manquants",
+            _ => "s.date_sortie",
+        };
+        var sens = critere.Descendant ? "DESC" : "ASC";
+        var parametres = new DynamicParameters(ParametresCritere(critere));
+        parametres.Add("decalage", Math.Max(0, decalage));
+        parametres.Add("nombre", Math.Max(0, nombre));
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        var lignes = await cx.QueryAsync<SortieResume>(new CommandDefinition(
+            $"{SelectResume} WHERE {WhereCloturees} GROUP BY s.id ORDER BY {cle} {sens}, s.id {sens} LIMIT @nombre OFFSET @decalage;",
+            parametres, cancellationToken: ct));
+        return lignes.AsList();
+    }
+
+    public async Task<TotauxSorties> TotaliserClotureesAsync(CritereSorties critere, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        var totaux = await cx.QuerySingleAsync<(int NbSorties, int NbEquipements)>(new CommandDefinition(
+            $"""
+            SELECT COUNT(*), COALESCE(SUM((SELECT COUNT(*) FROM sortie_equipement se WHERE se.sortie_id = s.id)), 0)
+            FROM sortie s JOIN moniteur m ON m.id = s.moniteur_id
+            WHERE {WhereCloturees};
+            """,
+            ParametresCritere(critere), cancellationToken: ct));
+        var parType = await cx.QueryAsync<(long? TypeId, string Nom, string Famille, int Nombre)>(new CommandDefinition(
+            $"""
+            SELECT s.type_sortie_id, COALESCE(ts.nom, s.type), s.type, COUNT(*)
+            FROM sortie s JOIN moniteur m ON m.id = s.moniteur_id LEFT JOIN type_sortie ts ON ts.id = s.type_sortie_id
+            WHERE {WhereCloturees}
+            GROUP BY s.type_sortie_id
+            ORDER BY MIN(COALESCE(ts.ordre, 999)), COALESCE(ts.nom, s.type);
+            """,
+            ParametresCritere(critere.SansType()), cancellationToken: ct));
+        return new TotauxSorties(totaux.NbSorties, totaux.NbEquipements,
+            parType.Select(t => new CompteTypeSortie(t.TypeId, t.Nom, Enum.Parse<TypeSortie>(t.Famille), t.Nombre)).ToList());
+    }
+
     public async Task<int> CompterClotureesAsync(CancellationToken ct = default)
     {
         await using var cx = await fabrique.OuvrirAsync(ct);

@@ -8,7 +8,10 @@ using Asprenaut.Materiel.Core.Services;
 
 namespace Asprenaut.Materiel.App.Ecrans;
 
-/// <summary>Accueil : bandeau, sorties en cours (cartes) et sorties clôturées (tableau).</summary>
+/// <summary>
+/// Accueil (maquette « Sorties ») : onglets « En cours » (bandeau, rappel de sauvegarde, cartes des sorties en cours) et
+/// « Clôturées » (recherche, période, responsable, puces par type, bilan, tableau trié par colonne, pages de 12).
+/// </summary>
 public sealed class EcranSorties : EcranBase
 {
     private readonly ServiceSortie _sorties;
@@ -16,19 +19,48 @@ public sealed class EcranSorties : EcranBase
     private readonly INavigation _navigation;
     private readonly ServiceReglages _reglages;
 
-    // Rappel de la sauvegarde complète hebdomadaire (stockage externe), visible seulement quand elle est à faire.
+    // Onglets et bouton « Nouvelle sortie » du haut (onglet Clôturées ; sur En cours, il est dans le bandeau).
+    private readonly Bascule _onglets = new("En cours", "Clôturées") { AccessibleName = "Sorties" };
+    private readonly BoutonArrondi _nouvelleHaut = new("Nouvelle sortie", StyleBouton.Principal, Icones.Plus) { Margin = Padding.Empty, Visible = false };
+    private readonly Control _panneauEnCours;
+    private readonly Control _panneauCloturees;
+
+    // Onglet En cours.
     private readonly BandeauMessage _rappelSauvegarde = new() { Height = 76, Margin = Padding.Empty };
     private readonly TableLayoutPanel _ligneRappel;
     private readonly Label _date = Ui.Libelle("", Theme.PoliceTitre(9.75f), Theme.AccentClair);
     private readonly Label _resume = Ui.Libelle("", Theme.Police(11.25f), Theme.TexteDoux);
-    private readonly GrilleAdaptative _cartes = new() { LargeurMin = 400, HauteurElement = 196, Ecart = 18, RangeesVisibles = 1, Margin = new Padding(0, 0, 0, 30) };
-    private readonly DataGridView _cloturees = new();
+    private readonly GrilleAdaptative _cartes = new() { LargeurMin = 400, HauteurElement = 196, Ecart = 18, Margin = Padding.Empty };
 
-    // Pagination des sorties clôturées : seule la page affichée est lue dans la base.
+    // Onglet Clôturées : filtres, tableau, pages.
+    private readonly Label _totaux = Ui.Libelle("", Theme.Police(10.5f), Theme.TexteSecondaire);
+    private readonly ChampSaisie _recherche = new() { TexteIndicatif = "Sortie, lieu, responsable", Icone = Icones.Recherche };
+    private readonly ListeDeroulante _periode = new() { AccessibleName = "Période" };
+    private readonly ListeDeroulante _responsable = new() { AccessibleName = "Responsable" };
+    private readonly BoutonArrondi _effacer = new("Effacer les filtres", StyleBouton.Lien, Icones.Croix) { Margin = Padding.Empty, Visible = false };
+    private readonly FiltreCategories _types = new(Theme.AccentClair) { LibelleTout = "Toutes", Unite = "sortie", Margin = Padding.Empty };
+    private readonly Bascule _bilan = new("Tous les bilans", "Tout rendu", "Manquants") { AccessibleName = "Bilan" };
+    private readonly DataGridView _cloturees = new();
     private readonly Label _rangPage = Ui.Libelle("", Theme.Police(9.75f), Theme.TexteSecondaire);
-    private readonly BoutonArrondi _precedente = new("‹ Précédentes", StyleBouton.Secondaire) { AccessibleName = "Sorties clôturées précédentes (plus récentes)" };
-    private readonly BoutonArrondi _suivante = new("Suivantes ›", StyleBouton.Secondaire) { AccessibleName = "Sorties clôturées suivantes (plus anciennes)" };
+    private readonly BoutonArrondi _precedente = new("‹ Précédentes", StyleBouton.Secondaire) { AccessibleName = "Sorties clôturées précédentes" };
+    private readonly BoutonArrondi _suivante = new("Suivantes ›", StyleBouton.Secondaire) { AccessibleName = "Sorties clôturées suivantes" };
+    private readonly System.Windows.Forms.Timer _attenteRecherche = new() { Interval = 300 };
+    private FiltreSorties _filtre = new();
     private PageSorties? _pageCloturees;
+    private Dictionary<string, CompteTypeSortie> _typesAffiches = [];
+    private bool _remplissage;
+
+    // Colonnes du tableau et tri correspondant (la colonne « Détail » ne trie pas).
+    private static readonly (string Nom, string Titre, float Poids, TriSorties? Tri)[] Colonnes =
+    [
+        ("date", "Date", 70, TriSorties.Date),
+        ("intitule", "Sortie", 170, TriSorties.Sortie),
+        ("type", "Type", 90, TriSorties.Type),
+        ("moniteur", "Responsable", 110, TriSorties.Responsable),
+        ("materiel", "Matériel", 80, TriSorties.Materiel),
+        ("bilan", "Bilan", 100, TriSorties.Bilan),
+        ("detail", "", 70, null),
+    ];
 
     public EcranSorties(ServiceSortie sorties, IHorloge horloge, INavigation navigation, ServiceReglages reglages)
     {
@@ -37,6 +69,7 @@ public sealed class EcranSorties : EcranBase
         _horloge = horloge;
         _navigation = navigation;
 
+        // Rappel de la sauvegarde complète hebdomadaire (stockage externe), visible seulement quand elle est à faire.
         var faire = new BoutonArrondi("Faire la sauvegarde ›", StyleBouton.Secondaire, Icones.Telecharger) { Margin = new Padding(14, 0, 0, 0) };
         faire.AccessibleDescription = "Ouvre Paramètres, sur les sauvegardes";
         faire.Click += (_, _) => _navigation.AllerA<EcranParametres>(EcranParametres.VersSauvegardes);
@@ -47,19 +80,175 @@ public sealed class EcranSorties : EcranBase
         faire.Anchor = AnchorStyles.Right;
         _ligneRappel.Visible = false;
 
-        Theme.AppliquerGrille(_cloturees);
-        Tableaux.AjouterColonne(_cloturees, "date", "Date", 70);
-        Tableaux.AjouterColonne(_cloturees, "intitule", "Sortie", 170);
-        Tableaux.AjouterColonne(_cloturees, "moniteur", "Responsable", 110);
-        Tableaux.AjouterColonne(_cloturees, "materiel", "Matériel", 90);
-        Tableaux.AjouterColonne(_cloturees, "bilan", "Bilan", 90);
+        _panneauEnCours = CreerEnCours();
+        _panneauCloturees = CreerCloturees();
+        _panneauCloturees.Visible = false;
+
+        // Haut : onglets à gauche, « Nouvelle sortie » à droite (onglet Clôturées).
+        _onglets.Changement += (_, _) => AfficherOnglet();
+        _nouvelleHaut.Click += (_, _) => _navigation.AllerA<EcranNouvelleSortie>();
+        var haut = Ui.Colonnes((_onglets, SizeType.AutoSize, 0), (new Panel { BackColor = Color.Transparent }, SizeType.Percent, 100), (_nouvelleHaut, SizeType.AutoSize, 0));
+        _onglets.Dock = _nouvelleHaut.Dock = DockStyle.None;
+        _onglets.Anchor = AnchorStyles.Left;
+        _nouvelleHaut.Anchor = AnchorStyles.Right;
+        haut.Height = Theme.HauteurBouton + 10;
+        haut.Margin = new Padding(0, 0, 0, 24);
+
+        var contenu = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent, Margin = Padding.Empty };
+        _panneauEnCours.Dock = _panneauCloturees.Dock = DockStyle.Fill;
+        contenu.Controls.Add(_panneauEnCours);
+        contenu.Controls.Add(_panneauCloturees);
+
+        Controls.Add(Ui.Colonne((haut, SizeType.AutoSize, 0), (contenu, SizeType.Percent, 100)));
+    }
+
+    public override string Titre => "Sorties";
+
+    public override EntreeMenu Menu => EntreeMenu.Sorties;
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _attenteRecherche.Dispose();
+        }
+
+        base.Dispose(disposing);
+    }
+
+    private bool Cloturees => _onglets.SelectedIndex == 1;
+
+    private void AfficherOnglet()
+    {
+        _panneauEnCours.Visible = !Cloturees;
+        _panneauCloturees.Visible = Cloturees;
+        _nouvelleHaut.Visible = Cloturees;
+    }
+
+    // ---------------------------------------------------------------- Onglet En cours
+
+    private Control CreerEnCours()
+    {
+        var titreEnCours = Ui.TitreSection("Sorties en cours");
+        var precision = Ui.Libelle("matériel encore dehors", Theme.Police(10.5f), Theme.TexteSecondaire);
+        precision.Margin = new Padding(10, 7, 0, 0);
+        var colonne = Ui.Colonne(
+            (CreerBandeau(), SizeType.Absolute, 230 + 30),
+            (_ligneRappel, SizeType.AutoSize, 0),
+            (Ui.Rangee(true, titreEnCours, precision), SizeType.AutoSize, 0),
+            (_cartes, SizeType.Percent, 100)); // Toutes les sorties en cours ; la grille défile si besoin.
+
+        // Écran peu haut : bandeau plus bas, pour garder de la place aux cartes.
+        colonne.Resize += (_, _) =>
+        {
+            var hauteur = colonne.Height < Dessin.Echelle(colonne, 640) ? 196 : 230;
+            var voulue = Dessin.Echelle(colonne, hauteur + 30);
+            if (Math.Abs(colonne.RowStyles[0].Height - voulue) > 0.5f)
+            {
+                colonne.RowStyles[0].Height = voulue;
+            }
+        };
+        return colonne;
+    }
+
+    // ---------------------------------------------------------------- Onglet Clôturées
+
+    private Control CreerCloturees()
+    {
+        // Titre et totaux du filtre : « 10 sorties · 119 équipements sortis ».
+        var titre = Ui.TitreSection("Sorties clôturées");
+        _totaux.Margin = new Padding(12, 9, 0, 0);
+        var entete = Ui.Rangee(true, titre, _totaux);
+        entete.Margin = new Padding(0, 0, 0, 14);
+
+        // Filtres : recherche, période, responsable, effacer ; puis types et bilan.
+        _periode.Items.AddRange([
+            new Choix<PeriodeSorties>(PeriodeSorties.Saison, "Toute la saison"),
+            new Choix<PeriodeSorties>(PeriodeSorties.TrenteJours, "30 derniers jours"),
+            new Choix<PeriodeSorties>(PeriodeSorties.TroisMois, "3 derniers mois"),
+            new Choix<PeriodeSorties>(PeriodeSorties.Toutes, "Toutes les sorties"),
+        ]);
+        _periode.SelectedIndex = 0;
+        _responsable.Items.Add(new Choix<long?>(null, "Tous les responsables"));
+        _responsable.SelectedIndex = 0;
+        _recherche.Champ.AccessibleName = "Rechercher une sortie";
+        _recherche.Champ.TextChanged += (_, _) =>
+        {
+            if (!_remplissage)
+            {
+                _attenteRecherche.Stop();
+                _attenteRecherche.Start();
+            }
+        };
+        _attenteRecherche.Tick += (_, _) =>
+        {
+            _attenteRecherche.Stop();
+            Filtrer(_filtre with { Recherche = _recherche.Valeur });
+        };
+        _periode.SelectedIndexChanged += (_, _) =>
+        {
+            if (!_remplissage && _periode.SelectedItem is Choix<PeriodeSorties> p)
+            {
+                Filtrer(_filtre with { Periode = p.Valeur });
+            }
+        };
+        _responsable.SelectedIndexChanged += (_, _) =>
+        {
+            if (!_remplissage && _responsable.SelectedItem is Choix<long?> r)
+            {
+                Filtrer(_filtre with { ResponsableId = r.Valeur });
+            }
+        };
+        _types.Changement += (_, _) =>
+            Filtrer(_filtre with { TypeId = _types.Selection is { } nom && _typesAffiches.TryGetValue(nom, out var t) ? t.TypeId : null });
+        _types.CouleurPoint = nom => _typesAffiches.TryGetValue(nom, out var t) ? Theme.CouleurTypeSortie(t.Famille) : null;
+        _bilan.Changement += (_, _) =>
+        {
+            if (!_remplissage)
+            {
+                Filtrer(_filtre with { Bilan = (BilanSorties)_bilan.SelectedIndex });
+            }
+        };
+        _effacer.Click += (_, _) => EffacerFiltres();
+
+        static Control Champ(string libelle, Control champ)
+        {
+            var etiquette = Ui.LibelleChamp(libelle);
+            etiquette.Margin = new Padding(2, 0, 0, 6);
+            var pile = Ui.Colonne((etiquette, SizeType.AutoSize, 0), (champ, SizeType.Absolute, Theme.HauteurChamp));
+            pile.Margin = new Padding(0, 0, 12, 0);
+            return pile;
+        }
+
+        var ligne1 = Ui.Colonnes(
+            (Champ("Recherche", _recherche), SizeType.Percent, 100),
+            (Champ("Période", _periode), SizeType.Absolute, 220),
+            (Champ("Responsable", _responsable), SizeType.Absolute, 260),
+            (_effacer, SizeType.AutoSize, 0));
+        _effacer.Dock = DockStyle.None;
+        _effacer.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+        var ligne2 = Ui.Colonnes((_types, SizeType.Percent, 100), (_bilan, SizeType.AutoSize, 0));
+        _bilan.Dock = DockStyle.None;
+        _bilan.Anchor = AnchorStyles.Right;
+        var filtres = Ui.Colonne((ligne1, SizeType.Absolute, Theme.HauteurChamp + 26), (ligne2, SizeType.Absolute, 52));
+        ligne2.Margin = new Padding(0, 14, 0, 0);
+        var carteFiltres = new Carte { Padding = new Padding(18, 16, 18, 14), Rayon = 22, Margin = new Padding(0, 0, 0, 18) };
+        filtres.Dock = DockStyle.Fill;
+        carteFiltres.Controls.Add(filtres);
+
+        // Tableau : clic sur une ligne (ou Entrée) = détail de la sortie ; clic sur un en-tête = tri.
+        Theme.AppliquerGrille(_cloturees, 58);
+        foreach (var (nom, titreColonne, poids, _) in Colonnes)
+        {
+            Tableaux.AjouterColonne(_cloturees, nom, titreColonne, poids);
+        }
+
         _cloturees.AccessibleName = "Sorties clôturées";
-        // Un clic (ou Entrée) sur une sortie clôturée l'ouvre : on y voit ses manquants, et en mode gestion on peut les rendre.
         _cloturees.CellClick += (_, e) =>
         {
             if (e.RowIndex >= 0 && _cloturees.Rows[e.RowIndex].Tag is SortieResume s)
             {
-                _navigation.AllerA<EcranRetour>(s.Id);
+                _navigation.AllerA<EcranRetour>(s.Id); // Ses manquants ; en mode gestion, on peut les rendre.
             }
         };
         _cloturees.KeyDown += (_, e) =>
@@ -70,34 +259,21 @@ public sealed class EcranSorties : EcranBase
                 _navigation.AllerA<EcranRetour>(s.Id);
             }
         };
-        _cloturees.CellMouseEnter += (_, e) => _cloturees.Cursor = e.RowIndex >= 0 ? Cursors.Hand : Cursors.Default;
-        _cloturees.CellFormatting += (_, e) =>
+        _cloturees.ColumnHeaderMouseClick += (_, e) =>
         {
-            if (e.ColumnIndex == _cloturees.Columns["intitule"]!.Index && e.CellStyle is not null)
+            if (Colonnes[e.ColumnIndex].Tri is { } tri)
             {
-                e.CellStyle.Font = Theme.PoliceTitre(10.5f);
-                e.CellStyle.ForeColor = Theme.Texte;
+                // Même colonne : on inverse ; autre colonne : dates et nombres du plus grand, textes de A à Z.
+                var descendant = _filtre.Tri == tri ? !_filtre.Descendant : tri is TriSorties.Date or TriSorties.Materiel or TriSorties.Bilan;
+                Filtrer(_filtre with { Tri = tri, Descendant = descendant }, page: _pageCloturees?.Page ?? 1);
             }
         };
-        _cloturees.CellPainting += (_, e) =>
-        {
-            if (e.RowIndex >= 0 && e.ColumnIndex == _cloturees.Columns["bilan"]!.Index && _cloturees.Rows[e.RowIndex].Tag is SortieResume s)
-            {
-                if (s.NbManquants == 0)
-                {
-                    Tableaux.PeindrePastille(e, "Tout rendu", Theme.Retour);
-                }
-                else
-                {
-                    Tableaux.PeindrePastille(e, Libelles.Pluriel(s.NbManquants, "manquant"), Theme.Depart);
-                }
-            }
-        };
+        _cloturees.CellMouseEnter += (_, e) =>
+            _cloturees.Cursor = e.RowIndex >= 0 || (e.ColumnIndex >= 0 && Colonnes[e.ColumnIndex].Tri is not null) ? Cursors.Hand : Cursors.Default;
+        _cloturees.CellPainting += PeindreCellule;
 
-        var carteCloturees = new Carte { Padding = new Padding(8, 6, 8, 8), Rayon = 22 };
+        var carteTableau = new Carte { Padding = new Padding(8, 6, 8, 8), Rayon = 22 };
         _cloturees.Dock = DockStyle.Fill;
-
-        // Sous le tableau : « Sorties 1 à 12 sur 143 », puis précédentes / suivantes.
         _rangPage.AutoSize = false;
         _rangPage.Dock = DockStyle.Fill;
         _rangPage.TextAlign = ContentAlignment.MiddleLeft;
@@ -110,47 +286,105 @@ public sealed class EcranSorties : EcranBase
         pagination.Dock = DockStyle.Bottom;
         pagination.Height = Theme.HauteurBouton + 12;
         pagination.Padding = new Padding(0, 6, 0, 0);
-        carteCloturees.Controls.Add(pagination);
-        carteCloturees.Controls.Add(_cloturees);
+        carteTableau.Controls.Add(pagination);
+        carteTableau.Controls.Add(_cloturees);
         _cloturees.BringToFront(); // Le tableau prend la place laissée par la barre du bas.
 
-        var titreEnCours = Ui.TitreSection("Sorties en cours");
-        var precision = Ui.Libelle("matériel encore dehors", Theme.Police(10.5f), Theme.TexteSecondaire);
-        precision.Margin = new Padding(10, 7, 0, 0);
-
-        var colonne = Ui.Colonne(
-            (CreerBandeau(), SizeType.Absolute, 230 + 30),
-            (_ligneRappel, SizeType.AutoSize, 0),
-            (Ui.Rangee(true, titreEnCours, precision), SizeType.AutoSize, 0),
-            (_cartes, SizeType.Absolute, 196 + 30),
-            (Ui.TitreSection("Sorties clôturées"), SizeType.AutoSize, 0),
-            (carteCloturees, SizeType.Percent, 100));
-        Controls.Add(colonne);
-
-        // Écran peu haut : bandeau plus bas, pour garder de la place au tableau des sorties clôturées.
-        colonne.Resize += (_, _) =>
-        {
-            var hauteur = colonne.Height < Dessin.Echelle(colonne, 760) ? 196 : 230;
-            var voulue = Dessin.Echelle(colonne, hauteur + 30);
-            if (Math.Abs(colonne.RowStyles[0].Height - voulue) > 0.5f)
-            {
-                colonne.RowStyles[0].Height = voulue;
-            }
-        };
+        return Ui.Colonne(
+            (entete, SizeType.AutoSize, 0),
+            (carteFiltres, SizeType.Absolute, Theme.HauteurChamp + 26 + 52 + 30 + 18),
+            (carteTableau, SizeType.Percent, 100));
     }
 
-    public override string Titre => "Sorties";
+    /// <summary>Sortie (titre et lieu), type (pastille de sa couleur), bilan (pastille), bouton « Détail ».</summary>
+    private void PeindreCellule(object? sender, DataGridViewCellPaintingEventArgs e)
+    {
+        if (e.RowIndex < 0 || e.ColumnIndex < 0 || e.Graphics is not { } g || _cloturees.Rows[e.RowIndex].Tag is not SortieResume s)
+        {
+            return;
+        }
 
-    public override EntreeMenu Menu => EntreeMenu.Sorties;
+        switch (Colonnes[e.ColumnIndex].Nom)
+        {
+            case "intitule":
+                var selection = (e.State & DataGridViewElementStates.Selected) != 0;
+                e.Paint(e.CellBounds, DataGridViewPaintParts.Background | DataGridViewPaintParts.Border | (selection ? DataGridViewPaintParts.SelectionBackground : 0));
+                var x = e.CellBounds.X + (int)Dessin.Echelle(_cloturees, 12);
+                var l = e.CellBounds.Width - (int)Dessin.Echelle(_cloturees, 20);
+                var milieu = e.CellBounds.Y + (e.CellBounds.Height / 2);
+                var lieu = s.Lieu.Trim();
+                var hTitre = (int)Dessin.Echelle(_cloturees, 22);
+                Dessin.Texte(g, s.Intitule, Theme.PoliceTitre(10.5f), new Rectangle(x, lieu.Length == 0 ? milieu - (hTitre / 2) : milieu - hTitre, l, hTitre), Theme.Texte);
+                if (lieu.Length > 0)
+                {
+                    Dessin.Texte(g, lieu, Theme.Police(9f), new Rectangle(x, milieu, l, (int)Dessin.Echelle(_cloturees, 20)), Theme.TexteSecondaire);
+                }
+
+                e.Handled = true;
+                break;
+            case "type":
+                Tableaux.PeindrePastille(e, s.LibelleType.ToUpper(Libelles.Culture), Theme.CouleurTypeSortie(s.Type));
+                break;
+            case "bilan":
+                if (s.NbManquants == 0)
+                {
+                    Tableaux.PeindrePastille(e, "Tout rendu", Theme.Retour);
+                }
+                else
+                {
+                    Tableaux.PeindrePastille(e, Libelles.Pluriel(s.NbManquants, "manquant"), Theme.Depart);
+                }
+
+                break;
+            case "detail":
+                Tableaux.PeindreBoutons(e, "Détail ›");
+                break;
+        }
+    }
+
+    private void Filtrer(FiltreSorties filtre, int page = 1)
+    {
+        _filtre = filtre;
+        Executer(() => AfficherClotureesAsync(page));
+    }
+
+    private void EffacerFiltres()
+    {
+        _remplissage = true;
+        _attenteRecherche.Stop();
+        _recherche.Valeur = "";
+        _periode.SelectedIndex = 0;
+        _responsable.SelectedIndex = 0;
+        _bilan.SelectedIndex = 0;
+        _types.Selection = null;
+        _remplissage = false;
+        Filtrer(new FiltreSorties { Tri = _filtre.Tri, Descendant = _filtre.Descendant });
+    }
 
     protected override async Task ChargerAsync(object? parametre)
     {
         var enCours = await _sorties.ListerEnCoursAsync();
+        var toutes = await _sorties.ListerClotureesAsync(1, 1); // Nombre de l'onglet : toutes les sorties clôturées.
+        var responsables = await _sorties.ListerResponsablesAsync();
         if (IsDisposed)
         {
             return;
         }
 
+        _onglets.DefinirNombre(0, enCours.Count);
+        _onglets.DefinirNombre(1, toutes.Total);
+        _remplissage = true;
+        while (_responsable.Items.Count > 1)
+        {
+            _responsable.Items.RemoveAt(1);
+        }
+
+        foreach (var m in responsables)
+        {
+            _responsable.Items.Add(new Choix<long?>(m.Id, m.EstClasse ? $"{m.NomComplet} (classe)" : m.NomComplet));
+        }
+
+        _remplissage = false;
         _date.Text = _horloge.AujourdHui.ToString("dddd d MMMM", Libelles.Culture).ToUpper(Libelles.Culture);
 
         // Sauvegarde complète de la semaine : rappel tant qu'elle n'est pas faite.
@@ -160,6 +394,7 @@ public sealed class EcranSorties : EcranBase
         {
             _rappelSauvegarde.Afficher(NiveauResultat.Avertissement, sauvegarde.Message, RappelSauvegarde.Conseil, detailEnCode: false);
         }
+
         var dehors = enCours.Sum(s => s.NbDehors);
         _resume.Text = enCours.Count == 0
             ? "Aucune sortie en cours : tout le matériel est rangé."
@@ -200,27 +435,45 @@ public sealed class EcranSorties : EcranBase
         await AfficherClotureesAsync(_pageCloturees?.Page ?? 1);
     }
 
-    /// <summary>Affiche une page des sorties clôturées (12 par page, la plus récemment clôturée d'abord).</summary>
+    /// <summary>Une page des sorties clôturées du filtre (12 par page), ses totaux, les puces par type et la barre des pages.</summary>
     private async Task AfficherClotureesAsync(int page)
     {
-        var resultat = await _sorties.ListerClotureesAsync(page);
-        if (IsDisposed)
+        var filtre = _filtre;
+        var resultat = await _sorties.ListerClotureesAsync(filtre, page);
+        if (IsDisposed || filtre != _filtre)
         {
-            return;
+            return; // Un autre filtre a été choisi entre-temps : sa propre lecture l'affichera.
         }
 
         _pageCloturees = resultat;
+        _totaux.Text = $"{Libelles.Pluriel(resultat.Total, "sortie")} · {Libelles.Pluriel(resultat.NbEquipements, "équipement sorti", "équipements sortis")}";
+        _effacer.Visible = filtre.Actif;
+
+        // Puces par type (sans le filtre de type).
+        var parType = (resultat.ParType ?? []).ToList();
+        _typesAffiches = parType.GroupBy(t => t.Nom).ToDictionary(g => g.Key, g => g.First());
+        _types.Selection = filtre.TypeId is null ? null : parType.FirstOrDefault(t => t.TypeId == filtre.TypeId)?.Nom;
+        _types.Afficher(parType.Sum(t => t.Nombre), parType.Select(t => (t.Nom, t.Nombre)));
+
+        // En-têtes : la colonne triée porte une flèche.
+        for (var i = 0; i < Colonnes.Length; i++)
+        {
+            var c = Colonnes[i];
+            var fleche = c.Tri == filtre.Tri ? (filtre.Descendant ? " ↓" : " ↑") : "";
+            _cloturees.Columns[i].HeaderText = c.Titre.ToUpper(Libelles.Culture) + fleche;
+        }
+
         _cloturees.SuspendLayout();
         _cloturees.Rows.Clear();
         foreach (var s in resultat.Sorties)
         {
-            var i = _cloturees.Rows.Add(Libelles.Date(s.DateSortie), s.Intitule, s.MoniteurNom, Libelles.Pluriel(s.NbTotal, "équipement"), "");
+            var i = _cloturees.Rows.Add(Libelles.Date(s.DateSortie), s.Intitule, s.LibelleType, s.MoniteurNom, $"{s.NbTotal} équip.", "", "");
             _cloturees.Rows[i].Tag = s;
         }
 
         _cloturees.ResumeLayout();
         _rangPage.Text = resultat.Total == 0
-            ? "Aucune sortie clôturée pour l'instant."
+            ? filtre.Actif ? "Aucune sortie ne correspond. Effacez les filtres pour tout revoir." : "Aucune sortie clôturée pour l'instant."
             : resultat.NbPages == 1
                 ? Libelles.Pluriel(resultat.Total, "sortie clôturée", "sorties clôturées")
                 : $"Sorties {resultat.Premiere} à {resultat.Derniere} sur {resultat.Total} · page {resultat.Page} / {resultat.NbPages}";

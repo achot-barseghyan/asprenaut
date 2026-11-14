@@ -89,6 +89,40 @@ public sealed class ServiceSortie(
         return new PageSorties(await sorties.ListerClotureesAsync((page - 1) * parPage, parPage, ct), total, page, parPage);
     }
 
+    /// <summary>
+    /// Onglet « Clôturées » : une page des sorties qui correspondent au filtre (recherche dans l'intitulé, le lieu et le
+    /// responsable ; période ; responsable ; type ; bilan), dans l'ordre choisi, avec le nombre d'équipements sortis et le
+    /// nombre de sorties par type (sans le filtre de type, pour les puces). Page hors limites ramenée à la première ou à la dernière.
+    /// </summary>
+    public async Task<PageSorties> ListerClotureesAsync(FiltreSorties filtre, int page, int parPage = SortiesParPage, CancellationToken ct = default)
+    {
+        parPage = Math.Max(1, parPage);
+        var critere = Critere(filtre);
+        var totaux = await sorties.TotaliserClotureesAsync(critere, ct);
+        var nbPages = Math.Max(1, (totaux.NbSorties + parPage - 1) / parPage);
+        page = Math.Clamp(page, 1, nbPages);
+        var liste = await sorties.ListerClotureesAsync(critere, (page - 1) * parPage, parPage, ct);
+        return new PageSorties(liste, totaux.NbSorties, page, parPage, totaux.NbEquipements, totaux.ParType);
+    }
+
+    /// <summary>Critères du dépôt : la période devient une date (saison = depuis le 1er septembre).</summary>
+    public CritereSorties Critere(FiltreSorties filtre)
+    {
+        var aujourdhui = horloge.AujourdHui;
+        DateOnly? depuis = filtre.Periode switch
+        {
+            PeriodeSorties.Saison => ServiceMoniteurs.DebutSaison(aujourdhui),
+            PeriodeSorties.TrenteJours => aujourdhui.AddDays(-30),
+            PeriodeSorties.TroisMois => aujourdhui.AddMonths(-3),
+            _ => null,
+        };
+        return new CritereSorties(filtre.Recherche, depuis, filtre.ResponsableId, filtre.TypeId, filtre.Bilan, filtre.Tri, filtre.Descendant);
+    }
+
+    /// <summary>Responsables proposés dans le filtre : moniteurs puis classes, inactifs compris (ils ont des sorties passées).</summary>
+    public Task<IReadOnlyList<Moniteur>> ListerResponsablesAsync(CancellationToken ct = default) =>
+        moniteurs.ListerAsync(actifsSeulement: false, ct);
+
     public Task<SortieResume?> ObtenirResumeAsync(long sortieId, CancellationToken ct = default) =>
         sorties.ObtenirResumeAsync(sortieId, ct);
 
