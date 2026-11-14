@@ -262,7 +262,7 @@ public sealed class ListeDeroulante : ComboBox
 /// Champ de date sombre : saisie "jj/mm/aaaa" ou calendrier déroulant (<see cref="Calendrier"/> : bouton, Alt + flèche bas
 /// ou F4), jour de la semaine en français. (Le DateTimePicker de Windows reste blanc et suit la langue du système.)
 /// </summary>
-public sealed class ChampDate : Panel
+public sealed class ChampDate : Panel, IFondDessine
 {
     private static readonly string[] Formats = ["dd/MM/yyyy", "d/M/yyyy", "dd/MM/yy", "d/M/yy", "ddMMyyyy"];
     private readonly TextBox _texte = new();

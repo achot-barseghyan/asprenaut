@@ -14,6 +14,10 @@ namespace Asprenaut.Materiel.App.Ecrans;
 /// </summary>
 public static class FormulaireEquipement
 {
+    // Fenêtre large et aérée : la fiche compte beaucoup de champs, deux par rangée.
+    private const int Largeur = 760;
+    private const int Marge = 44;
+
     /// <summary>
     /// Ouvre la fenêtre d'ajout. <paramref name="code"/> pré-remplit le code (étiquette scannée) ; sinon un code est proposé
     /// selon la catégorie. Retourne le code créé, ou null si l'utilisateur a annulé.
@@ -48,7 +52,7 @@ public static class FormulaireEquipement
             }
 
             return resultat;
-        });
+        }, Largeur, Marge);
         champs.Placer(fenetre, etat: false);
         fenetre.Shown += (_, _) => champs.Nom.Champ.Focus();
 
@@ -71,7 +75,7 @@ public static class FormulaireEquipement
             // Dernière révision inchangée : rien à enregistrer.
             var revision = champs.DerniereRevision.Date == derniereRevision ? null : champs.DerniereRevision.Date;
             return await inventaire.ModifierAsync(champs.Lire(new Equipement { Id = equipement.Id }), revision);
-        });
+        }, Largeur, Marge);
         champs.Placer(fenetre, etat: true);
         fenetre.Shown += (_, _) => champs.Nom.Champ.Focus();
         return fenetre.ShowDialog(proprietaire) == DialogResult.OK;
@@ -163,7 +167,7 @@ public static class FormulaireEquipement
                 champ.Champ.AccessibleName = nom;
             }
 
-            c.Aide.MaximumSize = new Size(460, 0);
+            c.Aide.MaximumSize = new Size(Largeur - 2 * Marge, 0);
 
             // Dernière révision tapée (ou choisie dans le calendrier) : la prochaine est calculée tout de suite.
             c.DerniereRevision.DateChangee += (_, _) => c.CalculerProchaineRevision();
@@ -334,14 +338,14 @@ public static class FormulaireEquipement
         {
             // Catégorie (maquette « Ajouter un équipement ») : liste avec recherche, ajout et suppression intégrés.
             fenetre.Champ("Catégorie", Categorie, Categorie.Height);
-            fenetre.Champ("Code de l'étiquette", Code);
             if (etat)
             {
-                fenetre.DeuxChamps("Nom", Nom, "État", Etat);
+                fenetre.DeuxChamps("Code de l'étiquette", Code, "État", Etat);
+                fenetre.Champ("Nom", Nom);
             }
             else
             {
-                fenetre.Champ("Nom", Nom);
+                fenetre.DeuxChamps("Code de l'étiquette", Code, "Nom", Nom);
             }
 
             _rangeeModele = fenetre.DeuxChamps("Marque", Marque, "Modèle", Modele);

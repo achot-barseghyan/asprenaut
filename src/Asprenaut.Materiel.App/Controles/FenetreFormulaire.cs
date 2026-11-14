@@ -10,19 +10,29 @@ namespace Asprenaut.Materiel.App.Controles;
 /// </summary>
 public sealed class FenetreFormulaire : Form
 {
-    private const int Largeur = 520;
+    /// <summary>Largeur d'origine des formulaires (pixels logiques, marges comprises).</summary>
+    public const int LargeurNormale = 520;
+
+    private readonly int _marge;
+    private readonly int _ecart;
 
     private readonly TableLayoutPanel _champs;
     private readonly Panel _cadre;
+    private readonly TableLayoutPanel _page;
     private readonly Label _message = Ui.Libelle("", Theme.PoliceTitre(10.5f), Theme.Erreur);
     private readonly BoutonArrondi _valider;
     private readonly Label _sousTitre = Ui.Libelle("", Theme.Police(9.75f), Theme.TexteSecondaireClair);
     private readonly Pastille _badge = new("", Theme.FondRetour, Theme.Retour, police: Theme.PoliceGrasse(7.5f), hauteur: 22);
     private readonly Func<Task<ResultatOperation>> _validation;
 
-    public FenetreFormulaire(string titre, string texteValider, Func<Task<ResultatOperation>> validation)
+    /// <param name="largeur">Largeur de la fenêtre (marges comprises), en pixels logiques.</param>
+    /// <param name="marge">Marge à gauche et à droite ; l'écart entre deux champs côte à côte la suit.</param>
+    public FenetreFormulaire(string titre, string texteValider, Func<Task<ResultatOperation>> validation, int largeur = LargeurNormale, int marge = 28)
     {
         _validation = validation;
+        _marge = marge;
+        _ecart = Math.Max(7, marge / 4);
+        var largeurChamps = largeur - 2 * marge;
         Text = titre;
         BackColor = Theme.Surface;
         ForeColor = Theme.Texte;
@@ -36,7 +46,7 @@ public sealed class FenetreFormulaire : Form
         AutoScaleMode = AutoScaleMode.None;
         AutoSize = true;
         AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        Padding = new Padding(28, 24, 28, 24);
+        Padding = new Padding(marge, 24, marge, 24);
 
         // Champs dans un cadre qui défile si la fenêtre dépasse la hauteur de l'écran (fiche d'un détendeur sur un petit écran).
         _champs = new TableLayoutPanel
@@ -46,7 +56,7 @@ public sealed class FenetreFormulaire : Form
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             BackColor = Color.Transparent,
             Margin = Padding.Empty,
-            MinimumSize = new Size(Largeur - 56, 0),
+            MinimumSize = new Size(largeurChamps, 0),
         };
         _champs.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         _cadre = new Panel { AutoScroll = true, BackColor = Theme.Surface, Margin = Padding.Empty };
@@ -63,7 +73,7 @@ public sealed class FenetreFormulaire : Form
         var boutons = Ui.Rangee(false, _valider, annuler);
         boutons.Margin = new Padding(0, 16, 0, 0);
         boutons.Anchor = AnchorStyles.Right;
-        _message.MaximumSize = new Size(Largeur - 56, 0);
+        _message.MaximumSize = new Size(largeurChamps, 0);
         _message.Margin = new Padding(0, 8, 0, 0);
         _message.Visible = false; // Affiché seulement en cas d'erreur.
 
@@ -80,7 +90,7 @@ public sealed class FenetreFormulaire : Form
         entete.Controls.Add(Ui.Pile(titreLibelle, _sousTitre), 0, 0);
         entete.Controls.Add(_badge, 1, 0);
 
-        var page = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, BackColor = Color.Transparent, Margin = Padding.Empty, MinimumSize = new Size(Largeur - 56, 0) };
+        var page = _page = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, BackColor = Color.Transparent, Margin = Padding.Empty, MinimumSize = new Size(largeurChamps, 0) };
         page.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         foreach (var (c, i) in new Control[] { entete, _cadre, _message, boutons }.Select((c, i) => (c, i)))
         {
@@ -127,10 +137,10 @@ public sealed class FenetreFormulaire : Form
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, hauteur));
         var l1 = Ui.LibelleChamp(libelle1);
         var l2 = Ui.LibelleChamp(libelle2);
-        l1.Margin = new Padding(0, 0, 7, 8);
-        l2.Margin = new Padding(7, 0, 0, 8);
-        champ1.Margin = new Padding(0, 0, 7, 0);
-        champ2.Margin = new Padding(7, 0, 0, 0);
+        l1.Margin = new Padding(0, 0, _ecart, 8);
+        l2.Margin = new Padding(_ecart, 0, 0, 8);
+        champ1.Margin = new Padding(0, 0, _ecart, 0);
+        champ2.Margin = new Padding(_ecart, 0, 0, 0);
         champ1.Dock = champ2.Dock = DockStyle.Fill;
         table.Controls.Add(l1, 0, 0);
         table.Controls.Add(l2, 1, 0);
@@ -166,7 +176,8 @@ public sealed class FenetreFormulaire : Form
             Dessin.MettreALEchelle(c, this);
         }
 
-        Padding = new Padding((int)Dessin.Echelle(this, 28), (int)Dessin.Echelle(this, 24), (int)Dessin.Echelle(this, 28), (int)Dessin.Echelle(this, 24));
+        Padding = new Padding((int)Dessin.Echelle(this, _marge), (int)Dessin.Echelle(this, 24), (int)Dessin.Echelle(this, _marge), (int)Dessin.Echelle(this, 24));
+        _page.Location = new Point(Padding.Left, Padding.Top); // Sinon la page reste collée au bord gauche.
         AjusterCadre();
         base.OnLoad(e);
     }
