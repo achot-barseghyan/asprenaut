@@ -422,6 +422,14 @@ Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services
 à côté de la base d'essai : les essais ne touchent jamais les réglages réels. Préfixe des étiquettes : `CodeScanne.Nettoyer(brut, prefixe)`.
 Sauvegardes : `IServiceSauvegarde` (dossier modifiable, dernière sauvegarde, `RestaurerAsync` qui vérifie le fichier,
 copie les données actuelles en `materiel_…_avant-restauration.db`, puis réapplique les migrations).
+Sauvegarde complète (`ISauvegardeComplete`, `Data/Sauvegardes/SauvegardeComplete`, `SauvegardeCompleteTests`) : un .zip avec
+`asprenaut-sauvegarde.json` (format, date, version de la base), `materiel.db` (API backup), `reglages.json` (`Reglages` seuls,
+pas `CheminBase` : `IReglagesSauvegardables` / App `ReglagesSauvegardables`) et `Manuels/*.pdf`. Paramètres › Données et
+sauvegardes : « Faire une sauvegarde complète… » (libre) ; « Restaurer… » accepte aussi un .zip (action RestaurerSauvegarde) :
+tout est vérifié avant (zip, description, base, réglages lisibles), puis base par `RestaurerAsync` (copie de sécurité), réglages
+(ancien fichier copié en `parametres_avant-restauration.json`, dossier des sauvegardes de ce PC gardé, `DeverrouilleAuDemarrage`
+faux, `ParametresApplication.Remplacee` bloque toute réécriture), manuels (même nom remplacé) ; puis `Application.Restart()`.
+Installer le PC du club : sauvegarde complète faite sur le PC de préparation, « Restaurer… » sur le PC du club.
 Étiquettes QR : section retirée de l'écran Paramètres à la demande du demandeur (impression non prévue pour l'instant).
 
 Écran Sorties : les sorties clôturées sont paginées (`ServiceSortie.ListerClotureesAsync(page)` → `PageSorties`, `SortiesParPage` = 12,

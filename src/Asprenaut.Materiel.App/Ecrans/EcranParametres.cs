@@ -18,6 +18,7 @@ public sealed class EcranParametres : EcranBase
 {
     private readonly ServiceReglages _reglages;
     private readonly IServiceSauvegarde _sauvegardes;
+    private readonly ISauvegardeComplete _complete;
     private readonly INavigation _navigation;
     private readonly ParametresApplication _parametres;
     private readonly BandeauMessage _etatSauvegarde = new() { Margin = new Padding(0, 0, 0, 18) };
@@ -37,7 +38,7 @@ public sealed class EcranParametres : EcranBase
     private readonly ServicePrestataires _prestataires;
     private readonly ServiceInventaire _inventaire;
 
-    public EcranParametres(ServiceReglages reglages, IServiceSauvegarde sauvegardes, INavigation navigation, ParametresApplication parametres, ServiceGestion gestion, GardeGestion garde, ServiceExport export, ServiceCompteur compteur, ServiceTypesSortie typesSortie, ServicePrestataires prestataires, ServiceInventaire inventaire)
+    public EcranParametres(ServiceReglages reglages, IServiceSauvegarde sauvegardes, ISauvegardeComplete complete, INavigation navigation, ParametresApplication parametres, ServiceGestion gestion, GardeGestion garde, ServiceExport export, ServiceCompteur compteur, ServiceTypesSortie typesSortie, ServicePrestataires prestataires, ServiceInventaire inventaire)
     {
         _export = export;
         _compteur = compteur;
@@ -48,6 +49,7 @@ public sealed class EcranParametres : EcranBase
         _garde = garde;
         _reglages = reglages;
         _sauvegardes = sauvegardes;
+        _complete = complete;
         _navigation = navigation;
         _parametres = parametres;
 
@@ -919,6 +921,20 @@ public sealed class EcranParametres : EcranBase
         var boutons = Ui.Colonnes((sauvegarder, SizeType.Percent, 33.3f), (restaurer, SizeType.Percent, 33.3f), (exporter, SizeType.Percent, 33.3f));
         boutons.Height = Theme.HauteurBouton;
         carte.Ajouter(boutons);
+
+        // Sauvegarde complète : base + réglages + manuels dans un seul fichier (panne du PC, installation du PC du club).
+        var titreComplete = Ui.Libelle("Sauvegarde complète", Theme.PoliceTitre(10.5f), Theme.Texte);
+        titreComplete.Margin = new Padding(0, 22, 0, 4);
+        carte.Ajouter(titreComplete);
+        var aideComplete = Ui.Libelle("Un seul fichier .zip avec les données, tous les réglages et les manuels. « Restaurer… » le reprend en entier, par exemple pour installer un autre PC.",
+            Theme.Police(9.75f), Theme.TexteSecondaire);
+        aideComplete.Margin = new Padding(0, 0, 0, 12);
+        carte.Ajouter(aideComplete);
+        var complete = new BoutonArrondi("Faire une sauvegarde complète…", StyleBouton.Secondaire, Icones.Telecharger) { AutoSize = false, Margin = Padding.Empty };
+        complete.Click += (_, _) => Executer(SauvegarderCompleteAsync); // Libre, comme une sauvegarde simple.
+        var ligneComplete = Ui.Colonnes((complete, SizeType.Percent, 100));
+        ligneComplete.Height = Theme.HauteurBouton;
+        carte.Ajouter(ligneComplete);
         return carte;
     }
 
@@ -1029,7 +1045,7 @@ public sealed class EcranParametres : EcranBase
         {
             Title = "Choisir la sauvegarde à restaurer",
             InitialDirectory = _sauvegardes.Dossier,
-            Filter = "Sauvegardes Asprenaut (materiel_*.db)|materiel_*.db|Toutes les bases (*.db)|*.db",
+            Filter = "Sauvegardes Asprenaut (*.zip, materiel_*.db)|*.zip;materiel_*.db|Sauvegardes complètes (*.zip)|*.zip|Toutes les bases (*.db)|*.db",
             CheckFileExists = true,
         };
         if (dialogue.ShowDialog(FindForm()) != DialogResult.OK)
@@ -1038,20 +1054,61 @@ public sealed class EcranParametres : EcranBase
         }
 
         var nom = Path.GetFileName(dialogue.FileName);
-        if (!Dialogues.Confirmer(FindForm(), $"Remplacer toutes les données actuelles par la sauvegarde « {nom} » ?\n\nUne copie des données actuelles est faite avant."))
+        var complete = string.Equals(Path.GetExtension(dialogue.FileName), ISauvegardeComplete.Extension, StringComparison.OrdinalIgnoreCase);
+        if (!Dialogues.Confirmer(FindForm(), complete
+            ? $"Remplacer les données, tous les réglages et les manuels par la sauvegarde complète « {nom} » ?\n\n" +
+              "Une copie des données et des réglages actuels est faite avant. L'application redémarrera ensuite."
+            : $"Remplacer toutes les données actuelles par la sauvegarde « {nom} » ?\n\nUne copie des données actuelles est faite avant."))
         {
             return;
         }
 
-        var resultat = await _sauvegardes.RestaurerAsync(dialogue.FileName);
+        var resultat = complete ? await _complete.RestaurerAsync(dialogue.FileName) : await _sauvegardes.RestaurerAsync(dialogue.FileName);
         if (!resultat.Reussi)
         {
             Dialogues.Erreur(FindForm(), resultat.Message);
             return;
         }
 
+        if (complete)
+        {
+            // Les réglages restaurés ne sont lus qu'au démarrage : on relance l'application (mêmes options, ex. --base).
+            Dialogues.Information(FindForm(), resultat.Message + "\n\nL'application va redémarrer.");
+            Application.Restart();
+            return;
+        }
+
         Dialogues.Information(FindForm(), resultat.Message);
         _navigation.AllerA<EcranSorties>(); // Les données ont changé : on repart de l'accueil.
+    }
+
+    /// <summary>« Faire une sauvegarde complète… » : où enregistrer le .zip (clé USB, Documents…), puis l'ouvrir dans l'Explorateur.</summary>
+    private async Task SauvegarderCompleteAsync()
+    {
+        using var dialogue = new SaveFileDialog
+        {
+            Title = "Enregistrer la sauvegarde complète",
+            FileName = _complete.NomPropose(),
+            Filter = "Sauvegarde complète (*.zip)|*.zip",
+            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            OverwritePrompt = true,
+        };
+        if (dialogue.ShowDialog(FindForm()) != DialogResult.OK)
+        {
+            return;
+        }
+
+        var resultat = await _complete.CreerAsync(dialogue.FileName);
+        if (!resultat.Reussi)
+        {
+            Dialogues.Erreur(FindForm(), resultat.Message);
+            return;
+        }
+
+        if (Dialogues.Confirmer(FindForm(), resultat.Message + "\n\nOuvrir le dossier ?"))
+        {
+            Fichiers.Ouvrir(Path.GetDirectoryName(dialogue.FileName) ?? dialogue.FileName);
+        }
     }
 
     // ---------------------------------------------------------------- Club

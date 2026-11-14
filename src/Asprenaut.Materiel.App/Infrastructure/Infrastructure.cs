@@ -58,8 +58,20 @@ public sealed class ParametresApplication
         return new ParametresApplication { Fichier = fichier };
     }
 
+    /// <summary>
+    /// Vrai après une restauration complète : le fichier contient déjà les réglages restaurés, ceux en mémoire ne doivent
+    /// plus l'écraser jusqu'au redémarrage.
+    /// </summary>
+    [JsonIgnore]
+    public bool Remplacee { get; set; }
+
     public void Enregistrer()
     {
+        if (Remplacee)
+        {
+            return;
+        }
+
         Directory.CreateDirectory(Path.GetDirectoryName(Fichier) ?? DossierApplication);
         File.WriteAllText(Fichier, JsonSerializer.Serialize(this, OptionsJson));
     }
@@ -80,6 +92,47 @@ public sealed class StockageReglagesJson(ParametresApplication parametres) : ISt
             // Le réglage reste actif jusqu'à la fermeture ; on note seulement l'échec.
             Erreurs.Journaliser(ex);
         }
+    }
+}
+
+/// <summary>
+/// Réglages de parametres.json pour la sauvegarde complète : seulement <see cref="Reglages"/> (le chemin de la base est propre
+/// au PC). À la restauration, le dossier des sauvegardes de ce PC est gardé, le mode gestion n'est pas rouvert au démarrage,
+/// et l'ancien fichier est copié en « parametres_avant-restauration.json ».
+/// </summary>
+public sealed class ReglagesSauvegardables(ParametresApplication parametres) : IReglagesSauvegardables
+{
+    private static readonly JsonSerializerOptions OptionsJson = new() { WriteIndented = true };
+
+    public string Lire() => JsonSerializer.Serialize(parametres.Reglages, OptionsJson);
+
+    public bool EstLisible(string json)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<Reglages>(json) is not null;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    public void Remplacer(string json)
+    {
+        var nouveaux = JsonSerializer.Deserialize<Reglages>(json) ?? throw new JsonException("Réglages vides.");
+        nouveaux.DossierSauvegardes = parametres.Reglages.DossierSauvegardes;
+        nouveaux.DeverrouilleAuDemarrage = false;
+        if (File.Exists(parametres.Fichier))
+        {
+            File.Copy(parametres.Fichier, Path.Combine(Path.GetDirectoryName(parametres.Fichier) ?? ".", "parametres_avant-restauration.json"), overwrite: true);
+        }
+
+        // Écrit le fichier sans toucher aux réglages en mémoire (les services les gardent jusqu'au redémarrage).
+        var copie = new ParametresApplication { CheminBase = parametres.CheminBase, Reglages = nouveaux };
+        Directory.CreateDirectory(Path.GetDirectoryName(parametres.Fichier) ?? ParametresApplication.DossierApplication);
+        File.WriteAllText(parametres.Fichier, JsonSerializer.Serialize(copie, OptionsJson));
+        parametres.Remplacee = true;
     }
 }
 
