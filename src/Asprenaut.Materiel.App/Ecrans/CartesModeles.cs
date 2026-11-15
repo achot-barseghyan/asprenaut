@@ -136,7 +136,7 @@ internal sealed class CarteModele : CarteModeleBase
 
         // Détail : libellé à gauche, valeur à droite (manque en rouge).
         var detail = new TableLayoutPanel { ColumnCount = 2, BackColor = Color.Transparent, Margin = new Padding(0, 10, 0, 0), Dock = DockStyle.Fill };
-        detail.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 104));
+        detail.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 118));
         detail.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         void Ligne(string libelle, string valeur, Color? couleur = null)
         {
@@ -171,22 +171,36 @@ internal sealed class CarteModele : CarteModeleBase
 
         Ligne("Compteur", compteur);
         Ligne("Notes", m.Notes.Trim().Length > 0 ? m.Notes.Trim().ReplaceLineEndings(" ") : "—", Theme.TexteSecondaireClair);
+        detail.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // La place en trop va en bas, pas dans la dernière ligne.
+        detail.RowCount++;
 
-        var creer = new BoutonArrondi("Créer", StyleBouton.Principal, Icones.Fleche, iconeApres: true) { Margin = new Padding(0, 0, 6, 0) };
+        // Actions : « Créer » prend la place qui reste (jamais coupé), « Modifier » garde son texte, dupliquer et supprimer
+        // sont des pictogrammes avec bulle. Toutes tiennent dans la largeur minimale de la carte (GrilleAdaptative.LargeurMin).
+        var creer = new BoutonArrondi("Créer", StyleBouton.Principal, Icones.Fleche, iconeApres: true) { AutoSize = false, Margin = new Padding(0, 0, 8, 0) };
         creer.AccessibleName = $"Créer la sortie « {fiche.Intitule} »";
         creer.Click += (_, _) => Creer?.Invoke(this, EventArgs.Empty);
-        var modifier = new BoutonArrondi("Modifier", StyleBouton.Secondaire, Icones.Crayon) { Margin = new Padding(0, 0, 6, 0) };
+        var modifier = new BoutonArrondi("Modifier", StyleBouton.Secondaire, Icones.Crayon) { Margin = new Padding(0, 0, 8, 0) };
+        modifier.AccessibleName = $"Modifier le modèle {m.Nom}";
         modifier.Click += (_, _) => Modifier?.Invoke(this, EventArgs.Empty);
-        var dupliquer = new BoutonArrondi("Dupliquer", StyleBouton.Secondaire, Icones.Document) { Margin = Padding.Empty };
+        var dupliquer = new BoutonArrondi("", StyleBouton.Icone, Icones.Document) { AccessibleName = $"Dupliquer le modèle {m.Nom}", Margin = new Padding(0, 0, 4, 0) };
         dupliquer.Click += (_, _) => Dupliquer?.Invoke(this, EventArgs.Empty);
         var supprimer = new BoutonArrondi("", StyleBouton.Icone, Icones.Corbeille) { AccessibleName = $"Supprimer le modèle {m.Nom}", Margin = Padding.Empty };
         supprimer.Click += (_, _) => Supprimer?.Invoke(this, EventArgs.Empty);
         var bulle = new ToolTip();
+        bulle.SetToolTip(dupliquer, "Dupliquer le modèle");
         bulle.SetToolTip(supprimer, "Supprimer le modèle");
         Disposed += (_, _) => bulle.Dispose();
-        var actions = Ui.Colonnes((Ui.Rangee(true, creer, modifier, dupliquer), SizeType.Percent, 100), (supprimer, SizeType.AutoSize, 0));
-        supprimer.Dock = DockStyle.None;
-        supprimer.Anchor = AnchorStyles.Right;
+        var actions = Ui.Colonnes(
+            (creer, SizeType.Percent, 100),
+            (modifier, SizeType.AutoSize, 0),
+            (dupliquer, SizeType.AutoSize, 0),
+            (supprimer, SizeType.AutoSize, 0));
+        foreach (var b in new[] { modifier, dupliquer, supprimer })
+        {
+            b.Dock = DockStyle.None;
+            b.Anchor = AnchorStyles.Left;
+        }
+
         actions.Margin = new Padding(0, 10, 0, 0);
 
         Controls.Add(Ui.Colonne(

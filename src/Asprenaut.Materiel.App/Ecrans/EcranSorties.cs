@@ -33,7 +33,7 @@ public sealed class EcranSorties : EcranBase
 
     // Démarrage rapide (onglet En cours) et onglet Modèles.
     private readonly GrilleAdaptative _rapides = new() { LargeurMin = 270, HauteurElement = 172, Ecart = 14, ColonnesMax = ServiceModelesSortie.NombreDemarrageRapide, RangeesVisibles = 1, Margin = new Padding(0, 0, 0, 26) };
-    private readonly GrilleAdaptative _grilleModeles = new() { LargeurMin = 380, HauteurElement = 318, Ecart = 14, Margin = Padding.Empty };
+    private readonly GrilleAdaptative _grilleModeles = new() { LargeurMin = 420, HauteurElement = 318, Ecart = 14, Margin = Padding.Empty };
 
     // Onglet En cours.
     private readonly BandeauMessage _rappelSauvegarde = new() { Height = 76, Margin = Padding.Empty };
