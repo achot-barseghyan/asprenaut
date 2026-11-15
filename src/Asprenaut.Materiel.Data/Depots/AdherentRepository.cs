@@ -8,13 +8,16 @@ namespace Asprenaut.Materiel.Data.Depots;
 /// <summary>Adhérents du club (table adherent, migration 014) et le matériel qu'ils ont pris (sortie_equipement.adherent_id).</summary>
 public sealed class AdherentRepository(FabriqueConnexion fabrique) : IAdherentRepository
 {
-    private const string Colonnes = "id, nom, prenom, niveau, licence, telephone, actif, nitrox, caci, caci_expiration";
+    // Formation en cours : le nom vient de la classe liée (migration 021) ; adherent.niveau seulement s'il n'y en a pas.
+    private const string Colonnes = "a.id, a.nom, a.prenom, a.classe_id, COALESCE(c.nom, a.niveau) AS niveau, a.licence, a.telephone, a.actif, a.nitrox, a.caci, a.caci_expiration";
+
+    private const string Source = "adherent a LEFT JOIN moniteur c ON c.id = a.classe_id";
 
     public async Task<IReadOnlyList<Adherent>> ListerAsync(bool actifsSeulement, CancellationToken ct = default)
     {
         await using var cx = await fabrique.OuvrirAsync(ct);
         var lignes = await cx.QueryAsync<Adherent>(new CommandDefinition(
-            $"SELECT {Colonnes} FROM adherent WHERE (@actifsSeulement = 0 OR actif = 1) ORDER BY nom, prenom;",
+            $"SELECT {Colonnes} FROM {Source} WHERE (@actifsSeulement = 0 OR a.actif = 1) ORDER BY a.nom, a.prenom;",
             new { actifsSeulement }, cancellationToken: ct));
         return lignes.AsList();
     }
@@ -23,7 +26,7 @@ public sealed class AdherentRepository(FabriqueConnexion fabrique) : IAdherentRe
     {
         await using var cx = await fabrique.OuvrirAsync(ct);
         return await cx.QuerySingleOrDefaultAsync<Adherent>(new CommandDefinition(
-            $"SELECT {Colonnes} FROM adherent WHERE id = @id;", new { id }, cancellationToken: ct));
+            $"SELECT {Colonnes} FROM {Source} WHERE a.id = @id;", new { id }, cancellationToken: ct));
     }
 
     public async Task<long> AjouterAsync(Adherent adherent, CancellationToken ct = default)
@@ -31,8 +34,8 @@ public sealed class AdherentRepository(FabriqueConnexion fabrique) : IAdherentRe
         await using var cx = await fabrique.OuvrirAsync(ct);
         adherent.Id = await cx.ExecuteScalarAsync<long>(new CommandDefinition(
             """
-            INSERT INTO adherent (nom, prenom, niveau, licence, telephone, actif, nitrox, caci, caci_expiration)
-            VALUES (@Nom, @Prenom, @Niveau, @Licence, @Telephone, @Actif, @Nitrox, @Caci, @CaciExpiration) RETURNING id;
+            INSERT INTO adherent (nom, prenom, classe_id, niveau, licence, telephone, actif, nitrox, caci, caci_expiration)
+            VALUES (@Nom, @Prenom, @ClasseId, @Niveau, @Licence, @Telephone, @Actif, @Nitrox, @Caci, @CaciExpiration) RETURNING id;
             """,
             Parametres(adherent), cancellationToken: ct));
         return adherent.Id;
@@ -43,7 +46,7 @@ public sealed class AdherentRepository(FabriqueConnexion fabrique) : IAdherentRe
         await using var cx = await fabrique.OuvrirAsync(ct);
         await cx.ExecuteAsync(new CommandDefinition(
             """
-            UPDATE adherent SET nom = @Nom, prenom = @Prenom, niveau = @Niveau, licence = @Licence, telephone = @Telephone, actif = @Actif, nitrox = @Nitrox, caci = @Caci, caci_expiration = @CaciExpiration
+            UPDATE adherent SET nom = @Nom, prenom = @Prenom, classe_id = @ClasseId, niveau = @Niveau, licence = @Licence, telephone = @Telephone, actif = @Actif, nitrox = @Nitrox, caci = @Caci, caci_expiration = @CaciExpiration
             WHERE id = @Id;
             """,
             Parametres(adherent), cancellationToken: ct));
@@ -88,6 +91,7 @@ public sealed class AdherentRepository(FabriqueConnexion fabrique) : IAdherentRe
         a.Id,
         a.Nom,
         a.Prenom,
+        a.ClasseId,
         a.Niveau,
         a.Licence,
         a.Telephone,

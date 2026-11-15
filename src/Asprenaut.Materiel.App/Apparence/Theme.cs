@@ -41,8 +41,6 @@ public sealed class Palette
     public required Color Materiel { get; init; }
     /// <summary>Nitrox (formulaire de l'adhérent : carte « Certifié nitrox », étiquette NITROX).</summary>
     public required Color Nitrox { get; init; }
-    /// <summary>Niveaux d'encadrant choisis (puces E1, MF1…).</summary>
-    public required Color Encadrant { get; init; }
 
     /// <summary>Réparation externe, chez un prestataire (violet de la maquette Révisions), sa variante texte et le texte sur son aplat.</summary>
     public required Color Prestataire { get; init; }
@@ -148,7 +146,6 @@ public static class Theme
     public static Color Erreur => _p.Erreur;
     public static Color Materiel => _p.Materiel;
     public static Color Nitrox => _p.Nitrox;
-    public static Color Encadrant => _p.Encadrant;
 
     // --- Réparation externe (Révisions : à envoyer, chez le prestataire) ---
     public static Color Prestataire => _p.Prestataire;
@@ -260,7 +257,6 @@ public static class Theme
             Erreur = erreur,
             Materiel = Hex("#B7C8FF"),
             Nitrox = Hex("#C6F36B"),
-            Encadrant = Hex("#B9A6FF"),
             Prestataire = Hex("#B39DFF"),
             PrestataireClair = Hex("#CBBCFF"),
             TexteSurPrestataire = Hex("#1D1240"),
@@ -316,7 +312,6 @@ public static class Theme
             Erreur = erreur,
             Materiel = Hex("#4338CA"),
             Nitrox = Hex("#3F6212"),
-            Encadrant = Hex("#6D28D9"),
             Prestataire = Hex("#6D28D9"),
             PrestataireClair = Hex("#5B21B6"),
             TexteSurPrestataire = Color.White,

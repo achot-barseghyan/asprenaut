@@ -169,6 +169,7 @@ public class AdherentsTests
     [Fact]
     public async Task L_import_met_a_jour_par_licence_sans_creer_de_doublon()
     {
+        _ctx.AjouterClasses();
         var julie = await AdherentAsync("Julie", "Martin", licence: "A-12-345678", niveau: "Niveau 1");
         julie.Actif = false;
         await _ctx.Adherents.EnregistrerAsync(julie);
@@ -267,20 +268,6 @@ public class AdherentsTests
         Assert.Equal("JM", liste[1].Initiales);
     }
 
-    // Formulaire : puces rangées Plongeur / Encadrant, « Niveau 2 » affiché « N2 ».
-    [Fact]
-    public void Les_niveaux_sont_ranges_plongeur_ou_encadrant()
-    {
-        var encadrants = Reglages.NiveauxParDefaut.Where(ServiceAdherents.EstEncadrant).ToList();
-        Assert.Equal(["Initiateur", "MF1", "MF2"], encadrants);
-        Assert.True(ServiceAdherents.EstEncadrant("E3"));
-        Assert.True(ServiceAdherents.EstEncadrant("Moniteur fédéral"));
-        Assert.False(ServiceAdherents.EstEncadrant("Niveau 4"));
-        Assert.Equal("N2", ServiceAdherents.NiveauCourt("Niveau 2"));
-        Assert.Equal("PA20", ServiceAdherents.NiveauCourt("PA20"));
-        Assert.Equal("Débutant", ServiceAdherents.NiveauCourt("Débutant"));
-    }
-
     // Formulaire : mise en forme pendant la saisie et aperçu de l'en-tête.
     [Fact]
     public void La_saisie_est_mise_en_forme()
@@ -309,43 +296,54 @@ public class AdherentsTests
         Assert.Equal(NiveauCaci.Valide, ServiceAdherents.EtatCaciSaisi(true, jour.AddDays(ServiceAdherents.JoursAvantFinCaci + 1), jour)!.Niveau);
     }
 
-    // Niveaux : une liste (Paramètres), le formulaire n'accepte qu'un niveau de la liste, l'import ramène les abréviations.
+
+    // Formation en cours : une classe du club (Membres › Classes), pas le brevet. « N2 » ou « niv 2 » → « Niveau 2 ».
     [Fact]
-    public async Task Le_niveau_est_pris_dans_la_liste()
+    public async Task La_formation_en_cours_est_une_classe_du_club()
     {
-        Assert.Equal("Niveau 2", ServiceAdherents.NiveauReconnu(" n2 ", _ctx.Adherents.Niveaux));
-        Assert.Equal("Niveau 2", ServiceAdherents.NiveauReconnu("NIVEAU 2", _ctx.Adherents.Niveaux));
-        Assert.Equal("PA40", ServiceAdherents.NiveauReconnu("pa 40", _ctx.Adherents.Niveaux));
-        Assert.Equal("Débutant", ServiceAdherents.NiveauReconnu("debutant", _ctx.Adherents.Niveaux));
-        Assert.Null(ServiceAdherents.NiveauReconnu("N5", _ctx.Adherents.Niveaux));
+        var classes = _ctx.AjouterClasses("Niveau 1", "Niveau 2", "Niveau 3", "Autonome");
+        var formations = await _ctx.Adherents.ListerFormationsAsync();
+        Assert.Equal(["Autonome", "Niveau 1", "Niveau 2", "Niveau 3"], formations.Select(f => f.Nom)); // Pas les moniteurs.
 
         var hugo = await AdherentAsync("Hugo", "Moreau", niveau: "niv 3");
-        Assert.Equal("Niveau 3", hugo.Niveau);
-        var refus = await _ctx.Adherents.EnregistrerAsync(new Adherent { Prenom = "Léa", Nom = "Dubois", Niveau = "Plongeur confirmé" });
-        Assert.Equal("Choisissez le niveau dans la liste.", refus.Message);
+        Assert.Equal(("Niveau 3", classes[2].Id), (hugo.Niveau, hugo.ClasseId));
+        var lea = await _ctx.Adherents.EnregistrerAsync(new Adherent { Prenom = "Léa", Nom = "Dubois", ClasseId = classes[3].Id });
+        Assert.Equal("Autonome", _ctx.Db.Adherents.Single(a => a.Id == lea.Id).Niveau);
 
-        // Un ancien niveau hors liste (saisi avant) est gardé tant qu'on ne le change pas.
-        hugo.Niveau = "Niveau 3 ancien";
-        _ctx.Db.Adherents.Single(a => a.Id == hugo.Id).Niveau = "Niveau 3 ancien";
-        Assert.True((await _ctx.Adherents.EnregistrerAsync(new Adherent { Id = hugo.Id, Prenom = "Hugo", Nom = "Moreau", Niveau = "Niveau 3 ancien", Actif = true })).Reussi);
+        var refus = await _ctx.Adherents.EnregistrerAsync(new Adherent { Prenom = "Léo", Nom = "Petit", Niveau = "Plongeur confirmé" });
+        Assert.Equal("Choisissez la formation dans la liste (classes de Membres › Classes).", refus.Message);
+        Assert.False((await _ctx.Adherents.EnregistrerAsync(new Adherent { Prenom = "Léo", Nom = "Petit", ClasseId = _ctx.Pascal.Id })).Reussi); // Un moniteur n'est pas une classe.
+
+        // Classe désactivée : gardée par ceux qui la suivent, plus proposée aux autres.
+        classes[2].Actif = false;
+        Assert.DoesNotContain(await _ctx.Adherents.ListerFormationsAsync(), f => f.Id == classes[2].Id);
+        Assert.Contains(await _ctx.Adherents.ListerFormationsAsync(hugo.ClasseId), f => f.Id == classes[2].Id);
+        Assert.True((await _ctx.Adherents.EnregistrerAsync(new Adherent { Id = hugo.Id, Prenom = "Hugo", Nom = "Moreau", ClasseId = classes[2].Id, Actif = true })).Reussi);
+        var autre = await _ctx.Adherents.EnregistrerAsync(new Adherent { Prenom = "Léo", Nom = "Petit", ClasseId = classes[2].Id });
+        Assert.Equal("La classe « Niveau 3 » est désactivée : choisissez une autre formation.", autre.Message);
+
+        // Puce retirée : plus de formation.
+        Assert.True((await _ctx.Adherents.EnregistrerAsync(new Adherent { Id = lea.Id!.Value, Prenom = "Léa", Nom = "Dubois", Actif = true })).Reussi);
+        Assert.Equal((null, null), (_ctx.Db.Adherents.Single(a => a.Id == lea.Id).ClasseId, _ctx.Db.Adherents.Single(a => a.Id == lea.Id).Niveau));
     }
 
     [Fact]
-    public async Task L_import_ramene_les_niveaux_a_la_liste_et_signale_les_inconnus()
+    public async Task L_import_ramene_les_formations_aux_classes_et_signale_les_inconnues()
     {
-        var r = await _ctx.Adherents.ImporterAsync([["Nom", "Prénom", "Niveau"], ["Martin", "Julie", "N2"], ["Petit", "Hugo", "super plongeur"], ["Dubois", "Léa", ""]]);
+        _ctx.AjouterClasses();
+        var r = await _ctx.Adherents.ImporterAsync([["Nom", "Prénom", "Formation en cours"], ["Martin", "Julie", "N2"], ["Petit", "Hugo", "super plongeur"], ["Dubois", "Léa", ""]]);
 
-        Assert.Equal("Import terminé : 3 adhérents ajoutés, 0 mis à jour, 1 niveau inconnu laissé vide (ligne 3).", r.Message);
-        Assert.Equal("Niveau 2", _ctx.Db.Adherents.Single(a => a.Nom == "Martin").Niveau);
-        Assert.Null(_ctx.Db.Adherents.Single(a => a.Nom == "Petit").Niveau);
+        Assert.Equal("Import terminé : 3 adhérents ajoutés, 0 mis à jour, 1 formation inconnue laissée vide (ligne 3).", r.Message);
+        var julie = _ctx.Db.Adherents.Single(a => a.Nom == "Martin");
+        Assert.Equal("Niveau 2", julie.Niveau);
+        Assert.NotNull(julie.ClasseId);
+        Assert.Null(_ctx.Db.Adherents.Single(a => a.Nom == "Petit").ClasseId);
+
+        // Ancienne colonne « Niveau » toujours lue ; liste du modèle Excel = les classes.
+        var r2 = await _ctx.Adherents.ImporterAsync([["Nom", "Prénom", "Niveau"], ["Petit", "Hugo", "niveau 4"]]);
+        Assert.True(r2.Reussi, r2.Message);
+        Assert.Equal("Niveau 4", _ctx.Db.Adherents.Single(a => a.Nom == "Petit").Niveau);
+        var noms = (await _ctx.Adherents.ListerFormationsAsync()).Select(f => f.Nom).ToList();
+        Assert.Equal(noms, ServiceAdherents.ColonnesModele(noms)[2].Choix);
     }
-
-    [Fact]
-    public void La_liste_des_niveaux_se_regle_dans_les_parametres()
-    {
-        Assert.True(_ctx.ServiceReglages.ChangerNiveauxAdherents(["Débutant", " Niveau 1 ", "", "Bronze"]).Reussi);
-        Assert.Equal(["Débutant", "Niveau 1", "Bronze"], _ctx.Adherents.Niveaux);
-        Assert.Equal("« Niveau 1 » est en double.", _ctx.ServiceReglages.ChangerNiveauxAdherents(["Niveau 1", "NIVEAU 1"]).Message);
-        Assert.Equal("Gardez au moins un niveau.", _ctx.ServiceReglages.ChangerNiveauxAdherents([" "]).Message);
-        Assert.Equal("Bronze", ServiceAdherents.ColonnesModele(_ctx.Adherents.Niveaux)[2].Choix![2]); // Liste du modèle Excel.
-    }}
+}

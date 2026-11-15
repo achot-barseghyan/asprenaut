@@ -64,44 +64,6 @@ public sealed class ServiceReglages(Reglages reglages, IStockageReglages stockag
         return ResultatOperation.Ok("Enregistré.");
     }
 
-    /// <summary>
-    /// Niveaux des adhérents (Paramètres › Configuration du club) : un par ligne, 1 à 30 niveaux de 30 caractères au plus, sans
-    /// doublon (majuscules et accents ignorés). Les adhérents gardent leur niveau même s'il n'est plus dans la liste.
-    /// </summary>
-    public ResultatOperation ChangerNiveauxAdherents(IEnumerable<string> niveaux)
-    {
-        if (Autorisation() is { Reussi: false } refus)
-        {
-            return refus;
-        }
-
-        var liste = niveaux.Select(n => (n ?? "").Trim()).Where(n => n.Length > 0).ToList();
-        if (liste.Count == 0)
-        {
-            return ResultatOperation.Echec("Gardez au moins un niveau.");
-        }
-
-        if (liste.Count > 30)
-        {
-            return ResultatOperation.Echec("30 niveaux au plus.");
-        }
-
-        if (liste.FirstOrDefault(n => n.Length > Adherent.LongueurMaxNiveau) is { } long_)
-        {
-            return ResultatOperation.Echec($"« {long_[..20]}… » : {Adherent.LongueurMaxNiveau} caractères au plus.");
-        }
-
-        var doublon = liste.GroupBy(ServiceAdherents.Simplifier).FirstOrDefault(g => g.Count() > 1);
-        if (doublon is not null)
-        {
-            return ResultatOperation.Echec($"« {doublon.First()} » est en double.");
-        }
-
-        reglages.NiveauxAdherents = liste;
-        stockage.Enregistrer(reglages);
-        return ResultatOperation.Ok($"{Libelles.Pluriel(liste.Count, "niveau enregistré", "niveaux enregistrés")}.");
-    }
-
     /// <summary>Revient aux tuiles d'origine de la catégorie.</summary>
     public ResultatOperation RetablirTuilesSignalement(string categorie)
     {

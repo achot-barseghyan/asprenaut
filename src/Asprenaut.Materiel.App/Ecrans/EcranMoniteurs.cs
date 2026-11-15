@@ -97,17 +97,19 @@ public sealed class EcranMoniteurs : EcranBase
             Executer(AfficherGenreAsync);
         };
 
-        // Niveau : tous, ceux de la liste du club, ou non renseigné.
-        _niveau.Items.Add(new Choix<string?>(null, "Tous les niveaux"));
-        foreach (var n in adherents.Niveaux)
-        {
-            _niveau.Items.Add(new Choix<string?>(n, n));
-        }
-
-        _niveau.Items.Add(new Choix<string?>(ServiceAdherents.SansNiveau, "Sans niveau"));
+        // Formation en cours : toutes, une classe du club (remplie à l'affichage : RemplirFormationsAsync), ou aucune.
+        _niveau.Items.Add(new Choix<string?>(null, "Toutes les formations"));
+        _niveau.Items.Add(new Choix<string?>(ServiceAdherents.SansNiveau, "Sans formation"));
         _niveau.SelectedIndex = 0;
         _niveau.Margin = new Padding(0, 0, 14, 0);
-        _niveau.SelectedIndexChanged += (_, _) => Executer(AfficherAdherentsAsync);
+        _niveau.AccessibleName = "Filtrer par formation en cours";
+        _niveau.SelectedIndexChanged += (_, _) =>
+        {
+            if (!_remplissageFormations)
+            {
+                Executer(AfficherAdherentsAsync);
+            }
+        };
         _recherche.Champ.TextChanged += (_, _) =>
         {
             _attenteRecherche.Stop();
@@ -387,6 +389,37 @@ public sealed class EcranMoniteurs : EcranBase
 
     // ================================================================ Adhérents
 
+    private bool _remplissageFormations;
+
+    /// <summary>
+    /// Liste du filtre « formation en cours » : les classes actives (elles changent dans l'onglet Classes), choix gardé si
+    /// la classe existe encore.
+    /// </summary>
+    private async Task RemplirFormationsAsync()
+    {
+        var formations = await _adherents.ListerFormationsAsync();
+        var choix = (_niveau.SelectedItem as Choix<string?>)?.Valeur;
+        _remplissageFormations = true;
+        try
+        {
+            _niveau.BeginUpdate();
+            _niveau.Items.Clear();
+            _niveau.Items.Add(new Choix<string?>(null, "Toutes les formations"));
+            foreach (var f in formations)
+            {
+                _niveau.Items.Add(new Choix<string?>(f.Nom, f.Nom));
+            }
+
+            _niveau.Items.Add(new Choix<string?>(ServiceAdherents.SansNiveau, "Sans formation"));
+            _niveau.SelectedItem = _niveau.Items.OfType<Choix<string?>>().FirstOrDefault(c => c.Valeur == choix) ?? _niveau.Items[0];
+            _niveau.EndUpdate();
+        }
+        finally
+        {
+            _remplissageFormations = false;
+        }
+    }
+
     /// <summary>Cartes des adhérents (recherche et filtre), compteurs des filtres, puis la fiche de l'adhérent choisi.</summary>
     private async Task AfficherAdherentsAsync()
     {
@@ -395,6 +428,7 @@ public sealed class EcranMoniteurs : EcranBase
             return;
         }
 
+        await RemplirFormationsAsync();
         var filtre = _choixAdherents;
         var liste = await _adherents.ListerAsync(_recherche.Champ.Text, filtre, (_niveau.SelectedItem as Choix<string?>)?.Valeur);
         if (IsDisposed || !Adherents)
@@ -459,7 +493,7 @@ public sealed class EcranMoniteurs : EcranBase
 
         var nom = Ui.Libelle(a.NomComplet, Theme.PoliceGrasse(16f));
         nom.Margin = new Padding(0, 0, 0, 4);
-        var qualite = string.Join(" · ", new[] { "Adhérent", a.Niveau, a.Nitrox ? "certifié nitrox" : null, a.Actif ? null : "désactivé" }.Where(p => !string.IsNullOrWhiteSpace(p)));
+        var qualite = string.Join(" · ", new[] { "Adhérent", a.Niveau is { } formation ? $"formation {formation}" : null, a.Nitrox ? "certifié nitrox" : null, a.Actif ? null : "désactivé" }.Where(p => !string.IsNullOrWhiteSpace(p)));
         var textes = Ui.Pile(nom, Ui.Libelle(qualite, Theme.Police(9.75f), Theme.TexteSecondaireClair));
         if (a.Licence is { Length: > 0 } licence)
         {
@@ -600,19 +634,11 @@ public sealed class EcranMoniteurs : EcranBase
 
         var prenom = new ChampSaisie { Valeur = a?.Prenom ?? "", TexteIndicatif = "Ex. Camille" };
         var nom = new ChampSaisie { Valeur = a?.Nom ?? "", TexteIndicatif = "Ex. Martin" };
-        // Niveau : puces de la liste du club (Paramètres › Configuration du club), Plongeur puis Encadrant ;
-        // un ancien niveau hors liste reste proposé.
-        var niveaux = _adherents.Niveaux.ToList();
-        if (a?.Niveau is { Length: > 0 } actuel && !niveaux.Contains(actuel))
-        {
-            niveaux.Add(actuel);
-        }
-
-        string Puce(string n) => _adherents.Niveaux.Contains(n) ? ServiceAdherents.NiveauCourt(n) : $"{n} (hors liste)";
-        var niveau = new ChoixPuces { AccessibleName = "Niveau de plongée", Margin = new Padding(0, 0, 0, 10) };
-        niveau.Groupe("Plongeur", niveaux.Where(n => !ServiceAdherents.EstEncadrant(n)).Select(n => (n, Puce(n))));
-        niveau.Groupe("Encadrant", niveaux.Where(ServiceAdherents.EstEncadrant).Select(n => (n, Puce(n))), Theme.Encadrant);
-        niveau.Valeur = a?.Niveau is { Length: > 0 } n0 ? n0 : null;
+        // Formation en cours : puces des classes du club (Membres › Classes) ; sa classe reste proposée si elle a été désactivée.
+        var formations = await _adherents.ListerFormationsAsync(a?.ClasseId);
+        var niveau = new ChoixPuces { AccessibleName = "Formation en cours", Margin = new Padding(0, 0, 0, 10) };
+        niveau.Groupe("Classe", formations.Select(f => (f.Nom, f.Actif ? f.Nom : $"{f.Nom} (désactivée)")));
+        niveau.Valeur = formations.FirstOrDefault(f => f.Id == a?.ClasseId)?.Nom;
         var licence = new ChampSaisie { Valeur = a?.Licence ?? "", TexteIndicatif = "A-12-345678", Icone = Icones.CarteLicence };
         var telephone = new ChampSaisie { Valeur = a?.Telephone ?? "", TexteIndicatif = "06 12 34 56 78", Icone = Icones.Telephone };
         var actif = new Interrupteur("Actif") { Checked = a?.Actif ?? true };
@@ -642,6 +668,7 @@ public sealed class EcranMoniteurs : EcranBase
                 Id = a?.Id ?? 0,
                 Prenom = prenom.Valeur,
                 Nom = nom.Valeur,
+                ClasseId = formations.FirstOrDefault(f => f.Nom == niveau.Valeur)?.Id,
                 Niveau = niveau.Valeur,
                 Licence = licence.Valeur,
                 Telephone = telephone.Valeur,
@@ -672,9 +699,16 @@ public sealed class EcranMoniteurs : EcranBase
         identite.DeuxChamps("Téléphone", telephone, "N° de licence", licence);
         fenetre.Ajouter(identite);
 
-        var sectionNiveau = new SectionFormulaire(2, "Niveau de plongée");
-        sectionNiveau.Ajouter(niveau);
-        var aideNiveau = sectionNiveau.Ajouter(Ui.Libelle("Touche à nouveau un niveau pour le retirer.", Theme.Police(9f), Theme.TexteSecondaire));
+        var sectionNiveau = new SectionFormulaire(2, "Formation en cours");
+        if (formations.Count > 0)
+        {
+            sectionNiveau.Ajouter(niveau);
+        }
+
+        var aideNiveau = sectionNiveau.Ajouter(Ui.Libelle(formations.Count > 0
+                ? "La classe qu'il suit : « Niveau 2 » = il prépare le niveau 2. Touche à nouveau une classe pour la retirer."
+                : "Aucune classe : créez-les dans Membres › Classes (Niveau 1, Niveau 2… Autonome).",
+            Theme.Police(9f), Theme.TexteSecondaire));
         aideNiveau.Margin = new Padding(0, 0, 0, 12);
         fenetre.Ajouter(sectionNiveau);
 
@@ -739,7 +773,7 @@ public sealed class EcranMoniteurs : EcranBase
                 _ => Theme.TexteSecondaire,
             };
 
-            sectionNiveau.TexteDroite = niveau.Valeur ?? "non renseigné";
+            sectionNiveau.TexteDroite = niveau.Valeur ?? "non renseignée";
             sectionNiveau.CouleurDroite = niveau.Valeur is null ? Theme.TexteSecondaire : Theme.AccentClair;
             carteCaci.DessousVisible = caci.Checked;
             carteCaci.Description = caci.Checked
@@ -808,7 +842,8 @@ public sealed class EcranMoniteurs : EcranBase
     {
         // Couleur de l'en-tête : celle du logo du club (fixe dans les deux thèmes).
         var c = Theme.LogoFonce;
-        var colonnes = ServiceAdherents.ColonnesModele(_adherents.Niveaux).Select(m => new Infrastructure.ColonneClasseur(
+        var formations = (await _adherents.ListerFormationsAsync()).Select(f => f.Nom).ToList();
+        var colonnes = ServiceAdherents.ColonnesModele(formations).Select(m => new Infrastructure.ColonneClasseur(
             m.EnTete, m.Obligatoire ? $"Obligatoire. {m.Aide}" : m.Aide, m.Largeur, m.Choix)).ToList();
         await Infrastructure.Fichiers.EnregistrerXlsxAsync(FindForm(), "Enregistrer le modèle des adhérents", ServiceAdherents.NomFichierModele(_reglages.NomClub),
             chemin => Infrastructure.EcrivainTableur.EcrireModele(chemin, "Adhérents", colonnes, ServiceAdherents.ModeEmploiModele, $"{c.R:X2}{c.G:X2}{c.B:X2}"));

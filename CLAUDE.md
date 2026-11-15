@@ -259,7 +259,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     `ServiceMoniteurs.AbregeDe` : « Niveau 2 » → « N2 ») ; ni téléphone, ni niveau, ni TIV (jamais inspecteur). Le genre ne change
     pas à la modification. Journal `ClasseCreee` / `ClasseModifiee`. Afficher `SortieResume.LibelleResponsable`
     (« Moniteur : … » / « Classe : … »). App : onglets `Bascule` dans `EcranMoniteurs` (ordre : Adhérents, ouvert à l'arrivée, puis Moniteurs et Classes ; `OngletAdherents` / `OngletMoniteurs` / `OngletClasses`), `ChoixResponsable` (Moniteur | Classe
-    puis la liste) dans Nouvelle sortie et Modifier la sortie. Filtres de l'écran Membres (`FiltresMembresTests`) : onglet Moniteurs, recherche (prénom, nom, niveau, téléphone, accents ignorés) et puces Tous / Actifs / Inspecteurs TIV / Matériel dehors / Inactifs (`ServiceMoniteurs.Filtrer` → `ListeMoniteurs`, nombres après la recherche) ; onglet Adhérents, recherche, liste Niveau (tous, ceux du club, « Sans niveau » = `ServiceAdherents.SansNiveau`) et puces Tous / Matériel dehors / Non rendu / Nitrox / Désactivés ; pas de filtre pour les classes ; chaque onglet a sa recherche. Données de démo : chargées si aucun moniteur (genre Moniteur).
+    puis la liste) dans Nouvelle sortie et Modifier la sortie. Filtres de l'écran Membres (`FiltresMembresTests`) : onglet Moniteurs, recherche (prénom, nom, niveau, téléphone, accents ignorés) et puces Tous / Actifs / Inspecteurs TIV / Matériel dehors / Inactifs (`ServiceMoniteurs.Filtrer` → `ListeMoniteurs`, nombres après la recherche) ; onglet Adhérents, recherche, liste « formation en cours » (toutes, les classes actives, « Sans formation » = `ServiceAdherents.SansNiveau`) et puces Tous / Matériel dehors / Non rendu / Nitrox / Désactivés ; pas de filtre pour les classes ; chaque onglet a sa recherche. Données de démo : chargées si aucun moniteur (genre Moniteur).
 25. Manuels (`ServiceManuels`, migration 009, écran `EcranManuels`, maquette « Manuels ») : consultation libre ; ajouter, modifier,
     retirer = action protégée Matériel. Le PDF est copié dans `Manuels\` à côté de la base (`IStockageManuels`, nom déjà pris →
     « (2) ») ; l'écran lit son nombre de pages (`LecteurPdf.CompterPagesAsync`). Marque et titre obligatoires ; sommaire tapé une
@@ -366,13 +366,16 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     met les certifiés en premier et marque les autres « pas certifié nitrox ». Fiche adhérent : « Désactiver » (confirmation) /
     « Réactiver » (`ChangerActifAsync`, action Moniteurs) ; désactivé : ne sort plus de matériel, gardé dans la liste (à la fin)
     pour être réactivé. Sortie non nominative : pas de contrôle nitrox.
-    Niveaux (ServiceAdherents.Niveaux, Reglages.NiveauxAdherents, liste d'origine Reglages.NiveauxParDefaut FFESSM, réglée dans
-    Paramètres › Configuration du club › Niveaux des adhérents, ServiceReglages.ChangerNiveauxAdherents : 1 à 30, 30 car., sans doublon) :
-    puces du formulaire (maquette « Ajouter un adhérent » : rangées Plongeur / Encadrant d'après `ServiceAdherents.EstEncadrant`,
-    violet `Theme.Encadrant`, « Niveau 2 » affiché « N2 » par `NiveauCourt` ; en-tête qui montre initiales, nom et étiquettes pendant la
-    saisie ; `MajusculesMots`, `FormaterTelephone`, `Initiales`, `EtatCaciSaisi` → pastille « Expire dans 17 j », « Délivré aujourd'hui (+1 an) ») ; EnregistrerAsync n'accepte qu'un niveau de la liste (NiveauReconnu : majuscules, accents,
-    espaces et ponctuation ignorés, « N2 » / « niv 2 » → « Niveau 2 ») ou l'ancien niveau inchangé (« hors liste ») ; l'import ramène
-    le niveau à la liste, un inconnu est laissé vide (l'ancien gardé) et compté dans le message.
+    Formation en cours (migration 021, `AdherentsTests`) : pas le brevet mais la classe suivie (« Niveau 2 » = il prépare le niveau 2) :
+    une classe de Membres › Classes (`Adherent.ClasseId` → adherent.classe_id ; `Adherent.Niveau` = nom de la classe, lu par jointure,
+    il suit donc un renommage). `ServiceAdherents.ListerFormationsAsync(garder)` : classes actives (+ la sienne si désactivée), par nom.
+    `EnregistrerAsync` relie par `ClasseId`, sinon par le nom (`NiveauReconnu` : majuscules, accents, espaces et ponctuation ignorés,
+    « N2 » / « niv 2 » → « Niveau 2 ») ; classe désactivée refusée sauf si c'était déjà la sienne ; un moniteur n'est pas une classe.
+    Plus de liste « Niveaux des adhérents » dans Paramètres. Import : colonne « Formation en cours » (aussi « Niveau », « Classe »,
+    « Groupe »), inconnue laissée vide (l'ancienne gardée) et comptée ; modèle Excel : liste des classes. Export : colonne « Formation en cours ».
+    Formulaire (maquette « Ajouter un adhérent ») : section « Formation en cours », puces des classes ; en-tête qui montre initiales, nom
+    et étiquettes pendant la saisie ; `MajusculesMots`, `FormaterTelephone`, `Initiales`, `EtatCaciSaisi` → pastille « Expire dans 17 j »,
+    « Délivré aujourd'hui (+1 an) ».
 
 32. Manquants retrouvés (`ManquantsTests`) : un équipement Manquant scanné au départ d'une sortie est d'abord noté Rendu dans
     chaque sortie où il manquait (journal `ManquantRetrouve` relié à l'ancienne sortie, message « A01 était manquant (sortie
@@ -508,11 +511,13 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   `ux_intervention_prevue_ouverte`).
   019 : adherent.caci (0/1) et adherent.caci_expiration (date, null si pas de CACI).
   020 : categorie.icone et categorie.couleur (clés, null = d'après le nom).
+  021 : adherent.classe_id (formation en cours = une classe, table moniteur genre Classe) ; reprise : niveau texte → classe du même nom,
+  classe créée pour un niveau sans classe (« Autonome »).
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/021_xxx.sql`, sans jamais modifier un script déjà livré
+- Nouvelle migration : ajouter `Migrations/022_xxx.sql`, sans jamais modifier un script déjà livré
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.

@@ -47,7 +47,7 @@ public sealed class Contexte
         var types = new TypeSortieRepositoryMemoire(Db);
         TypesSortie = new ServiceTypesSortie(types, Gestion);
         DepotAdherents = new AdherentRepositoryMemoire(Db);
-        Adherents = new ServiceAdherents(DepotAdherents, journal, Horloge, Gestion, Reglages);
+        Adherents = new ServiceAdherents(DepotAdherents, journal, Horloge, Gestion, moniteurs);
         Sorties = new ServiceSortie(sorties, moniteurs, journal, Horloge, Reglages, Gestion, types, DepotAdherents);
         Inventaire = new ServiceInventaire(equipements, categories, journal, Horloge, Reglages, Gestion, sorties, DepotRevisions);
         ServiceReglages = new ServiceReglages(Reglages, Stockage, Sauvegardes, Gestion);
@@ -76,6 +76,16 @@ public sealed class Contexte
         Db.Categories.Add(new Categorie { Id = Db.ProchainId(), Nom = "Détendeurs" });
         Pascal = new Moniteur { Id = Db.ProchainId(), Prenom = "Pascal", Nom = "Martin", Actif = true };
         Db.Moniteurs.Add(Pascal);
+    }
+
+    /// <summary>Classes du club (formations en cours des adhérents), comme la migration 008 ; par défaut Niveau 1 à 4.</summary>
+    public IReadOnlyList<Moniteur> AjouterClasses(params string[] noms)
+    {
+        var classes = (noms.Length > 0 ? noms : ["Niveau 1", "Niveau 2", "Niveau 3", "Niveau 4"])
+            .Select(n => new Moniteur { Id = Db.ProchainId(), Genre = GenreResponsable.Classe, Nom = n, Actif = true })
+            .ToList();
+        Db.Moniteurs.AddRange(classes);
+        return classes;
     }
 
     public Equipement Equipement(

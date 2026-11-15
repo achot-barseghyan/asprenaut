@@ -1,3 +1,4 @@
+using Asprenaut.Materiel.Data.Depots;
 using Asprenaut.Materiel.Data.Migrations;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -36,9 +37,41 @@ public class SchemaTests : IAsyncLifetime
     }
 
     [Fact]
-    public void Scripts_001_a_020_sont_embarques()
+    public void Scripts_001_a_021_sont_embarques()
     {
-        Assert.Equal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
+        Assert.Equal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21], GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
+    }
+
+    // 021 : le niveau texte de l'adhérent devient sa classe (formation en cours) ; une classe manquante est créée.
+    [Fact]
+    public async Task La_migration_021_relie_les_adherents_a_leur_classe()
+    {
+        var fabrique = new Connexion.FabriqueConnexion(Path.Combine(_base.Dossier, "avant-021.db"));
+        var migrations = new GestionnaireMigrations(fabrique);
+        Assert.Equal(20, await migrations.AppliquerAsync(jusqua: 20));
+        await using (var cx = await fabrique.OuvrirAsync())
+        {
+            await cx.ExecuteAsync("""
+                INSERT INTO adherent (nom, prenom, niveau, actif) VALUES
+                    ('Martin', 'Julie', 'niveau 2', 1), ('Petit', 'Hugo', 'Autonome', 1),
+                    ('Dubois', 'Léa', 'autonome ', 1), ('Moreau', 'Paul', NULL, 1);
+                """);
+        }
+
+        await migrations.AppliquerAsync();
+        var depot = new AdherentRepository(fabrique);
+        var adherents = (await depot.ListerAsync(actifsSeulement: false)).ToDictionary(a => a.Prenom);
+        Assert.Equal("Niveau 2", adherents["Julie"].Niveau); // Nom de la classe existante (migration 008).
+        Assert.Equal(("Autonome", "Autonome"), (adherents["Hugo"].Niveau, adherents["Léa"].Niveau)); // Une seule classe créée.
+        Assert.Equal(adherents["Hugo"].ClasseId, adherents["Léa"].ClasseId);
+        Assert.Equal((null, null), (adherents["Paul"].ClasseId, adherents["Paul"].Niveau));
+
+        await using var cx2 = await fabrique.OuvrirAsync();
+        Assert.Equal(1L, await cx2.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM moniteur WHERE genre = 'Classe' AND nom = 'Autonome';"));
+
+        // Le nom affiché suit la classe : la renommer change la formation de ses adhérents.
+        await cx2.ExecuteAsync("UPDATE moniteur SET nom = 'Niveau 2 (2026)' WHERE id = @Id;", new { Id = adherents["Julie"].ClasseId });
+        Assert.Equal("Niveau 2 (2026)", (await depot.ObtenirAsync(adherents["Julie"].Id))!.Niveau);
     }
 
     // 010 : les anciens codes DET-/GIL- deviennent ceux des médailles (A07, S12), sorties et journal compris.

@@ -15,7 +15,13 @@ public sealed class Adherent
     public string Nom { get; set; } = "";
     public string Prenom { get; set; } = "";
 
-    /// <summary>« Niveau 2 », « Moniteur »... ou null.</summary>
+    /// <summary>
+    /// Formation en cours : la classe du club qu'il suit (Membres › Classes : « Niveau 2 » = il prépare le niveau 2, pas
+    /// son brevet), ou null. Lien réel (adherent.classe_id, migration 021) ; voir <see cref="Niveau"/> pour son nom.
+    /// </summary>
+    public long? ClasseId { get; set; }
+
+    /// <summary>Nom de la classe de <see cref="ClasseId"/> (« Niveau 2 », « Autonome »), pour l'affichage et la recherche ; ou null.</summary>
     public string? Niveau { get; set; }
 
     /// <summary>Numéro de licence FFESSM (unique s'il est renseigné), ou null.</summary>

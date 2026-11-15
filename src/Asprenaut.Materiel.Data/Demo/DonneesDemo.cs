@@ -43,7 +43,7 @@ public static class DonneesDemo
         ];
         foreach (var a in adherents)
         {
-            await cx.ExecuteAsync("INSERT INTO adherent (nom, prenom, niveau, licence, actif) VALUES (@Nom, @Prenom, @Niveau, @Licence, 1);",
+            await cx.ExecuteAsync("INSERT INTO adherent (nom, prenom, niveau, classe_id, licence, actif) VALUES (@Nom, @Prenom, @Niveau, (SELECT id FROM moniteur WHERE genre = 'Classe' AND nom = @Niveau LIMIT 1), @Licence, 1);",
                 new { a.Nom, a.Prenom, a.Niveau, a.Licence }, tx); // Pas le tuple : Dapper ne voit pas les noms de ses éléments.
         }
 

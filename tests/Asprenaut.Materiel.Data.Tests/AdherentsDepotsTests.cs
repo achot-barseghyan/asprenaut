@@ -30,13 +30,21 @@ public class AdherentsDepotsTests : IAsyncLifetime
     public async Task Un_adherent_est_ajoute_modifie_et_sa_licence_est_unique()
     {
         var depot = new AdherentRepository(_base.Fabrique);
-        var julie = new Adherent { Nom = "Martin", Prenom = "Julie", Niveau = "Niveau 2", Licence = "A-1", Telephone = "06" };
+        long niveau2;
+        await using (var cx0 = await _base.Fabrique.OuvrirAsync())
+        {
+            niveau2 = await cx0.ExecuteScalarAsync<long>("SELECT id FROM moniteur WHERE genre = 'Classe' AND nom = 'Niveau 2';");
+        }
+
+        var julie = new Adherent { Nom = "Martin", Prenom = "Julie", ClasseId = niveau2, Niveau = "Niveau 2", Licence = "A-1", Telephone = "06" };
         await depot.AjouterAsync(julie);
+        Assert.Equal((niveau2, "Niveau 2"), ((await depot.ObtenirAsync(julie.Id))!.ClasseId, (await depot.ObtenirAsync(julie.Id))!.Niveau)); // Formation en cours (021).
         await depot.AjouterAsync(new Adherent { Nom = "Sans", Prenom = "Licence" });
         await depot.AjouterAsync(new Adherent { Nom = "Autre", Prenom = "Sans licence" }); // Plusieurs licences vides : permis.
 
         julie.Actif = false;
         julie.Niveau = null;
+        julie.ClasseId = null;
         await depot.MettreAJourAsync(julie);
 
         var lu = (await depot.ObtenirAsync(julie.Id))!;

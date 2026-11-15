@@ -142,7 +142,7 @@ public sealed class EcranParametres : EcranBase
         _sousTitre.Text = configuration ? SousTitreConfiguration : SousTitreParametres;
         if (configuration && _grilleConfiguration is null)
         {
-            _grilleConfiguration = Grille(CarteClub(), CarteTypesSortie(), CarteCompteur(), CarteNiveaux(), CartePrestataires(), CarteTuilesSignalement());
+            _grilleConfiguration = Grille(CarteClub(), CarteTypesSortie(), CarteCompteur(), CartePrestataires(), CarteTuilesSignalement());
             _grilleConfiguration.Visible = false;
             Dessin.MettreALEchelle(_grilleConfiguration, this); // Construite après l'affichage : pixels logiques à convertir.
             _cadre.Controls.Add(_grilleConfiguration);
@@ -1484,58 +1484,6 @@ public sealed class EcranParametres : EcranBase
         }
 
         await AfficherTypesAsync();
-    }
-
-    // ---------------------------------------------------------------- Niveaux des adhérents
-
-    /// <summary>
-    /// Niveaux proposés pour les adhérents (formulaire, modèle Excel, import) : un par ligne, dans l'ordre de la liste.
-    /// Les adhérents gardent leur niveau s'il est retiré de la liste.
-    /// </summary>
-    private CarteSection CarteNiveaux()
-    {
-        var carte = new CarteSection("Niveaux des adhérents", Icones.Moniteurs, Theme.AccentClair);
-        var aide = Ui.Libelle("Proposés dans la fiche d'un adhérent et dans le modèle Excel. Un niveau par ligne, dans l'ordre voulu. "
-            + "À l'import, « N2 » ou « niveau 2 » deviennent « Niveau 2 » ; un niveau inconnu est laissé vide.", Theme.Police(9.75f), Theme.TexteSecondaire);
-        aide.MaximumSize = new Size(560, 0);
-        aide.Margin = new Padding(0, 0, 0, 10);
-        carte.Ajouter(aide);
-
-        var liste = new ChampSaisie(multiligne: true) { Height = 230, Margin = new Padding(0, 0, 0, 12) };
-        liste.Champ.AccessibleName = "Niveaux, un par ligne";
-        liste.Valeur = string.Join(Environment.NewLine, _reglages.Actuels.NiveauxAdherents);
-        carte.Ajouter(liste);
-
-        var enregistrer = new BoutonArrondi("Enregistrer la liste", StyleBouton.Secondaire, Icones.Coche) { Margin = Padding.Empty };
-        enregistrer.Click += (_, _) =>
-        {
-            if (!Autoriser())
-            {
-                return;
-            }
-
-            var r = _reglages.ChangerNiveauxAdherents(liste.Valeur.Split('\n'));
-            if (r.Reussi)
-            {
-                liste.Valeur = string.Join(Environment.NewLine, _reglages.Actuels.NiveauxAdherents); // Nettoyée (espaces, lignes vides).
-                Dialogues.Information(FindForm(), r.Message);
-            }
-            else
-            {
-                Dialogues.Erreur(FindForm(), r.Message);
-            }
-        };
-        var retablir = new BoutonArrondi("Rétablir la liste d'origine", StyleBouton.Lien) { Margin = new Padding(12, 0, 0, 0) };
-        retablir.Click += (_, _) =>
-        {
-            if (Autoriser() && Dialogues.Confirmer(FindForm(), "Revenir à la liste d'origine des niveaux ?")
-                && _reglages.ChangerNiveauxAdherents(Reglages.NiveauxParDefaut).Reussi)
-            {
-                liste.Valeur = string.Join(Environment.NewLine, Reglages.NiveauxParDefaut);
-            }
-        };
-        carte.Ajouter(Ui.Rangee(true, enregistrer, retablir), pleineLargeur: false);
-        return carte;
     }
 
     // ---------------------------------------------------------------- Prestataires

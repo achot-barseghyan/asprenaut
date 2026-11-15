@@ -16,10 +16,59 @@ public sealed class ServiceAdherents(
     IJournalRepository journal,
     IHorloge horloge,
     ServiceGestion? gestion = null,
-    Reglages? reglages = null)
+    IMoniteurRepository? classes = null)
 {
-    /// <summary>Niveaux proposés (réglables dans Paramètres › Configuration du club).</summary>
-    public IReadOnlyList<string> Niveaux => reglages?.NiveauxAdherents is { Count: > 0 } liste ? liste : Reglages.NiveauxParDefaut;
+    /// <summary>
+    /// Formations proposées : les classes actives du club (Membres › Classes), plus <paramref name="garder"/> (formation actuelle
+    /// de l'adhérent, même si sa classe a été désactivée). Triées par nom (Niveau 1, Niveau 2… Autonome).
+    /// </summary>
+    public async Task<IReadOnlyList<Moniteur>> ListerFormationsAsync(long? garder = null, CancellationToken ct = default) =>
+        classes is null ? [] : (await classes.ListerAsync(actifsSeulement: false, ct))
+            .Where(m => m.EstClasse && (m.Actif || m.Id == garder))
+            .OrderBy(m => m.Nom, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+
+    /// <summary>
+    /// Relie la saisie à sa classe : par <see cref="Adherent.ClasseId"/>, sinon par le nom tapé (« N2 » → « Niveau 2 »). Remplit
+    /// <see cref="Adherent.Niveau"/> avec le nom de la classe. Une classe désactivée n'est acceptée que si c'était déjà la sienne ;
+    /// un ancien niveau sans classe reste accepté tant qu'il n'est pas changé. Null si tout va bien, sinon le refus.
+    /// </summary>
+    private async Task<ResultatOperation?> RelierFormationAsync(Adherent saisie, Adherent? ancien, CancellationToken ct)
+    {
+        var liste = classes is null ? [] : (await classes.ListerAsync(actifsSeulement: false, ct)).Where(m => m.EstClasse).ToList();
+        Moniteur? classe = null;
+        if (saisie.ClasseId is { } id)
+        {
+            classe = liste.FirstOrDefault(c => c.Id == id);
+            if (classe is null)
+            {
+                return ResultatOperation.Echec("Cette formation n'existe plus : choisissez-en une autre.");
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(saisie.Niveau))
+        {
+            var nom = NiveauReconnu(saisie.Niveau, liste.Select(c => c.Nom).ToList());
+            classe = liste.Where(c => c.Nom == nom).OrderBy(c => !c.Actif).FirstOrDefault();
+            if (classe is null)
+            {
+                if (ancien is { ClasseId: null } && string.Equals(ancien.Niveau?.Trim(), saisie.Niveau.Trim(), StringComparison.Ordinal))
+                {
+                    return null; // Ancien niveau sans classe, inchangé.
+                }
+
+                return ResultatOperation.Echec("Choisissez la formation dans la liste (classes de Membres › Classes).");
+            }
+        }
+
+        if (classe is { Actif: false } && classe.Id != ancien?.ClasseId)
+        {
+            return ResultatOperation.Echec($"La classe « {classe.Nom} » est désactivée : choisissez une autre formation.");
+        }
+
+        saisie.ClasseId = classe?.Id;
+        saisie.Niveau = classe?.Nom;
+        return null;
+    }
 
     /// <summary>
     /// Niveau de la liste qui correspond à la saisie, sans tenir compte des majuscules, accents, espaces, points et tirets ;
@@ -42,23 +91,6 @@ public sealed class ServiceAdherents(
         // Abréviations courantes : « n2 », « niv2 », « niveau2 ».
         var abrege = System.Text.RegularExpressions.Regex.Match(cle, "^(n|niv|niveau)([1-4])$");
         return abrege.Success ? niveaux.FirstOrDefault(n => Cle(n) == $"niveau{abrege.Groups[2].Value}") : null;
-    }
-
-    /// <summary>
-    /// Niveau d'encadrant (formulaire de l'adhérent : rangée « Encadrant ») : E1 à E4, Initiateur, MF1, MF2, moniteur, BEES, DEJEPS…
-    /// Les autres niveaux (Débutant, Niveau 1, PA20, PE40…) sont des niveaux de plongeur.
-    /// </summary>
-    public static bool EstEncadrant(string niveau)
-    {
-        var cle = new string(Simplifier(niveau).Where(char.IsLetterOrDigit).ToArray());
-        return System.Text.RegularExpressions.Regex.IsMatch(cle, "^(e[1-5]|mf[12]|initiateur|moniteur|encadrant|bees|dejeps|desjeps|instructeur)");
-    }
-
-    /// <summary>Texte de la puce d'un niveau : « Niveau 2 » → « N2 » ; les autres restent entiers (« PA20 », « Débutant »).</summary>
-    public static string NiveauCourt(string niveau)
-    {
-        var m = System.Text.RegularExpressions.Regex.Match(niveau.Trim(), @"^niveau\s*(\d)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        return m.Success ? $"N{m.Groups[1].Value}" : niveau.Trim();
     }
 
     /// <summary>Majuscule au début de chaque mot (« jean-pierre le goff » → « Jean-Pierre Le Goff ») ; le reste est gardé tel quel.</summary>
@@ -263,18 +295,10 @@ public sealed class ServiceAdherents(
 
         var tous = await adherents.ListerAsync(actifsSeulement: false, ct);
 
-        // Niveau pris dans la liste ; un ancien niveau hors liste reste accepté tant qu'il n'est pas changé.
-        if (!string.IsNullOrWhiteSpace(saisie.Niveau))
+        // Formation en cours : une classe du club.
+        if (await RelierFormationAsync(saisie, tous.FirstOrDefault(a => a.Id == saisie.Id && saisie.Id != 0), ct) is { } refusFormation)
         {
-            var ancien = tous.FirstOrDefault(a => a.Id == saisie.Id && saisie.Id != 0)?.Niveau;
-            if (NiveauReconnu(saisie.Niveau, Niveaux) is { } niveau)
-            {
-                saisie.Niveau = niveau;
-            }
-            else if (!string.Equals(ancien?.Trim(), saisie.Niveau.Trim(), StringComparison.Ordinal))
-            {
-                return ResultatOperation.Echec("Choisissez le niveau dans la liste.");
-            }
+            return refusFormation;
         }
 
         // CACI avant modification (pour le journal), relevé avant que la saisie ne soit nettoyée.
@@ -389,7 +413,7 @@ public sealed class ServiceAdherents(
     [
         ["nom", "nom de famille", "nom adherent"],
         ["prenom"],
-        ["niveau", "niveau de plongee", "brevet"],
+        ["formation en cours", "formation", "classe", "groupe", "niveau", "niveau de plongee", "niveau en cours", "brevet"],
         ["licence", "n licence", "no licence", "numero de licence", "num licence", "licence ffessm", "n de licence"],
         ["telephone", "tel", "portable", "mobile", "telephone portable"],
         ["nitrox", "certifie nitrox", "certification nitrox", "brevet nitrox"],
@@ -408,7 +432,7 @@ public sealed class ServiceAdherents(
     [
         new("Nom", "Nom de famille", 22, true),
         new("Prénom", "Prénom", 18, true),
-        new("Niveau", "Choisissez dans la liste (flèche de la case)", 16, false, niveaux),
+        new("Formation en cours", "Classe suivie (ex. Niveau 2 = prépare le niveau 2) : choisissez dans la liste (flèche de la case)", 20, false, niveaux),
         new("Licence", "Numéro de licence FFESSM (sert à reconnaître l'adhérent à l'import suivant)", 18, false),
         new("Téléphone", "Ex. : 06 12 34 56 78", 18, false),
         new("Nitrox", "Oui si certifié nitrox, sinon Non", 12, false, ["Oui", "Non"]),
@@ -427,7 +451,7 @@ public sealed class ServiceAdherents(
         "2. Nom et Prénom sont obligatoires. Les autres colonnes peuvent rester vides.",
         "3. Ne changez pas la première ligne (les titres des colonnes) : l'application s'en sert pour lire le fichier.",
         "4. Licence : si elle est remplie, l'adhérent est reconnu à l'import suivant et mis à jour au lieu d'être ajouté en double.",
-        "5. Niveau et Nitrox : choisissez dans la liste (flèche à droite de la case). Ne tapez pas d'autre niveau : il serait ignoré. Vide = inchangé.",
+        "5. Formation en cours et Nitrox : choisissez dans la liste (flèche à droite de la case). La formation est la classe suivie (Niveau 2 = prépare le niveau 2). Ne tapez pas d'autre formation : elle serait ignorée. Vide = inchangé.",
         "6. CACI valable jusqu'au : date de fin du certificat, au format jj/mm/aaaa (ex. 15/09/2027). Passée cette date, l'adhérent ne sort plus de matériel. Vide = inchangé.",
         "7. Enregistrez en .xlsx et rapportez le fichier au responsable matériel : Membres › Adhérents › Importer la liste Excel.",
         "Personne n'est retiré par l'import : les adhérents absents du fichier restent dans l'application.",
@@ -514,6 +538,7 @@ public sealed class ServiceAdherents(
         }
 
         var existants = (await adherents.ListerAsync(actifsSeulement: false, ct)).ToList();
+        var formations = await ListerFormationsAsync(ct: ct);
         int ajoutes = 0, misAJour = 0;
         var ignorees = lues.Where(l => l.Adherent is null).Select(l => l.Numero).ToList();
         var licencesVues = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -523,11 +548,14 @@ public sealed class ServiceAdherents(
         {
             var nouveau = lu.Adherent;
 
-            // Niveau ramené à la liste (« N2 » → « Niveau 2 ») ; inconnu : laissé vide (l'ancien est gardé), et signalé.
+            // Formation ramenée aux classes actives (« N2 » → « Niveau 2 ») ; inconnue : laissée vide (l'ancienne est gardée), et signalée.
             if (nouveau.Niveau is { } niveauLu)
             {
-                nouveau.Niveau = NiveauReconnu(niveauLu, Niveaux);
-                if (nouveau.Niveau is null)
+                var nom = NiveauReconnu(niveauLu, formations.Select(f => f.Nom).ToList());
+                var classe = formations.FirstOrDefault(f => f.Nom == nom);
+                nouveau.ClasseId = classe?.Id;
+                nouveau.Niveau = classe?.Nom;
+                if (classe is null)
                 {
                     niveauxInconnus.Add(lu.Numero);
                 }
@@ -553,7 +581,12 @@ public sealed class ServiceAdherents(
 
             existant.Nom = nouveau.Nom;
             existant.Prenom = nouveau.Prenom;
-            existant.Niveau = nouveau.Niveau ?? existant.Niveau;
+            if (nouveau.ClasseId is not null)
+            {
+                existant.ClasseId = nouveau.ClasseId;
+                existant.Niveau = nouveau.Niveau;
+            }
+
             existant.Licence = nouveau.Licence ?? existant.Licence;
             existant.Telephone = nouveau.Telephone ?? existant.Telephone;
             existant.Nitrox = lu.Nitrox ?? existant.Nitrox;
@@ -576,7 +609,7 @@ public sealed class ServiceAdherents(
 
         if (niveauxInconnus.Count > 0)
         {
-            message += $", {Libelles.Pluriel(niveauxInconnus.Count, "niveau inconnu laissé vide", "niveaux inconnus laissés vides")} " +
+            message += $", {Libelles.Pluriel(niveauxInconnus.Count, "formation inconnue laissée vide", "formations inconnues laissées vides")} " +
                 $"(ligne{(niveauxInconnus.Count > 1 ? "s" : "")} {string.Join(", ", niveauxInconnus.Take(10))}{(niveauxInconnus.Count > 10 ? "…" : "")})";
         }
 

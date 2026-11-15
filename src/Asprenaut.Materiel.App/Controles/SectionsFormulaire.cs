@@ -213,7 +213,7 @@ public sealed class SectionFormulaire : Carte
 }
 
 /// <summary>
-/// Puces à choix unique, rangées par groupes (« Plongeur » : Débutant N1 N2… ; « Encadrant » : E1 MF1…), titre du groupe à gauche,
+/// Puces à choix unique, rangées par groupes (« Classe » : Niveau 1, Niveau 2… Autonome), titre du groupe à gauche,
 /// retour à la ligne si la place manque. Un clic sur la puce choisie la retire (aucun choix). Clavier : flèches, Espace.
 /// Un seul contrôle dessiné.
 /// </summary>

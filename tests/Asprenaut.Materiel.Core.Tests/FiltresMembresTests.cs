@@ -41,6 +41,7 @@ public class FiltresMembresTests
     [Fact]
     public async Task Les_adherents_se_filtrent_par_niveau_nitrox_et_desactives()
     {
+        _ctx.AjouterClasses();
         async Task Ajouter(string prenom, string? niveau, bool nitrox = false, bool actif = true)
         {
             var r = await _ctx.Adherents.EnregistrerAsync(new Adherent { Prenom = prenom, Nom = "Test", Niveau = niveau, Nitrox = nitrox, Actif = actif });
