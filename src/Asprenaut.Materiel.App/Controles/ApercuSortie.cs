@@ -220,8 +220,9 @@ public sealed class ApercuSortie : ControleDessine
                     continue;
                 }
 
-                var l = TextRenderer.MeasureText(g, texte, p, Size.Empty, drapeaux).Width;
-                TextRenderer.DrawText(g, texte, p, new Rectangle(xt, (int)y, Math.Min(l + 2, fin - xt), (int)E(HauteurLigne)), c, drapeaux);
+                // Mesure sans EndEllipsis : avec une zone vide, il ramenait la largeur à presque rien (« R… »).
+                var l = TextRenderer.MeasureText(g, texte, p, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine).Width;
+                TextRenderer.DrawText(g, texte, p, new Rectangle(xt, (int)y, Math.Min(l + 4, fin - xt), (int)E(HauteurLigne)), c, drapeaux);
                 xt += l;
             }
 
