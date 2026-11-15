@@ -200,6 +200,15 @@ public sealed class SortieRepositoryMemoire(BaseMemoire db) : ISortieRepository
     public Task<int> CompterClotureesAsync(CancellationToken ct = default) =>
         Task.FromResult(db.Sorties.Count(s => s.Statut == StatutSortie.Cloturee));
 
+    public Task<IReadOnlyList<string>> ListerLieuxRecentsAsync(int nombre, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<string>>(db.Sorties
+            .Where(s => s.Lieu.Trim().Length > 0)
+            .OrderByDescending(s => s.DateSortie).ThenByDescending(s => s.Id)
+            .Select(s => s.Lieu.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(nombre)
+            .ToList());
+
     public Task<IReadOnlyList<SortieResume>> ListerClotureesAsync(CritereSorties critere, int decalage, int nombre, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<SortieResume>>(critere.Trier(db.Sorties.Select(Resumer).Where(critere.Correspond))
             .Skip(decalage).Take(nombre).ToList());

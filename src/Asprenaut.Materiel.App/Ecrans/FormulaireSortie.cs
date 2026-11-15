@@ -307,7 +307,7 @@ internal static class FormulaireSortie
     }
 
     /// <summary>« MF1 · Inspecteur TIV » ; classe : « Classe » ; inactif signalé.</summary>
-    private static string Detail(Moniteur m)
+    internal static string Detail(Moniteur m)
     {
         var parties = new List<string>();
         if (m.EstClasse)

@@ -79,6 +79,9 @@ public interface ISortieRepository
 
     Task<int> CompterClotureesAsync(CancellationToken ct = default);
 
+    /// <summary>Lieux non vides des sorties, sans doublon (majuscules ignorées), de la sortie la plus récente.</summary>
+    Task<IReadOnlyList<string>> ListerLieuxRecentsAsync(int nombre, CancellationToken ct = default);
+
     /// <summary>Une page des sorties clôturées qui correspondent aux critères, dans l'ordre demandé.</summary>
     Task<IReadOnlyList<SortieResume>> ListerClotureesAsync(CritereSorties critere, int decalage, int nombre, CancellationToken ct = default);
 

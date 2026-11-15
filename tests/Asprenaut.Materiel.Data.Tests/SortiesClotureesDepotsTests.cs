@@ -82,4 +82,23 @@ public class SortiesClotureesDepotsTests : IAsyncLifetime
         Assert.Equal([(piscine, "Piscine", 2), (mer, "Mer", 1)], totaux.ParType.Select(t => (t.TypeId!.Value, t.Nom, t.Nombre)));
         Assert.Equal(TypeSortie.Mer, totaux.ParType.Single(t => t.TypeId == mer).Famille);
     }
+
+    [Fact]
+    public async Task Les_lieux_recents_sans_doublon_de_la_sortie_la_plus_recente()
+    {
+        var (piscine, _, pascal, _) = await PreparerAsync();
+        await using (var cx = await _base.Fabrique.OuvrirAsync())
+        {
+            // Même lieu en minuscules, plus ancien : ne crée pas de doublon et ne fait pas reculer « Piscine Chalon ».
+            await cx.ExecuteAsync("""
+                INSERT INTO sortie (date_sortie, type, type_sortie_id, intitule, lieu, moniteur_id, statut) VALUES
+                    ('2026-09-10', 'Piscine', @piscine, 'Rentrée', ' piscine chalon ', @pascal, 'Cloturee');
+                """, new { piscine, pascal });
+        }
+
+        var depot = new SortieRepository(_base.Fabrique);
+        var lieux = await depot.ListerLieuxRecentsAsync(5);
+        Assert.Equal(["MARSEILLE", "PISCINE CHALON"], lieux.Select(l => l.ToUpperInvariant())); // Lieux vides ignorés.
+        Assert.Single(await depot.ListerLieuxRecentsAsync(1));
+    }
 }

@@ -163,6 +163,19 @@ public sealed class SortieRepository(FabriqueConnexion fabrique) : ISortieReposi
         return await cx.ExecuteScalarAsync<int>(new CommandDefinition("SELECT COUNT(*) FROM sortie WHERE statut = 'Cloturee';", cancellationToken: ct));
     }
 
+    public async Task<IReadOnlyList<string>> ListerLieuxRecentsAsync(int nombre, CancellationToken ct = default)
+    {
+        const string sql = """
+            SELECT TRIM(lieu) FROM sortie
+            WHERE TRIM(lieu) <> ''
+            GROUP BY TRIM(lieu) COLLATE NOCASE
+            ORDER BY MAX(date_sortie) DESC, MAX(id) DESC
+            LIMIT @nombre;
+            """;
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        return (await cx.QueryAsync<string>(new CommandDefinition(sql, new { nombre }, cancellationToken: ct))).ToList();
+    }
+
     public async Task<IReadOnlyList<LigneSortie>> ListerLignesAsync(long sortieId, CancellationToken ct = default)
     {
         const string sql = """

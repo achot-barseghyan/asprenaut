@@ -85,16 +85,16 @@ public sealed class EnTeteSortie : ControleDessine
 /// </summary>
 public sealed class ChoixTypeSortie : ControleDessine
 {
-    private const int HauteurTuile = 66;
     private const int Ecart = 8;
 
-    public sealed record Element(long Id, string Nom, string Icone, Color Couleur);
+    /// <summary>Un type ; <paramref name="Detail"/> facultatif sous le nom (« 1 utilisation »).</summary>
+    public sealed record Element(long Id, string Nom, string Icone, Color Couleur, string? Detail = null);
 
     private readonly List<Element> _elements = [];
     private long? _valeur;
     private int _survol = -1;
     private int _largeurPlacee = -1;
-    private int _hauteur = HauteurTuile;
+    private int _hauteur = 66;
     private readonly List<RectangleF> _zones = [];
 
     public ChoixTypeSortie()
@@ -139,7 +139,39 @@ public sealed class ChoixTypeSortie : ControleDessine
 
     public event EventHandler? ValeurChangee;
 
-    private int Colonnes => _elements.Count <= 5 ? Math.Max(1, _elements.Count) : (int)Math.Ceiling(_elements.Count / Math.Ceiling(_elements.Count / 5.0));
+    /// <summary>Tuiles par ligne au plus (« Modifier la sortie » : 5 ; « Nouvelle sortie » : 6).</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public int ColonnesMax
+    {
+        get => _colonnesMax;
+        set
+        {
+            if (value == _colonnesMax)
+            {
+                return;
+            }
+
+            _colonnesMax = value;
+            _largeurPlacee = -1;
+            Parent?.PerformLayout(this, nameof(Height));
+            Invalidate();
+        }
+    }
+
+    private int _colonnesMax = 5;
+
+    /// <summary>Hauteur d'une tuile, en pixels logiques.</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public int HauteurTuile { get; set; } = 66;
+
+    private int Colonnes
+    {
+        get
+        {
+            var max = Math.Max(1, ColonnesMax);
+            return _elements.Count <= max ? Math.Max(1, _elements.Count) : (int)Math.Ceiling(_elements.Count / Math.Ceiling(_elements.Count / (double)max));
+        }
+    }
 
     private void Placer(int largeur)
     {
@@ -205,10 +237,16 @@ public sealed class ChoixTypeSortie : ControleDessine
             }
 
             var icone = E(22);
-            var haut = zone.Y + ((zone.Height - icone - E(5) - E(18)) / 2);
+            var detail = el.Detail is { Length: > 0 } ? E(15) : 0;
+            var haut = zone.Y + ((zone.Height - icone - E(5) - E(18) - detail) / 2);
             Icones.Dessiner(g, el.Icone, new RectangleF(zone.X + ((zone.Width - icone) / 2), haut, icone, icone), el.Couleur);
             Dessin.Texte(g, el.Nom, Theme.PoliceTitre(9.75f), Rectangle.Round(new RectangleF(zone.X + E(4), haut + icone + E(5), zone.Width - E(8), E(18))),
                 choisi ? Theme.Texte : Theme.TexteSecondaireClair, centre: true);
+            if (detail > 0)
+            {
+                Dessin.Texte(g, el.Detail!, Theme.Police(8.25f), Rectangle.Round(new RectangleF(zone.X + E(4), haut + icone + E(5) + E(17), zone.Width - E(8), E(15))),
+                    Theme.TexteSecondaire, centre: true);
+            }
         }
     }
 
@@ -316,6 +354,29 @@ public sealed class ChoixPersonnes : ControleDessine
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public int LignesVisibles { get; set; } = 4;
 
+    private int _colonnes = 2;
+
+    /// <summary>Cartes par ligne (« Modifier la sortie » : 2 ; « Nouvelle sortie » : 4, moins si la place manque).</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public int Colonnes
+    {
+        get => _colonnes;
+        set
+        {
+            value = Math.Max(1, value);
+            if (value == _colonnes)
+            {
+                return;
+            }
+
+            _colonnes = value;
+            _decalage = 0;
+            RendreVisible();
+            Parent?.PerformLayout(this, nameof(Height));
+            Invalidate();
+        }
+    }
+
     /// <summary>Texte affiché quand la liste est vide.</summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public string TexteVide { get; set; } = "";
@@ -355,7 +416,7 @@ public sealed class ChoixPersonnes : ControleDessine
 
     public event EventHandler? ValeurChangee;
 
-    private int Lignes => Math.Max(1, (_elements.Count + 1) / 2);
+    private int Lignes => Math.Max(1, (_elements.Count + Colonnes - 1) / Colonnes);
 
     private int LignesAffichees => Math.Min(Lignes, LignesVisibles);
 
@@ -379,8 +440,8 @@ public sealed class ChoixPersonnes : ControleDessine
     private RectangleF Zone(int i)
     {
         var largeur = Width - 1 - (Defile ? E(LargeurBarre) : 0);
-        var l = (largeur - E(Ecart)) / 2;
-        return new RectangleF((i % 2) * (l + E(Ecart)), ((i / 2) * (E(HauteurCarte) + E(Ecart))) - _decalage, l, E(HauteurCarte));
+        var l = (largeur - ((Colonnes - 1) * E(Ecart))) / Colonnes;
+        return new RectangleF((i % Colonnes) * (l + E(Ecart)), ((i / Colonnes) * (E(HauteurCarte) + E(Ecart))) - _decalage, l, E(HauteurCarte));
     }
 
     protected override void Peindre(Graphics g)
@@ -499,7 +560,7 @@ public sealed class ChoixPersonnes : ControleDessine
             return;
         }
 
-        var haut = (i / 2) * (E(HauteurCarte) + E(Ecart));
+        var haut = (i / Colonnes) * (E(HauteurCarte) + E(Ecart));
         var hauteurVue = HauteurVoulue;
         if (haut < _decalage)
         {
@@ -575,8 +636,8 @@ public sealed class ChoixPersonnes : ControleDessine
         {
             Keys.Left => i - 1,
             Keys.Right => i + 1,
-            Keys.Up => i - 2,
-            Keys.Down => i < 0 ? 0 : i + 2,
+            Keys.Up => i - Colonnes,
+            Keys.Down => i < 0 ? 0 : i + Colonnes,
             _ => int.MinValue,
         };
         if (n == int.MinValue)

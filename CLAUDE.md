@@ -85,7 +85,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   (pastilles de couleur, 7 par ligne), `CarteAutorisation` (tuile, titre,
   description, `Interrupteur` coloré, carte teintée si active, `Dessous` retiré / remis plutôt que masqué), `TuileIcone`, `AvatarEntete`
   (`Colorer` : violet du moniteur ; `Tuile` : carré arrondi de « Ajouter une classe »), `LibelleObligatoire` ; `ChampSaisie.CouleurBordure`. Ces contrôles sont `AutoSize` + `GrowAndShrink` et se mesurent à la largeur du parent quand la largeur proposée
-  vaut 0 ou 1 (un TableLayoutPanel sonde avec 1 : les puces une par ligne gonflaient la fenêtre) ; les décoratifs ont `TabStop = false`, `Interrupteur`, `SelecteurNombre`, `Bascule` (options côte à côte, nombres), `ChoixResponsable`, `CarteSection`, `LigneReglage`,
+  vaut 0 ou 1 (un TableLayoutPanel sonde avec 1 : les puces une par ligne gonflaient la fenêtre) ; les décoratifs ont `TabStop = false`, `Interrupteur`, `SelecteurNombre`, `Bascule` (options côte à côte, nombres), `CarteSection`, `LigneReglage`,
   `ListeChoix` (liste de choix dessinée, badge + titre + détail, clic ou flèches), `JournalHistorique` (journal par jour dessiné dans un seul contrôle défilant : seule la partie visible est peinte, le clic sur un
   code est retrouvé par calcul — à préférer à un contrôle par ligne dès qu'une liste peut compter des milliers d'éléments).
   `EcranBilan` : cartes entièrement dessinées (classes imbriquées), placées par `PageBilan` selon la largeur (4/2 chiffres,
@@ -111,6 +111,15 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   vertical (cercle placé sous `Bascule.Bottom`), un clic la rouvre ; les colonnes ouvertes se partagent la place (les repliées ne comptent pas dans les 5 / 2 par rangée),
   accolade seulement si assez large. Choix retenu : `Reglages.ColonnesRevisionsRepliees`, `ChangerColonnesRevisionsRepliees` (libre,
   une colonne reste ouverte).
+- **Nouvelle sortie** (`EcranNouvelleSortie`, maquette, `NouvelleSortieTests`) : en-tête + `EtapesSortie` (1 Sortie — 2 Départ du
+  matériel — 3 Retour) ; colonne de gauche défilante de quatre `SectionFormulaire` (fond `Theme.Surface`) : 1 Type (`ChoixTypeSortie`,
+  `ColonnesMax` 6 / 3 si étroit, tuiles de 84 avec « 1 utilisation »), 2 Quand et où (date | lieu, raccourcis `ChoixPuces.Actions` :
+  `ServiceSortie.DatesProposees` — aujourd'hui, demain, prochain week-end — et `LieuxRecentsAsync` (3 puces, 20 en autocomplétion,
+  `ISortieRepository.ListerLieuxRecentsAsync`) ; intitulé proposé `ServiceSortie.IntitulePropose` avec pastille « AUTO » tant qu'il
+  n'est pas tapé, vidé = repris), 3 Responsable (`Bascule` + `ChoixPersonnes.Colonnes` 4 / 2), 4 Règles et notes (compteur
+  `SelecteurNombre` protégé, `OptionUnParCategorie` pour les types nominatifs, notes 400 car.) ; à droite (340, 300 sous 1100 px
+  logiques), fixe : `ApercuSortie` (calendrier teinté, type, intitulé, lignes responsable / lieu / utilisations / règle, manque en
+  rouge), `NoteEtape` « Étape suivante », « Créer et scanner le matériel », Annuler, « Il manque … » et l'erreur du service.
 - **Paramètres** (`EcranParametres`) : deux onglets (`Bascule`). « Paramètres » (fonctionnement de l'app) : Sécurité, Pistolet,
   Règles des sorties, Données et sauvegardes, Affichage, À propos. « Configuration du club » : Club, Types de sortie, Compteur
   d'utilisation, Prestataires, Problèmes signalés — construit et rempli seulement à sa première ouverture (`AfficherOngletAsync`,
@@ -274,8 +283,8 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     niveau » tapé, `NiveauPropose` ; Rôles au club : carte Inspecteur TIV, + carte « Moniteur actif » en modification), en-tête violet
     (`Theme.Encadrement`) avec initiales et étiquettes ; classe : nom | abréviation (« AUTO » tant qu'elle suit le nom, compteur 0/4),
     exemples (`ExemplesClasses`, à l'ajout, sans les noms pris), couleur, aperçu (`ApercuClasse`), carte « Classe active » en modification. Journal `ClasseCreee` / `ClasseModifiee`. Afficher `SortieResume.LibelleResponsable`
-    (« Moniteur : … » / « Classe : … »). App : onglets `Bascule` dans `EcranMoniteurs` (ordre : Adhérents, ouvert à l'arrivée, puis Moniteurs et Classes ; `OngletAdherents` / `OngletMoniteurs` / `OngletClasses`), `ChoixResponsable` (Moniteur | Classe
-    puis la liste) dans Nouvelle sortie et Modifier la sortie. Filtres de l'écran Membres (`FiltresMembresTests`) : onglet Moniteurs, recherche (prénom, nom, niveau, téléphone, accents ignorés) et puces Tous / Actifs / Inspecteurs TIV / Matériel dehors / Inactifs (`ServiceMoniteurs.Filtrer` → `ListeMoniteurs`, nombres après la recherche) ; onglet Adhérents, recherche, liste « formation en cours » (toutes, les classes actives, « Sans formation » = `ServiceAdherents.SansNiveau`) et puces Tous / Matériel dehors / Non rendu / Nitrox / Désactivés ; pas de filtre pour les classes ; chaque onglet a sa recherche. Données de démo : chargées si aucun moniteur (genre Moniteur).
+    (« Moniteur : … » / « Classe : … »). App : onglets `Bascule` dans `EcranMoniteurs` (ordre : Adhérents, ouvert à l'arrivée, puis Moniteurs et Classes ; `OngletAdherents` / `OngletMoniteurs` / `OngletClasses`), `Bascule` Moniteur | Classe
+    puis `ChoixPersonnes` dans Nouvelle sortie et Modifier la sortie. Filtres de l'écran Membres (`FiltresMembresTests`) : onglet Moniteurs, recherche (prénom, nom, niveau, téléphone, accents ignorés) et puces Tous / Actifs / Inspecteurs TIV / Matériel dehors / Inactifs (`ServiceMoniteurs.Filtrer` → `ListeMoniteurs`, nombres après la recherche) ; onglet Adhérents, recherche, liste « formation en cours » (toutes, les classes actives, « Sans formation » = `ServiceAdherents.SansNiveau`) et puces Tous / Matériel dehors / Non rendu / Nitrox / Désactivés ; pas de filtre pour les classes ; chaque onglet a sa recherche. Données de démo : chargées si aucun moniteur (genre Moniteur).
 25. Manuels (`ServiceManuels`, migration 009, écran `EcranManuels`, maquette « Manuels ») : consultation libre ; ajouter, modifier,
     retirer = action protégée Matériel. Le PDF est copié dans `Manuels\` à côté de la base (`IStockageManuels`, nom déjà pris →
     « (2) ») ; l'écran lit son nombre de pages (`LecteurPdf.CompterPagesAsync`). Marque et titre obligatoires ; sommaire tapé une

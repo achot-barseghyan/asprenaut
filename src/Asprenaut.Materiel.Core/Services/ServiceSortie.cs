@@ -129,6 +129,54 @@ public sealed class ServiceSortie(
     public Task<IReadOnlyList<LigneSortie>> ListerMaterielAsync(long sortieId, CancellationToken ct = default) =>
         sorties.ListerLignesAsync(sortieId, ct);
 
+    /// <summary>Lieux proposés en raccourcis dans « Nouvelle sortie » : ceux des sorties les plus récentes, sans doublon.</summary>
+    public Task<IReadOnlyList<string>> LieuxRecentsAsync(int nombre = 3, CancellationToken ct = default) =>
+        sorties.ListerLieuxRecentsAsync(Math.Max(1, nombre), ct);
+
+    /// <summary>
+    /// Raccourcis de date de « Nouvelle sortie » : aujourd'hui, demain, puis le prochain week-end (le suivant si samedi
+    /// est aujourd'hui ou demain, déjà proposés).
+    /// </summary>
+    public static IReadOnlyList<(string Texte, DateOnly Date)> DatesProposees(DateOnly aujourdhui)
+    {
+        var samedi = ((int)DayOfWeek.Saturday - (int)aujourdhui.DayOfWeek + 7) % 7;
+        if (samedi <= 1)
+        {
+            samedi += 7;
+        }
+
+        return [("Aujourd'hui", aujourdhui), ("Demain", aujourdhui.AddDays(1)), ("Samedi", aujourdhui.AddDays(samedi)), ("Dimanche", aujourdhui.AddDays(samedi + 1))];
+    }
+
+    /// <summary>
+    /// Intitulé proposé tant que l'utilisateur n'en tape pas (« Piscine du jeudi », « Sortie mer du samedi ») : une classe
+    /// responsable donne « Piscine Niveau 2 » ; une sortie en mer ou au lac avec un lieu, « Sortie Marseille ».
+    /// </summary>
+    public static string IntitulePropose(TypeDeSortie? type, DateOnly? date, Moniteur? responsable, string lieu)
+    {
+        var famille = type?.Pictogramme ?? TypeSortie.Autre;
+        var debut = famille switch
+        {
+            TypeSortie.Piscine => "Piscine",
+            TypeSortie.Fosse => "Fosse",
+            TypeSortie.Mer => "Sortie mer",
+            TypeSortie.Lac => "Sortie lac",
+            TypeSortie.Bapteme => "Baptêmes",
+            _ => type?.Nom.Trim() is { Length: > 0 } nom ? nom : "Sortie",
+        };
+        if (responsable is { EstClasse: true })
+        {
+            return $"{debut} {responsable.NomComplet}";
+        }
+
+        if (lieu.Trim() is { Length: > 0 } l && famille is TypeSortie.Mer or TypeSortie.Lac)
+        {
+            return $"Sortie {l}";
+        }
+
+        return date is { } d ? $"{debut} du {d.ToString("dddd", Libelles.Culture)}" : debut;
+    }
+
     public async Task<ResultatOperation> CreerAsync(NouvelleSortie demande, CancellationToken ct = default)
     {
         var intitule = demande.Intitule.Trim();
