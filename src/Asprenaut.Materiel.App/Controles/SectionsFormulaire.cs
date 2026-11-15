@@ -25,24 +25,84 @@ public sealed class LibelleObligatoire : Label
         Margin = Padding.Empty;
     }
 
+    private bool _etoile = true;
+    private bool _modifie;
+
+    /// <summary>Étoile « obligatoire » (faux : libellé simple, qui peut seulement porter le point <see cref="Modifie"/>).</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool Etoile
+    {
+        get => _etoile;
+        set
+        {
+            _etoile = value;
+            Size = GetPreferredSize(Size.Empty);
+            Invalidate();
+        }
+    }
+
+    /// <summary>
+    /// Point turquoise après le libellé : la valeur diffère de celle enregistrée (« Modifier la sortie »). Sa place est toujours
+    /// réservée, pour que le libellé ne change pas de largeur.
+    /// </summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool Modifie
+    {
+        get => _modifie;
+        set
+        {
+            if (_modifie != value)
+            {
+                _modifie = value;
+                Invalidate();
+            }
+        }
+    }
+
+    /// <summary>Réserve la place du point <see cref="Modifie"/>.</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool AvecPoint { get; set; }
+
     private Font PoliceEtoile => Theme.PoliceGrasse(Font.SizeInPoints);
 
-    private int LargeurEtoile => TextRenderer.MeasureText("*", PoliceEtoile, Size.Empty, TextFormatFlags.NoPadding).Width + (int)Dessin.Echelle(this, 4);
+    private int LargeurEtoile => _etoile ? TextRenderer.MeasureText("*", PoliceEtoile, Size.Empty, TextFormatFlags.NoPadding).Width + (int)Dessin.Echelle(this, 4) : 0;
+
+    private int LargeurPoint => AvecPoint ? (int)Dessin.Echelle(this, 15) : 0;
 
     public override Size GetPreferredSize(Size proposedSize)
     {
         var texte = TextRenderer.MeasureText(Text, Font, Size.Empty, TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
-        return new Size(texte.Width + LargeurEtoile + 2, texte.Height + 2);
+        return new Size(texte.Width + LargeurEtoile + LargeurPoint + 2, texte.Height + 2);
     }
 
     protected override void OnPaint(PaintEventArgs e)
     {
         const TextFormatFlags drapeaux = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix;
-        var largeurTexte = TextRenderer.MeasureText(Text, Font, Size.Empty, drapeaux).Width;
+        var mesure = TextRenderer.MeasureText(Text, Font, Size.Empty, drapeaux);
         var xTexte = _etoileDevant ? LargeurEtoile : 0;
-        var xEtoile = _etoileDevant ? 0 : largeurTexte + (int)Dessin.Echelle(this, 4);
+        var xEtoile = _etoileDevant ? 0 : mesure.Width + (int)Dessin.Echelle(this, 4);
         TextRenderer.DrawText(e.Graphics, Text, Font, new Point(xTexte, 1), ForeColor, drapeaux);
-        TextRenderer.DrawText(e.Graphics, "*", PoliceEtoile, new Point(xEtoile, 1), Theme.AccentClair, drapeaux);
+        if (_etoile)
+        {
+            TextRenderer.DrawText(e.Graphics, "*", PoliceEtoile, new Point(xEtoile, 1), Theme.AccentClair, drapeaux);
+        }
+
+        if (_modifie)
+        {
+            // Point de 7 px avec un léger halo (maquette « Modifier la sortie »).
+            Dessin.Qualite(e.Graphics);
+            var x = mesure.Width + LargeurEtoile + Dessin.Echelle(this, 5);
+            var y = 1 + (mesure.Height / 2f);
+            var r = Dessin.Echelle(this, 3.5f);
+            var halo = Dessin.Echelle(this, 5.5f);
+            using (var pinceauHalo = new SolidBrush(Color.FromArgb(55, Theme.Accent)))
+            {
+                e.Graphics.FillEllipse(pinceauHalo, x + r - halo, y - halo, 2 * halo, 2 * halo);
+            }
+
+            using var pinceau = new SolidBrush(Theme.Accent);
+            e.Graphics.FillEllipse(pinceau, x, y - r, 2 * r, 2 * r);
+        }
     }
 }
 
@@ -179,7 +239,7 @@ public sealed class SectionFormulaire : Carte
         Controls.Add(_contenu);
 
         var badge = new NumeroSection(numero) { Margin = new Padding(0, 0, 10, 0) };
-        var libelle = Ui.Libelle(titre.ToUpper(Libelles.Culture), Theme.PoliceGrasse(9.75f), Theme.Texte);
+        var libelle = _titre = new LibelleObligatoire(titre.ToUpper(Libelles.Culture), Theme.PoliceGrasse(9.75f), Theme.Texte) { AvecPoint = true, Etoile = false };
         libelle.Margin = new Padding(0, 3, 0, 0);
         var gauche = Ui.Rangee(true, badge, libelle);
         gauche.Margin = Padding.Empty;
@@ -191,6 +251,16 @@ public sealed class SectionFormulaire : Carte
         Ajouter(entete);
 
         _contenu.SizeChanged += (_, _) => Parent?.PerformLayout(this, nameof(Height));
+    }
+
+    private readonly LibelleObligatoire _titre;
+
+    /// <summary>Point turquoise après le titre : un choix de la section diffère de celui enregistré.</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool Modifie
+    {
+        get => _titre.Modifie;
+        set => _titre.Modifie = value;
     }
 
     /// <summary>Texte discret à droite du titre (« non renseigné », « Niveau 2 »).</summary>
@@ -225,8 +295,20 @@ public sealed class SectionFormulaire : Carte
         return controle;
     }
 
+    /// <summary>Champ pleine largeur sous un libellé déjà construit (<see cref="LibelleObligatoire.Modifie"/>).</summary>
+    public T Champ<T>(Label libelle, T controle, int hauteur = Theme.HauteurChamp)
+        where T : Control
+    {
+        FenetreFormulaire.AjouterChamp(_contenu, libelle, controle, hauteur);
+        return controle;
+    }
+
     /// <summary>Deux champs côte à côte (voir <see cref="FenetreFormulaire.DeuxChamps"/>).</summary>
     public TableLayoutPanel DeuxChamps(string libelle1, Control champ1, string libelle2, Control champ2, int hauteur = Theme.HauteurChamp) =>
+        Ajouter(FenetreFormulaire.RangeeDeuxChamps(libelle1, champ1, libelle2, champ2, hauteur, 7));
+
+    /// <summary>Deux champs côte à côte sous des libellés déjà construits.</summary>
+    public TableLayoutPanel DeuxChamps(Label libelle1, Control champ1, Label libelle2, Control champ2, int hauteur = Theme.HauteurChamp) =>
         Ajouter(FenetreFormulaire.RangeeDeuxChamps(libelle1, champ1, libelle2, champ2, hauteur, 7));
 
     public override Size GetPreferredSize(Size proposedSize)

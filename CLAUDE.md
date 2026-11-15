@@ -152,6 +152,13 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
    le moniteur déjà responsable reste accepté s'il est devenu inactif (`ServiceSortie.ModifierAsync`, journal `SortieModifiee`).
    Supprimer une sortie : seulement si aucun matériel n'y est rattaché (`ServiceSortie.SupprimerAsync` ; la requête SQL du dépôt
    re-vérifie, journal `SortieSupprimee`). Écran Départ : boutons « Modifier la sortie » et « Supprimer » (sortie vide) en haut à droite.
+   Fenêtre « Modifier la sortie » (`Ecrans/FormulaireSortie`, maquette) : en-tête `EnTeteSortie` (calendrier teinté du type,
+   intitulé, pastille du type, responsable · lieu, suit la saisie ; `FenetreFormulaire.EnTetePersonnalise`), deux colonnes de
+   `SectionFormulaire` : 1 La sortie (`ChoixTypeSortie` en tuiles, date, intitulé, lieu), 2 Notes (400 car., compteur) |
+   3 Responsable (`Bascule` + `ChoixPersonnes`, cartes sur 2 colonnes, 3 lignes puis molette), 4 Règles du matériel (compteur,
+   puces 1 plongée / Journée / Week-end, `OptionUnParCategorie`). Point turquoise sur chaque valeur changée
+   (`LibelleObligatoire.Modifie` / `AvecPoint` / `Etoile`, `SectionFormulaire.Modifie`), résumé en bas (`FenetreFormulaire.Resume`),
+   « Enregistrer » grisé sans modification.
 7. Clôture : Dehors → Manquant, confirmation avec le nombre (`ApercuClotureAsync`) s'il reste du matériel dehors
    (`ApercuCloture.ConfirmationNecessaire`, réglage `ConfirmerCloture`).
 8. Un Manquant scanné plus tard au retour (dans sa sortie ou depuis une autre) ou au départ d'une autre sortie → Rendu + journal

@@ -1427,7 +1427,7 @@ public sealed class EcranMoniteurs : EcranBase
     }
 
     /// <summary>Pastille avec les initiales en dégradé : ronde pour un moniteur, carrée arrondie avec l'abréviation pour une classe.</summary>
-    private sealed class Avatar : ControleDessine
+    internal sealed class Avatar : ControleDessine
     {
         private readonly string _initiales;
         private readonly (Color Clair, Color Fonce) _degrade;

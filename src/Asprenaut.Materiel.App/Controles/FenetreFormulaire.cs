@@ -29,6 +29,7 @@ public sealed class FenetreFormulaire : Form, IFondDessine
     private TableLayoutPanel _bas = null!;
     private TableLayoutPanel _entete = null!;
     private readonly Label _note = new LibelleObligatoire("", Theme.Police(9f), Theme.TexteSecondaire, etoileDevant: true);
+    private readonly Label _resume = Ui.Libelle("", Theme.Police(9f), Theme.TexteSecondaire);
     private readonly Func<Task<ResultatOperation>> _validation;
 
     /// <param name="largeur">Largeur de la fenêtre (marges comprises), en pixels logiques.</param>
@@ -81,13 +82,15 @@ public sealed class FenetreFormulaire : Form, IFondDessine
         boutons.Anchor = AnchorStyles.Right;
         // Bas de la fenêtre : note facultative à gauche (« * champs obligatoires »), boutons à droite.
         _note.Visible = false;
-        _note.Anchor = AnchorStyles.Left;
-        var bas = _bas = Ui.Colonnes((_note, SizeType.Percent, 100), (boutons, SizeType.AutoSize, 0));
+        _resume.Visible = false;
+        _resume.MaximumSize = new Size(Math.Max(120, largeurChamps - 320), 0);
+        var gauche = Ui.Pile(_note, _resume);
+        var bas = _bas = Ui.Colonnes((gauche, SizeType.Percent, 100), (boutons, SizeType.AutoSize, 0));
         bas.AutoSize = true;
         bas.Dock = DockStyle.Fill;
         // Colonnes met Dock Fill : la note se centre à côté des boutons (Anchor après Dock, qui le remet à zéro).
-        _note.Dock = boutons.Dock = DockStyle.None;
-        _note.Anchor = AnchorStyles.Left;
+        gauche.Dock = boutons.Dock = DockStyle.None;
+        gauche.Anchor = AnchorStyles.Left;
         boutons.Anchor = AnchorStyles.Right;
         bas.Margin = new Padding(0, 16, 0, 0);
         _message.MaximumSize = new Size(largeurChamps, 0);
@@ -138,6 +141,32 @@ public sealed class FenetreFormulaire : Form, IFondDessine
         _badge.Visible = !string.IsNullOrEmpty(badge);
         _avatar.Icone = icone ?? "";
         _avatar.Visible = icone is not null;
+    }
+
+    /// <summary>
+    /// Remplace l'en-tête (rond, titre, sous-titre, pastille) par un contrôle toute largeur (carte de la sortie de
+    /// « Modifier la sortie »). Le titre de la barre de la fenêtre reste celui du constructeur.
+    /// </summary>
+    public void EnTetePersonnalise(Control controle)
+    {
+        foreach (var ancien in _entete.Controls.Cast<Control>().ToList())
+        {
+            ancien.Visible = false; // Gardés (le titre est encore modifiable par Titre) mais plus affichés.
+        }
+
+        controle.Dock = DockStyle.Fill;
+        controle.Margin = Padding.Empty;
+        _entete.Controls.Add(controle, 0, 1);
+        _entete.SetColumnSpan(controle, 3);
+    }
+
+    /// <summary>Texte en bas à gauche (« 2 modifications : type, lieu ») ; <paramref name="enAvant"/> : turquoise et gras.</summary>
+    public void Resume(string texte, bool enAvant)
+    {
+        _resume.Text = texte;
+        _resume.Font = enAvant ? Theme.PoliceTitre(9f) : Theme.Police(9f);
+        _resume.ForeColor = enAvant ? Theme.AccentClair : Theme.TexteSecondaire;
+        _resume.Visible = texte.Length > 0;
     }
 
     /// <summary>Titre affiché dans la fenêtre (aperçu : « Camille Martin » pendant la saisie).</summary>
@@ -231,9 +260,12 @@ public sealed class FenetreFormulaire : Form, IFondDessine
         return new LibelleObligatoire(texte[..^2], Theme.PoliceTitre(9.75f), Theme.TexteSecondaireClair) { Margin = new Padding(0, 0, 0, 8) };
     }
 
-    internal static void AjouterChamp(TableLayoutPanel table, string libelle, Control controle, int hauteur)
+    internal static void AjouterChamp(TableLayoutPanel table, string libelle, Control controle, int hauteur) =>
+        AjouterChamp(table, LibelleChamp(libelle), controle, hauteur);
+
+    internal static void AjouterChamp(TableLayoutPanel table, Label libelle, Control controle, int hauteur)
     {
-        AjouterLigne(table, LibelleChamp(libelle), SizeType.AutoSize, 0);
+        AjouterLigne(table, libelle, SizeType.AutoSize, 0);
         controle.Margin = new Padding(0, 0, 0, 14);
         AjouterLigne(table, controle, SizeType.Absolute, hauteur + 14);
     }
@@ -246,15 +278,16 @@ public sealed class FenetreFormulaire : Form, IFondDessine
     }
 
     /// <summary>Deux champs côte à côte, libellés au-dessus, séparés de 2 × <paramref name="ecart"/>.</summary>
-    internal static TableLayoutPanel RangeeDeuxChamps(string libelle1, Control champ1, string libelle2, Control champ2, int hauteur, int ecart)
+    internal static TableLayoutPanel RangeeDeuxChamps(string libelle1, Control champ1, string libelle2, Control champ2, int hauteur, int ecart) =>
+        RangeeDeuxChamps(LibelleChamp(libelle1), champ1, LibelleChamp(libelle2), champ2, hauteur, ecart);
+
+    internal static TableLayoutPanel RangeeDeuxChamps(Label l1, Control champ1, Label l2, Control champ2, int hauteur, int ecart)
     {
         var table = new TableLayoutPanel { ColumnCount = 2, RowCount = 2, AutoSize = true, BackColor = Color.Transparent, Margin = new Padding(0, 0, 0, 14) };
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, hauteur));
-        var l1 = LibelleChamp(libelle1);
-        var l2 = LibelleChamp(libelle2);
         l1.Margin = new Padding(0, 0, ecart, 8);
         l2.Margin = new Padding(ecart, 0, 0, 8);
         champ1.Margin = new Padding(0, 0, ecart, 0);

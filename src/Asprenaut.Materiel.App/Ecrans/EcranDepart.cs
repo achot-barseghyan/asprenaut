@@ -268,80 +268,16 @@ public sealed class EcranDepart : EcranScanBase
     /// <summary>Modifier date, type, intitulé, responsable, lieu, notes : fenêtre préremplie, validée par ServiceSortie.</summary>
     private async Task ModifierAsync()
     {
-        if (await _sorties.ObtenirAsync(SortieId) is not { } s || IsDisposed)
-        {
-            return;
-        }
-
-        var date = new ChampDate { Date = s.DateSortie };
-        // Types proposés, plus celui de la sortie s'il a été masqué depuis.
-        var type = new ListeDeroulante { AccessibleName = "Type de sortie" };
-        var types = await _typesSortie.ListerProposesAsync(s.TypeId);
-        foreach (var t in types)
-        {
-            type.Items.Add(new Choix<long>(t.Id, t.Nom));
-        }
-
-        type.SelectedIndex = Math.Max(0, types.ToList().FindIndex(t => t.Id == s.TypeId));
-        var intitule = new ChampSaisie { Valeur = s.Intitule };
-        intitule.Champ.AccessibleName = "Intitulé";
-        var lieu = new ChampSaisie { Valeur = s.Lieu, TexteIndicatif = "Nom de la piscine, du site…" };
-        lieu.Champ.AccessibleName = "Lieu";
-        var notes = new ChampSaisie(multiligne: true) { Valeur = s.Notes, TexteIndicatif = "Groupe N1, 8 élèves…" };
-        notes.Champ.AccessibleName = "Notes";
-
-        // Moniteurs et classes actifs, plus le responsable actuel s'il est devenu inactif.
-        var responsable = new ChoixResponsable();
-        responsable.Remplir((await _moniteurs.ListerTousAsync()).Where(m => m.Actif || m.Id == s.MoniteurId).ToList(), s.MoniteurId);
-
-        // Utilisations comptées : celles de la sortie ; un autre type reprend sa valeur par défaut.
-        var utilisations = new SelecteurNombre("Utilisations comptées pour cette sortie", n => Libelles.Pluriel(n, "utilisation")) { Nombre = s.Utilisations };
-        _garde.Lier(utilisations, ActionProtegee.CompteurSortie);
-        utilisations.Demande += (_, n) =>
-        {
-            if (_garde.Exiger(utilisations.FindForm(), ActionProtegee.CompteurSortie, "Changer les utilisations"))
-            {
-                utilisations.Nombre = Math.Clamp(n, TypeDeSortie.UtilisationsMin, TypeDeSortie.UtilisationsMax);
-            }
-        };
-        // Sortie nominative (la sienne, ou celle du nouveau type) : un équipement par catégorie et par adhérent.
-        var unParCategorie = new OptionUnParCategorie(_garde) { Actif = s.UnParCategorie, Visible = s.Nominatif, Margin = new Padding(0, 0, 0, 14) };
-        type.SelectedIndexChanged += (_, _) =>
-        {
-            if (type.SelectedItem is Choix<long> c && types.FirstOrDefault(t => t.Id == c.Valeur) is { } choisi)
-            {
-                utilisations.Nombre = choisi.Id == s.TypeId ? s.Utilisations : choisi.Utilisations;
-                unParCategorie.Visible = choisi.Id == s.TypeId ? s.Nominatif : choisi.Nominatif;
-            }
-        };
-
-        using var fenetre = new FenetreFormulaire("Modifier la sortie", "Enregistrer", () =>
-            date.Date is not { } d
-                ? Task.FromResult(ResultatOperation.Echec("Date invalide : écrivez-la comme 08/11/2026."))
-                : _sorties.ModifierAsync(SortieId, new NouvelleSortie(
-                    d,
-                    s.Type,
-                    intitule.Valeur,
-                    responsable.ResponsableId,
-                    lieu.Valeur,
-                    notes.Valeur,
-                    (type.SelectedItem as Choix<long>)?.Valeur,
-                    utilisations.Nombre,
-                    unParCategorie.Actif)));
-        fenetre.DeuxChamps("Date", date, "Type", type);
-        fenetre.DeuxChamps("Intitulé", intitule, "Utilisations (compteur)", utilisations);
-        fenetre.Ajouter(unParCategorie);
-        fenetre.Champ("Responsable", responsable); // Toute la largeur : « Moniteur | Classe » puis la liste.
-        fenetre.Champ("Lieu", lieu);
-        fenetre.Champ("Notes (facultatif)", notes, 96);
-
-        if (fenetre.ShowDialog(FindForm()) == DialogResult.OK && !IsDisposed)
+        if (await FormulaireSortie.ModifierAsync(FindForm(), SortieId, _sorties, _typesSortie, _moniteurs, _garde) && !IsDisposed)
         {
             await RafraichirAsync();
             ZoneScan.AfficherMessage(NiveauResultat.Succes, "Sortie modifiée.");
         }
 
-        ZoneScan.PrendreFocus();
+        if (!IsDisposed)
+        {
+            ZoneScan.PrendreFocus();
+        }
     }
 
     /// <summary>Supprimer une sortie créée par erreur (bouton visible seulement si aucun matériel n'est scanné).</summary>
