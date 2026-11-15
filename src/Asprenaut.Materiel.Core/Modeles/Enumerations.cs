@@ -67,6 +67,15 @@ public enum ModeAffichage
     Clair,
 }
 
+/// <summary>Logo du club (Paramètres › Club) : celui fourni avec l'appli, une image choisie par le club, ou aucun (initiales).</summary>
+[System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<ChoixLogo>))]
+public enum ChoixLogo
+{
+    Fourni,
+    Personnalise,
+    Aucun,
+}
+
 /// <summary>Montage du premier étage d'un détendeur sur le robinet du bloc.</summary>
 public enum MontageDetendeur
 {

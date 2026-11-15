@@ -21,12 +21,14 @@ public sealed class SauvegardeComplete(
     IServiceSauvegarde sauvegarde,
     IReglagesSauvegardables reglages,
     string dossierManuels,
-    Func<DateTime> maintenantLocal) : ISauvegardeComplete
+    Func<DateTime> maintenantLocal,
+    string? dossierClub = null) : ISauvegardeComplete
 {
     public const string EntreeDescription = "asprenaut-sauvegarde.json";
     public const string EntreeBase = "materiel.db";
     public const string EntreeReglages = "reglages.json";
     public const string DossierManuelsZip = "Manuels/";
+    public const string DossierClubZip = "Club/";
     private const int Format = 1;
 
     /// <summary>Description écrite dans le fichier : format, date, version de la base, nombre de manuels.</summary>
@@ -68,6 +70,11 @@ public sealed class SauvegardeComplete(
                 foreach (var manuel in manuels)
                 {
                     archive.CreateEntryFromFile(manuel, DossierManuelsZip + Path.GetFileName(manuel), CompressionLevel.Fastest);
+                }
+
+                foreach (var fichier in dossierClub is not null && Directory.Exists(dossierClub) ? Directory.GetFiles(dossierClub) : [])
+                {
+                    archive.CreateEntryFromFile(fichier, DossierClubZip + Path.GetFileName(fichier), CompressionLevel.Fastest);
                 }
             }
 
@@ -137,6 +144,19 @@ public sealed class SauvegardeComplete(
             foreach (var manuel in manuels)
             {
                 manuel.ExtractToFile(Path.Combine(dossierManuels, Path.GetFileName(manuel.FullName)), overwrite: true);
+            }
+
+            // Le logo du club (le nom seul, comme les manuels).
+            var club = archive.Entries
+                .Where(e => e.FullName.StartsWith(DossierClubZip, StringComparison.Ordinal) && Path.GetFileName(e.FullName).Length > 0)
+                .ToList();
+            if (dossierClub is not null && club.Count > 0)
+            {
+                Directory.CreateDirectory(dossierClub);
+                foreach (var fichier in club)
+                {
+                    fichier.ExtractToFile(Path.Combine(dossierClub, Path.GetFileName(fichier.FullName)), overwrite: true);
+                }
             }
 
             return ResultatOperation.Ok($"Sauvegarde complète du {description.Creee} restaurée : base, réglages et {Libelle(manuels.Count)}. " +

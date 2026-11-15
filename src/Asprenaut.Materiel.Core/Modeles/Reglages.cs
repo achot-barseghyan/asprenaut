@@ -143,7 +143,19 @@ public sealed class Reglages
 
     public string NomClub { get; set; } = "Asprenaut";
 
+    /// <summary>Nom du responsable matériel (repris comme intervenant des réparations faites au club).</summary>
     public string ResponsableMateriel { get; set; } = "";
+
+    /// <summary>Téléphone du responsable matériel, mis en forme par paires (« 06 12 34 56 78 »).</summary>
+    public string TelephoneResponsable { get; set; } = "";
+
+    /// <summary>Logo affiché sur l'accueil ; l'image choisie par le club est rangée dans « Club\logo.png » à côté de la base.</summary>
+    public ChoixLogo LogoClub { get; set; } = ChoixLogo.Fourni;
+
+    /// <summary>Responsable et téléphone sur une ligne (« Marc Petit · 06 12 34 56 78 »), pour les documents imprimés.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string ResponsableComplet =>
+        string.Join(" · ", new[] { ResponsableMateriel, TelephoneResponsable }.Select(t => t.Trim()).Where(t => t.Length > 0));
 
     /// <summary>Numéro d'affiliation FFESSM (ex. « 14 71-0025 »), repris dans l'identification marquée sur le matériel.</summary>
     public string NumeroClub { get; set; } = "";

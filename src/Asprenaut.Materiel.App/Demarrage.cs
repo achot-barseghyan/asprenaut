@@ -5,6 +5,7 @@ using Asprenaut.Materiel.Core.Abstractions;
 using Asprenaut.Materiel.Core.Services;
 using Asprenaut.Materiel.Data.Connexion;
 using Asprenaut.Materiel.Data.Depots;
+using Asprenaut.Materiel.Data.Club;
 using Asprenaut.Materiel.Data.Manuels;
 using Asprenaut.Materiel.Data.Migrations;
 using Asprenaut.Materiel.Data.Sauvegardes;
@@ -57,13 +58,15 @@ internal static class Demarrage
         services.AddSingleton<IPrestataireRepository, PrestataireRepository>();
         services.AddSingleton<IModeleSortieRepository, ModeleSortieRepository>();
         services.AddSingleton<IStockageManuels>(_ => new StockageManuels(StockageManuels.DossierParDefaut(parametres.CheminBase)));
+        services.AddSingleton<IStockageLogo>(_ => new StockageLogo(StockageLogo.DossierParDefaut(parametres.CheminBase)));
         services.AddSingleton<IReglagesSauvegardables, ReglagesSauvegardables>();
         services.AddSingleton<ISauvegardeComplete>(sp => new SauvegardeComplete(
             sp.GetRequiredService<FabriqueConnexion>(),
             sp.GetRequiredService<IServiceSauvegarde>(),
             sp.GetRequiredService<IReglagesSauvegardables>(),
             StockageManuels.DossierParDefaut(parametres.CheminBase),
-            () => DateTime.Now));
+            () => DateTime.Now,
+            StockageLogo.DossierParDefaut(parametres.CheminBase)));
 
         // Services métier (Core)
         services.AddSingleton<ServiceScan>();
@@ -77,6 +80,7 @@ internal static class Demarrage
         services.AddSingleton<ServiceTypesSortie>();
         services.AddSingleton<ServiceGestion>();
         services.AddSingleton<ServiceReglages>();
+        services.AddSingleton<LogoDuClub>();
         services.AddSingleton<ServiceRevisions>();
         services.AddSingleton<ServiceManuels>();
         services.AddSingleton<ServiceSignalements>();

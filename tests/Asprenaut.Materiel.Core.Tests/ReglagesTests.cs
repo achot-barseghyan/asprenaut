@@ -1,6 +1,7 @@
 using Asprenaut.Materiel.Core.Modeles;
 using Asprenaut.Materiel.Core.Resultats;
 using Asprenaut.Materiel.Core.Saisie;
+using Asprenaut.Materiel.Core.Services;
 using Asprenaut.Materiel.Core.Tests.Memoire;
 
 namespace Asprenaut.Materiel.Core.Tests;
@@ -209,10 +210,10 @@ public class ReglagesTests
     public void Chaque_changement_est_enregistre_et_un_refus_ne_l_est_pas()
     {
         _ctx.ServiceReglages.Modifier(r => r.SonsActifs = false);
-        _ctx.ServiceReglages.ChangerClub("Asprenaut", "Marc · 06 00 00 00 00");
+        _ctx.ServiceReglages.ChangerClub(new SaisieClub("Asprenaut", "", "Marc", "06 00 00 00 00"));
         Assert.Equal(2, _ctx.Stockage.Enregistrements);
 
-        Assert.False(_ctx.ServiceReglages.ChangerClub("  ", "x").Reussi);
+        Assert.False(_ctx.ServiceReglages.ChangerClub(new SaisieClub("  ", "", "x", "")).Reussi);
         Assert.False(_ctx.ServiceReglages.ChangerDossierSauvegardes(@"E:\INTERDIT").Reussi);
         Assert.Equal(2, _ctx.Stockage.Enregistrements);
         Assert.Null(_ctx.Reglages.DossierSauvegardes);

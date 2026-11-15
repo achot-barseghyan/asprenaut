@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using Asprenaut.Materiel.Core.Abstractions;
 using Asprenaut.Materiel.Core.Modeles;
+using Asprenaut.Materiel.Data.Club;
 using Asprenaut.Materiel.Data.Depots;
 using Asprenaut.Materiel.Data.Sauvegardes;
 
@@ -65,6 +66,35 @@ public class SauvegardeCompleteTests : IAsyncLifetime
         Assert.Equal("""{"NomClub":"Asprenaut"}""", _reglages.Json);
         Assert.Equal("pdf d'origine", await File.ReadAllTextAsync(Path.Combine(DossierManuels, "Notice.pdf")));
         Assert.Single(Directory.GetFiles(Path.Combine(_base.Dossier, "Sauvegardes"), "*_avant-restauration.db")); // Filet de sécurité.
+    }
+
+    [Fact]
+    public async Task Le_logo_du_club_est_range_a_cote_de_la_base_et_suit_la_sauvegarde_complete()
+    {
+        var dossierClub = StockageLogo.DossierParDefaut(_base.CheminBase);
+        Assert.Equal(Path.Combine(_base.Dossier, "Club"), dossierClub);
+        var logos = new StockageLogo(dossierClub);
+        Assert.Null(logos.Chemin());
+        logos.Enregistrer([1, 2, 3]);
+        logos.Enregistrer([4, 5]); // Remplacé, sans fichier temporaire laissé.
+        Assert.Equal([4, 5], await File.ReadAllBytesAsync(logos.Chemin()!));
+        Assert.Equal(["logo.png"], Directory.GetFiles(dossierClub).Select(Path.GetFileName));
+
+        var simple = new ServiceSauvegarde(_base.Fabrique, Path.Combine(_base.Dossier, "Sauvegardes"), () => new DateTime(2026, 11, 14, 10, 30, 0));
+        var complete = new SauvegardeComplete(_base.Fabrique, simple, _reglages, DossierManuels, () => new DateTime(2026, 11, 14, 10, 30, 0), dossierClub);
+        var zip = Path.Combine(_base.Dossier, "complete.zip");
+        Assert.True((await complete.CreerAsync(zip)).Reussi);
+        using (var archive = ZipFile.OpenRead(zip))
+        {
+            Assert.Contains("Club/logo.png", archive.Entries.Select(e => e.FullName));
+        }
+
+        logos.Supprimer();
+        logos.Supprimer(); // Sans erreur s'il n'y en a plus.
+        Assert.Null(logos.Chemin());
+
+        Assert.True((await complete.RestaurerAsync(zip)).Reussi);
+        Assert.Equal([4, 5], await File.ReadAllBytesAsync(logos.Chemin()!));
     }
 
     [Fact]

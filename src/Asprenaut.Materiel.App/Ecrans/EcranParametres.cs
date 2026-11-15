@@ -44,10 +44,12 @@ public sealed class EcranParametres : EcranBase
     private readonly ServicePrestataires _prestataires;
     private readonly ServiceInventaire _inventaire;
     private readonly ServiceRevisions _revisions;
+    private readonly LogoDuClub _logoClub;
 
-    public EcranParametres(ServiceReglages reglages, IServiceSauvegarde sauvegardes, ISauvegardeComplete complete, INavigation navigation, ParametresApplication parametres, ServiceGestion gestion, GardeGestion garde, ServiceExport export, ServiceCompteur compteur, ServiceTypesSortie typesSortie, ServicePrestataires prestataires, ServiceInventaire inventaire, ServiceRevisions revisions)
+    public EcranParametres(ServiceReglages reglages, IServiceSauvegarde sauvegardes, ISauvegardeComplete complete, INavigation navigation, ParametresApplication parametres, ServiceGestion gestion, GardeGestion garde, ServiceExport export, ServiceCompteur compteur, ServiceTypesSortie typesSortie, ServicePrestataires prestataires, ServiceInventaire inventaire, ServiceRevisions revisions, LogoDuClub logoClub)
     {
         _revisions = revisions;
+        _logoClub = logoClub;
         _export = export;
         _compteur = compteur;
         _typesSortie = typesSortie;
@@ -120,17 +122,31 @@ public sealed class EcranParametres : EcranBase
         }
 
         grille.SuspendLayout(); // Une seule mise en page pour toutes les cartes (sinon la grille se recalcule à chaque ajout).
-        for (var i = 0; i < cartes.Length; i++)
+        // Une carte marquée PleineLargeur (Club) prend toute une rangée ; les autres vont deux par deux.
+        int rangee = -1, colonne = 2;
+        foreach (var carte in cartes)
         {
-            if (i % 2 == 0)
+            var pleine = ReferenceEquals(carte.Tag, PleineLargeur);
+            if (pleine || colonne == 2)
             {
                 grille.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                rangee++;
+                colonne = 0;
             }
 
-            cartes[i].AutoSize = true;
-            cartes[i].Dock = DockStyle.Fill;
-            cartes[i].Margin = new Padding(i % 2 == 0 ? 0 : 10, 0, i % 2 == 0 ? 10 : 0, 20);
-            grille.Controls.Add(cartes[i], i % 2, i / 2);
+            carte.AutoSize = true;
+            carte.Dock = DockStyle.Fill;
+            carte.Margin = pleine ? new Padding(0, 0, 0, 20) : new Padding(colonne == 0 ? 0 : 10, 0, colonne == 0 ? 10 : 0, 20);
+            grille.Controls.Add(carte, colonne, rangee);
+            if (pleine)
+            {
+                grille.SetColumnSpan(carte, 2);
+                colonne = 2;
+            }
+            else
+            {
+                colonne++;
+            }
         }
 
         grille.ResumeLayout(true);
@@ -1150,85 +1166,326 @@ public sealed class EcranParametres : EcranBase
 
     // ---------------------------------------------------------------- Club
 
+    /// <summary>
+    /// Carte « Club » (maquette « Paramètres · Club »), sur toute la largeur : logo à gauche (glisser ou choisir une image,
+    /// remplacer, retirer, revenir au logo d'origine), à droite nom, numéro d'affiliation, responsable matériel et téléphone,
+    /// puis l'aperçu du bandeau d'accueil. Rien n'est écrit avant « Enregistrer » (code gestionnaire) ; « Annuler » revient.
+    /// </summary>
     private CarteSection CarteClub()
     {
-        var r = _reglages.Actuels;
-        var carte = new CarteSection("Club", Icones.Logo, Theme.AccentClair);
+        var carte = new CarteSection("Club", Icones.Logo, Theme.AccentClair) { Tag = PleineLargeur };
+        var sousTitre = Ui.Libelle("Nom, logo et contact du club. Le logo s'affiche sur l'accueil.", Theme.Police(9.75f), Theme.TexteSecondaire);
+        sousTitre.Margin = new Padding(0, 0, 0, 18);
+        carte.Ajouter(sousTitre);
 
-        var nom = new ChampSaisie { Valeur = r.NomClub };
-        nom.Champ.AccessibleName = "Nom du club";
-        var responsable = new ChampSaisie { Valeur = r.ResponsableMateriel, TexteIndicatif = "Nom et téléphone" };
-        responsable.Champ.AccessibleName = "Responsable matériel";
-        void Enregistrer()
+        // --- Logo (colonne de gauche) ---
+        var zone = new ZoneLogo { Width = LargeurLogo, Margin = new Padding(0, 0, 0, 12) };
+        var choisir = new BoutonArrondi("Choisir un logo", StyleBouton.Secondaire, Icones.Envoyer) { AutoSize = false, Dock = DockStyle.Fill, Margin = Padding.Empty };
+        var retirer = new BoutonArrondi("Retirer le logo", StyleBouton.Icone, Icones.Corbeille) { CouleurIcone = Theme.Erreur, Margin = new Padding(8, 0, 0, 0) };
+        var origine = new BoutonArrondi("Remettre le logo d'origine", StyleBouton.Lien) { Margin = new Padding(0, 4, 0, 0) };
+        foreach (var bouton in new[] { choisir, retirer, origine })
         {
-            if (nom.Valeur.Trim() == _reglages.Actuels.NomClub && responsable.Valeur.Trim() == _reglages.Actuels.ResponsableMateriel)
-            {
-                return;
-            }
-
-            // Différé : pas de fenêtre (code gestionnaire, erreur) pendant que le focus quitte le champ.
-            BeginInvoke(() =>
-            {
-                var resultat = Autoriser() ? _reglages.ChangerClub(nom.Valeur, responsable.Valeur) : null;
-                if (resultat is not { Reussi: true })
-                {
-                    nom.Valeur = _reglages.Actuels.NomClub;
-                    responsable.Valeur = _reglages.Actuels.ResponsableMateriel;
-                }
-
-                if (resultat is { Reussi: false })
-                {
-                    Dialogues.Information(FindForm(), resultat.Message);
-                }
-            });
+            bouton.AfficherPastille = false; // Bandeau « Mode consultation » en tête de page ; le code est demandé à l'enregistrement.
         }
 
-        nom.Champ.Leave += (_, _) => Enregistrer();
-        responsable.Champ.Leave += (_, _) => Enregistrer();
+        var actionsLogo = Ui.Colonnes((choisir, SizeType.Percent, 100), (retirer, SizeType.Absolute, Theme.HauteurCliquable + 8));
+        actionsLogo.Dock = DockStyle.None;
+        actionsLogo.Size = new Size(LargeurLogo, Theme.HauteurCliquable);
+        actionsLogo.Margin = new Padding(0, 0, 0, 10);
+        var aideLogo = Ui.Libelle("PNG, JPG, BMP ou GIF, 2 Mo au plus. Un logo carré sur fond clair rend le mieux.", Theme.Police(9f), Theme.TexteSecondaire);
+        aideLogo.MaximumSize = new Size(LargeurLogo, 0);
+        var erreurLogo = Ui.Libelle("", Theme.Police(9f), Theme.Erreur);
+        erreurLogo.MaximumSize = new Size(LargeurLogo, 0);
+        erreurLogo.Visible = false;
+        var colonneLogo = Ui.Pile(Ui.LibelleChamp("Logo du club"), zone, actionsLogo, aideLogo, erreurLogo, origine);
+        colonneLogo.Margin = new Padding(0, 0, 28, 0);
 
-        var champs = new TableLayoutPanel { ColumnCount = 2, RowCount = 2, AutoSize = true, BackColor = Color.Transparent, Margin = new Padding(0, 0, 0, 18) };
-        champs.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        champs.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        champs.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        champs.RowStyles.Add(new RowStyle(SizeType.Absolute, Theme.HauteurChamp));
-        var lNom = Ui.LibelleChamp("Nom du club");
-        var lResp = Ui.LibelleChamp("Responsable matériel");
-        lResp.Margin = new Padding(7, 0, 0, 8);
-        nom.Margin = new Padding(0, 0, 7, 0);
-        responsable.Margin = new Padding(7, 0, 0, 0);
-        nom.Dock = responsable.Dock = DockStyle.Fill;
-        champs.Controls.Add(lNom, 0, 0);
-        champs.Controls.Add(lResp, 1, 0);
-        champs.Controls.Add(nom, 0, 1);
-        champs.Controls.Add(responsable, 1, 1);
-        carte.Ajouter(champs);
+        // --- Champs (colonne de droite) ---
+        var nom = ChampClub("Nom du club", "Ex. : Asprenaut", ServiceReglages.LongueurMaxNomClub);
+        var numero = ChampClub("Numéro d'affiliation FFESSM", "Ex. : 14 71-0025", ServiceReglages.LongueurMaxNumeroClub);
+        var responsable = ChampClub("Nom du responsable matériel", "Prénom Nom", ServiceReglages.LongueurMaxResponsable);
+        responsable.Icone = Icones.Personne;
+        var telephone = ChampClub("Téléphone du responsable matériel", "06 12 34 56 78", ServiceReglages.LongueurMaxTelephone);
+        telephone.Icone = Icones.Telephone;
+        telephone.Champ.Font = Theme.PoliceCode(11.25f);
 
-        // Numéro d'affiliation : repris dans l'identification marquée sur le matériel.
-        var numero = new ChampSaisie { Valeur = r.NumeroClub, TexteIndicatif = "Ex. : 14 71-0025" };
-        numero.Champ.AccessibleName = "Numéro d'affiliation";
-        numero.Champ.Leave += (_, _) =>
+        // 0612345678 → 06 12 34 56 78 pendant la frappe (curseur gardé en fin de saisie), comme la fiche de l'adhérent.
+        telephone.Champ.TextChanged += (_, _) =>
         {
-            if (numero.Valeur.Trim() == _reglages.Actuels.NumeroClub)
+            var forme = ServiceAdherents.FormaterTelephone(telephone.Valeur);
+            if (forme != telephone.Valeur && telephone.Champ.SelectionStart == telephone.Valeur.Length)
+            {
+                telephone.Valeur = forme;
+                telephone.Champ.SelectionStart = forme.Length;
+            }
+        };
+
+        var aideNumero = Ui.Libelle("Repris dans l'identification du matériel : « (Stab) S01 taille XL Asprenaut 14 71-0025 ».", Theme.Police(9f), Theme.TexteSecondaire);
+        aideNumero.Margin = new Padding(0, 8, 0, 20);
+        var apercu = new ApercuBandeau { Margin = Padding.Empty };
+        var colonneChamps = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 1,
+            BackColor = Color.Transparent,
+            Margin = Padding.Empty,
+        };
+        colonneChamps.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        foreach (var ligne in new Control[]
+        {
+            DeuxChampsClub(("Nom du club", nom), ("Numéro d'affiliation FFESSM", numero)),
+            aideNumero,
+            new IntertitreFilet("Responsable matériel") { Margin = new Padding(0, 0, 0, 14) },
+            DeuxChampsClub(("Nom", responsable), ("Téléphone", telephone)),
+            new IntertitreFilet("Aperçu sur l'accueil") { Margin = new Padding(0, 22, 0, 14) },
+            apercu,
+        })
+        {
+            colonneChamps.RowStyles.Add(ligne == apercu ? new RowStyle(SizeType.Absolute, apercu.Height) : new RowStyle(SizeType.AutoSize));
+            ligne.Dock = DockStyle.Fill;
+            colonneChamps.Controls.Add(ligne, 0, colonneChamps.RowStyles.Count - 1);
+        }
+
+        var corps = Ui.Colonnes((colonneLogo, SizeType.Absolute, LargeurLogo + 28), (colonneChamps, SizeType.Percent, 100));
+        corps.AutoSize = true;
+        corps.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        corps.RowStyles[0] = new RowStyle(SizeType.AutoSize);
+        corps.Margin = new Padding(0, 0, 0, 20);
+        carte.Ajouter(corps);
+
+        // --- Pied : état, Annuler, Enregistrer ---
+        var etat = Ui.Libelle("", Theme.Police(9.75f), Theme.TexteSecondaire);
+        etat.TextAlign = ContentAlignment.MiddleLeft;
+        etat.Margin = Padding.Empty;
+        var annuler = new BoutonArrondi("Annuler", StyleBouton.Secondaire) { Margin = new Padding(10, 0, 0, 0), AfficherPastille = false };
+        var enregistrer = new BoutonArrondi("Enregistrer", StyleBouton.Principal, Icones.Coche) { Margin = new Padding(10, 0, 0, 0), AfficherPastille = false };
+        carte.Ajouter(new Panel { Height = 1, BackColor = Theme.Bordure, Margin = new Padding(0, 0, 0, 16) });
+        var pied = Ui.Colonnes((etat, SizeType.Percent, 100), (annuler, SizeType.AutoSize, 0), (enregistrer, SizeType.AutoSize, 0));
+        pied.Height = Theme.HauteurBouton;
+        carte.Ajouter(pied);
+
+        // --- Saisie en cours ---
+        var choix = _reglages.Actuels.LogoClub;
+        LogoDuClub.ImagePreparee? nouvelle = null;
+        Image? ImageAffichee() => nouvelle?.Apercu ?? choix switch
+        {
+            ChoixLogo.Fourni => LogoDuClub.Fourni,
+            ChoixLogo.Personnalise => _logoClub.Image,
+            _ => null,
+        };
+
+        List<string> Changements()
+        {
+            var r = _reglages.Actuels;
+            var liste = new List<string>();
+            if (nouvelle is not null || choix != r.LogoClub)
+            {
+                liste.Add("logo");
+            }
+
+            if (nom.Valeur.Trim() != r.NomClub)
+            {
+                liste.Add("nom");
+            }
+
+            if (numero.Valeur.Trim() != r.NumeroClub)
+            {
+                liste.Add("numéro d'affiliation");
+            }
+
+            if (responsable.Valeur.Trim() != r.ResponsableMateriel || ServiceAdherents.FormaterTelephone(telephone.Valeur.Trim()) != r.TelephoneResponsable)
+            {
+                liste.Add("responsable");
+            }
+
+            return liste;
+        }
+
+        void Afficher()
+        {
+            var image = ImageAffichee();
+            zone.Image = image;
+            zone.AccessibleName = image is null ? "Logo du club : choisir une image" : "Logo du club : remplacer l'image";
+            choisir.Text = image is null ? "Choisir un logo" : "Remplacer";
+            retirer.Enabled = image is not null;
+            origine.Visible = choix != ChoixLogo.Fourni || nouvelle is not null;
+
+            var nomAffiche = nom.Valeur.Trim().Length > 0 ? nom.Valeur.Trim() : "Nom du club";
+            var contact = string.Join(" · ", new[] { responsable.Valeur.Trim(), telephone.Valeur.Trim() }.Where(t => t.Length > 0));
+            apercu.Image = image;
+            apercu.Afficher(nomAffiche, contact.Length > 0 ? $"Responsable matériel : {contact}" : "Responsable matériel non renseigné",
+                ServiceReglages.InitialesClub(nom.Valeur));
+
+            var changements = Changements();
+            etat.Text = changements.Count > 0 ? "Modifié : " + string.Join(", ", changements) : "Aucune modification";
+            etat.ForeColor = changements.Count > 0 ? Theme.AccentClair : Theme.TexteSecondaire;
+            etat.Font = changements.Count > 0 ? Theme.PoliceTitre(9.75f) : Theme.Police(9.75f);
+            enregistrer.Enabled = annuler.Enabled = changements.Count > 0;
+        }
+
+        void Erreur(string? message)
+        {
+            erreurLogo.Text = message ?? "";
+            erreurLogo.Visible = message is not null;
+        }
+
+        void Prendre(string fichier)
+        {
+            var (image, erreur) = LogoDuClub.Preparer(fichier);
+            Erreur(erreur);
+            if (image is null)
             {
                 return;
             }
 
-            BeginInvoke(() =>
+            var ancienne = nouvelle;
+            nouvelle = image;
+            choix = ChoixLogo.Personnalise;
+            Afficher();
+            ancienne?.Apercu.Dispose(); // Après Afficher : plus aucun contrôle ne la dessine.
+        }
+
+        void Oublier(ChoixLogo nouveauChoix)
+        {
+            var ancienne = nouvelle;
+            nouvelle = null;
+            choix = nouveauChoix;
+            Erreur(null);
+            Afficher();
+            ancienne?.Apercu.Dispose();
+        }
+
+        void ChoisirFichier()
+        {
+            using var dialogue = new OpenFileDialog
             {
-                if (!Autoriser() || !_reglages.ChangerNumeroClub(numero.Valeur).Reussi)
-                {
-                    numero.Valeur = _reglages.Actuels.NumeroClub;
-                }
-            });
+                Title = "Choisir le logo du club",
+                Filter = "Images (*.png, *.jpg, *.bmp, *.gif)|" + string.Join(';', ServiceReglages.ExtensionsLogo.Select(e => "*" + e)),
+                CheckFileExists = true,
+            };
+            if (dialogue.ShowDialog(FindForm()) == DialogResult.OK)
+            {
+                Prendre(dialogue.FileName);
+            }
+        }
+
+        zone.Choisir += (_, _) => ChoisirFichier();
+        zone.Deposer += (_, fichier) => Prendre(fichier);
+        choisir.Click += (_, _) => ChoisirFichier();
+        retirer.Click += (_, _) => Oublier(ChoixLogo.Aucun);
+        origine.Click += (_, _) => Oublier(ChoixLogo.Fourni);
+        foreach (var champ in new[] { nom, numero, responsable, telephone })
+        {
+            champ.Champ.TextChanged += (_, _) => Afficher();
+        }
+
+        void Remplir()
+        {
+            var r = _reglages.Actuels;
+            nom.Valeur = r.NomClub;
+            numero.Valeur = r.NumeroClub;
+            responsable.Valeur = r.ResponsableMateriel;
+            telephone.Valeur = r.TelephoneResponsable;
+            nom.Erreur = false;
+            Oublier(r.LogoClub);
+        }
+
+        annuler.Click += (_, _) => Remplir();
+        enregistrer.Click += (_, _) =>
+        {
+            if (nom.Valeur.Trim().Length == 0)
+            {
+                nom.Erreur = true;
+                nom.Champ.Focus();
+                return;
+            }
+
+            if (!Autoriser())
+            {
+                return;
+            }
+
+            var logo = nouvelle is not null ? ChangementLogo.Remplacer(nouvelle.Png)
+                : choix == ChoixLogo.Aucun ? ChangementLogo.Retirer
+                : choix == ChoixLogo.Fourni ? ChangementLogo.Origine
+                : ChangementLogo.Garder;
+            var resultat = _reglages.ChangerClub(new SaisieClub(nom.Valeur, numero.Valeur, responsable.Valeur, telephone.Valeur, logo));
+            if (!resultat.Reussi)
+            {
+                Dialogues.Information(FindForm(), resultat.Message);
+                return;
+            }
+
+            _logoClub.Recharger();
+            Remplir();
+            etat.Text = resultat.Message;
+            etat.ForeColor = Theme.RetourClair;
         };
-        carte.Ajouter(Ui.LibelleChamp("Numéro d'affiliation FFESSM"));
-        numero.Height = Theme.HauteurChamp;
-        numero.Margin = new Padding(0, 0, 0, 8);
-        carte.Ajouter(numero);
-        var aide = Ui.Libelle("Repris dans l'identification du matériel : « (Stab) S01 taille XL Asprenaut 14 71-0025 ».", Theme.Police(9.75f), Theme.TexteSecondaire);
-        aide.MaximumSize = new Size(560, 0);
-        carte.Ajouter(aide);
+        carte.Disposed += (_, _) => nouvelle?.Apercu.Dispose();
+
+        Remplir();
         return carte;
+    }
+
+    /// <summary>Largeur de la colonne du logo (Paramètres › Club).</summary>
+    private const int LargeurLogo = 240;
+
+    /// <summary>Marque d'une carte posée sur toute la largeur de la grille (<see cref="Grille"/>).</summary>
+    private static readonly object PleineLargeur = new();
+
+    private static ChampSaisie ChampClub(string nomAccessible, string indicatif, int longueur)
+    {
+        var champ = new ChampSaisie { TexteIndicatif = indicatif, Dock = DockStyle.Fill };
+        champ.Champ.AccessibleName = nomAccessible;
+        champ.Champ.MaxLength = longueur;
+        return champ;
+    }
+
+    /// <summary>Deux champs côte à côte, chacun sous son libellé.</summary>
+    private static TableLayoutPanel DeuxChampsClub((string Libelle, ChampSaisie Champ) gauche, (string Libelle, ChampSaisie Champ) droite)
+    {
+        var table = new TableLayoutPanel { ColumnCount = 2, RowCount = 2, AutoSize = true, BackColor = Color.Transparent, Margin = Padding.Empty };
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        table.RowStyles.Add(new RowStyle(SizeType.Absolute, Theme.HauteurChamp));
+        var lGauche = Ui.LibelleChamp(gauche.Libelle);
+        var lDroite = Ui.LibelleChamp(droite.Libelle);
+        lDroite.Margin = new Padding(8, 0, 0, 8);
+        gauche.Champ.Margin = new Padding(0, 0, 8, 0);
+        droite.Champ.Margin = new Padding(8, 0, 0, 0);
+        table.Controls.Add(lGauche, 0, 0);
+        table.Controls.Add(lDroite, 1, 0);
+        table.Controls.Add(gauche.Champ, 0, 1);
+        table.Controls.Add(droite.Champ, 1, 1);
+        return table;
+    }
+
+    /// <summary>Intertitre en petites capitales suivi d'un filet (« RESPONSABLE MATÉRIEL ───── »).</summary>
+    private sealed class IntertitreFilet : ControleDessine
+    {
+        private readonly string _texte;
+
+        public IntertitreFilet(string texte)
+        {
+            _texte = texte.ToUpper(Libelles.Culture);
+            Height = 20;
+            AccessibleRole = AccessibleRole.StaticText;
+            AccessibleName = texte;
+        }
+
+        protected override void Peindre(Graphics g)
+        {
+            var police = Theme.PoliceTitre(8.25f);
+            const TextFormatFlags drapeaux = TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine;
+            var taille = TextRenderer.MeasureText(g, _texte, police, Size.Empty, drapeaux);
+            TextRenderer.DrawText(g, _texte, police, new Rectangle(0, 0, taille.Width + 2, Height), Theme.TexteSecondaireClair, drapeaux);
+            using var trait = new Pen(Theme.Bordure);
+            var x = taille.Width + E(10);
+            g.DrawLine(trait, x, Height / 2f, Width, Height / 2f);
+        }
     }
 
     // ---------------------------------------------------------------- Types de sortie

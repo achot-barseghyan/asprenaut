@@ -9,7 +9,8 @@ namespace Asprenaut.Materiel.Core.Services;
 /// Lecture et modification des réglages du club. Chaque modification est validée,
 /// appliquée tout de suite (instance partagée) et enregistrée.
 /// </summary>
-public sealed class ServiceReglages(Reglages reglages, IStockageReglages stockage, IServiceSauvegarde sauvegardes, ServiceGestion? gestion = null)
+public sealed class ServiceReglages(
+    Reglages reglages, IStockageReglages stockage, IServiceSauvegarde sauvegardes, ServiceGestion? gestion = null, IStockageLogo? logos = null)
 {
     public const int LongueurMaxPrefixe = 8;
 
@@ -221,44 +222,125 @@ public sealed class ServiceReglages(Reglages reglages, IStockageReglages stockag
         return ResultatOperation.Ok(p.Length == 0 ? "Aucun préfixe." : $"Préfixe « {p} » enregistré.");
     }
 
-    /// <summary>Nom du club et responsable du matériel (textes libres, espaces superflus retirés).</summary>
-    public ResultatOperation ChangerClub(string? nomClub, string? responsable)
+    public const int LongueurMaxNomClub = 60;
+    public const int LongueurMaxResponsable = 60;
+    public const int LongueurMaxNumeroClub = 20;
+    public const int LongueurMaxTelephone = 20;
+
+    /// <summary>Poids maximal du fichier choisi comme logo (2 Mo).</summary>
+    public const long TailleMaxLogo = 2 * 1024 * 1024;
+
+    /// <summary>Formats d'image acceptés pour le logo (lus par Windows sans bibliothèque).</summary>
+    public static readonly string[] ExtensionsLogo = [".png", ".jpg", ".jpeg", ".bmp", ".gif"];
+
+    /// <summary>Message d'erreur si ce fichier ne peut pas servir de logo (format, poids), sinon null.</summary>
+    public static string? VerifierFichierLogo(string nomFichier, long taille)
+    {
+        if (!ExtensionsLogo.Contains(Path.GetExtension(nomFichier ?? "").ToLowerInvariant()))
+        {
+            return "Format non pris en charge. Utilisez une image PNG, JPG, BMP ou GIF.";
+        }
+
+        if (taille <= 0)
+        {
+            return "Ce fichier est vide.";
+        }
+
+        return taille > TailleMaxLogo
+            ? $"Fichier trop lourd ({(taille / 1048576.0).ToString("0.0", Libelles.Culture)} Mo). 2 Mo au plus."
+            : null;
+    }
+
+    /// <summary>Initiales affichées à la place du logo (« Asprenaut » → « A », « Club Subaquatique » → « CS ») ; « ? » sans nom.</summary>
+    public static string InitialesClub(string? nom)
+    {
+        var initiales = string.Concat((nom ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(m => char.IsLetterOrDigit(m[0])).Take(2).Select(m => char.ToUpper(m[0], Libelles.Culture)));
+        return initiales.Length == 0 ? "?" : initiales;
+    }
+
+    /// <summary>
+    /// Fiche du club (Paramètres › Club) : nom (obligatoire, 60 car.), numéro d'affiliation (20), responsable matériel (60) et son
+    /// téléphone (mis en forme par paires, 20), et le logo. Tout est vérifié avant d'écrire : rien ne change en cas de refus.
+    /// </summary>
+    public ResultatOperation ChangerClub(SaisieClub saisie)
     {
         if (Autorisation() is { Reussi: false } refus)
         {
             return refus;
         }
 
-        var nom = (nomClub ?? "").Trim();
+        var nom = (saisie.Nom ?? "").Trim();
+        var numero = (saisie.Numero ?? "").Trim();
+        var responsable = (saisie.Responsable ?? "").Trim();
+        var telephone = ServiceAdherents.FormaterTelephone((saisie.Telephone ?? "").Trim());
         if (nom.Length == 0)
         {
             return ResultatOperation.Echec("Indiquez le nom du club.");
         }
 
+        if (nom.Length > LongueurMaxNomClub)
+        {
+            return ResultatOperation.Echec($"Nom du club trop long ({LongueurMaxNomClub} caractères au plus).");
+        }
+
+        if (numero.Length > LongueurMaxNumeroClub)
+        {
+            return ResultatOperation.Echec($"Numéro d'affiliation trop long ({LongueurMaxNumeroClub} caractères au plus).");
+        }
+
+        if (responsable.Length > LongueurMaxResponsable)
+        {
+            return ResultatOperation.Echec($"Nom du responsable trop long ({LongueurMaxResponsable} caractères au plus).");
+        }
+
+        if (telephone.Length > LongueurMaxTelephone)
+        {
+            return ResultatOperation.Echec($"Téléphone trop long ({LongueurMaxTelephone} caractères au plus).");
+        }
+
+        var logo = saisie.Logo ?? ChangementLogo.Garder;
+        if (logo.Image is { } image && (image.Length == 0 || image.Length > TailleMaxLogo))
+        {
+            return ResultatOperation.Echec("Image du logo trop lourde (2 Mo au plus).");
+        }
+
+        if (logo.Choix is { } choix && choix != reglages.LogoClub || logo.Image is not null)
+        {
+            if (logos is null)
+            {
+                return ResultatOperation.Echec("Le logo ne peut pas être enregistré ici.");
+            }
+
+            try
+            {
+                if (logo.Image is { } png)
+                {
+                    logos.Enregistrer(png);
+                }
+                else if (logo.Choix != ChoixLogo.Personnalise)
+                {
+                    logos.Supprimer();
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return ResultatOperation.Echec("Impossible d'enregistrer le logo sur ce PC.");
+            }
+
+            reglages.LogoClub = logo.Image is not null ? ChoixLogo.Personnalise : logo.Choix!.Value;
+        }
+
         reglages.NomClub = nom;
-        reglages.ResponsableMateriel = (responsable ?? "").Trim();
+        reglages.NumeroClub = numero;
+        reglages.ResponsableMateriel = responsable;
+        reglages.TelephoneResponsable = telephone;
         stockage.Enregistrer(reglages);
-        return ResultatOperation.Ok("Enregistré.");
+        return ResultatOperation.Ok("Club enregistré.");
     }
 
-    /// <summary>Numéro d'affiliation du club (texte libre, 20 caractères au plus ; vide accepté).</summary>
-    public ResultatOperation ChangerNumeroClub(string? numero)
-    {
-        if (Autorisation() is { Reussi: false } refus)
-        {
-            return refus;
-        }
-
-        var n = (numero ?? "").Trim();
-        if (n.Length > 20)
-        {
-            return ResultatOperation.Echec("Numéro trop long (20 caractères au plus).");
-        }
-
-        reglages.NumeroClub = n;
-        stockage.Enregistrer(reglages);
-        return ResultatOperation.Ok("Enregistré.");
-    }
+    /// <summary>Chemin de l'image du logo choisi par le club, ou null (logo fourni, aucun logo, ou fichier disparu).</summary>
+    public string? CheminLogo() => reglages.LogoClub == ChoixLogo.Personnalise ? logos?.Chemin() : null;
 
     /// <summary>Nouveau dossier des sauvegardes : vérifié par le service de sauvegarde, puis retenu.</summary>
     public ResultatOperation ChangerDossierSauvegardes(string dossier)
@@ -277,4 +359,31 @@ public sealed class ServiceReglages(Reglages reglages, IStockageReglages stockag
 
         return resultat;
     }
+}
+
+/// <summary>Fiche du club saisie dans Paramètres › Club (<see cref="ServiceReglages.ChangerClub"/>).</summary>
+public sealed record SaisieClub(string? Nom, string? Numero, string? Responsable, string? Telephone, ChangementLogo? Logo = null);
+
+/// <summary>Ce qu'on fait du logo en enregistrant le club : le garder, le remplacer par une image, le retirer, revenir à celui d'origine.</summary>
+public sealed record ChangementLogo
+{
+    private ChangementLogo(ChoixLogo? choix, byte[]? image)
+    {
+        Choix = choix;
+        Image = image;
+    }
+
+    /// <summary>Choix demandé (null : on garde le logo actuel, ou une nouvelle image).</summary>
+    public ChoixLogo? Choix { get; }
+
+    /// <summary>Nouvelle image, déjà mise en PNG par l'écran.</summary>
+    public byte[]? Image { get; }
+
+    public static ChangementLogo Garder { get; } = new(null, null);
+
+    public static ChangementLogo Retirer { get; } = new(ChoixLogo.Aucun, null);
+
+    public static ChangementLogo Origine { get; } = new(ChoixLogo.Fourni, null);
+
+    public static ChangementLogo Remplacer(byte[] png) => new(null, png);
 }

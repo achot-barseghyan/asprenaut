@@ -140,7 +140,9 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   depuis `Ressources/Asprenaut.png` (1024 px). `ApplicationIcon` dans le .csproj pour le .exe, ressource embarquée lue par
   `Icones.IconeFenetre` pour `MainForm` et `FenetreFormulaire` (barre de titre, barre des tâches).
 - **Logo du club** : `Ressources/LogoClub.png` (image de la maquette, ressource `LogoClub.png`), dessiné par `LogoClub` (`Controles/Decor.cs`)
-  dans une tuile blanche (`Theme.FondLogoClub`, fixe dans les deux thèmes) à gauche du bandeau de l'écran Sorties.
+  dans une tuile blanche (`Theme.FondLogoClub`, fixe dans les deux thèmes) à gauche du bandeau de l'écran Sorties. Logo choisi par le club
+  (règle 41) : `Reglages.LogoClub` (`ChoixLogo` Fourni / Personnalise / Aucun = initiales `ServiceReglages.InitialesClub`), image dans
+  `Clubogo.png` à côté de la base (`IStockageLogo`, `Data/Club/StockageLogo`), lue par `Infrastructure/LogoDuClub` (singleton, `Recharger`).
 
 ## Règles métier (chacune a au moins un test dans Core.Tests)
 
@@ -500,6 +502,14 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     « AUJOURD'HUI », « Créer la sortie » → `EcranDepart`, « Ajuster » → `AllerA<EcranNouvelleSortie>(FicheModele)` prérempli ; les
     valeurs protégées y suivent les règles normales), « Gérer les modèles › ». Fenêtre `Ecrans/FormulaireModele`. Export : modeles_sortie.csv.
 
+41. Fiche du club (`ServiceReglages.ChangerClub(SaisieClub)`, `ClubTests`, maquette « Paramètres · Club », action Paramètres) : carte
+    « Club » sur toute la largeur de Configuration du club (`Tag = PleineLargeur` dans `Grille`). Nom obligatoire (60 car.), numéro
+    d'affiliation (20), responsable matériel (60) et `TelephoneResponsable` (mis en forme par paires, 20) ; `Reglages.ResponsableComplet`
+    (« nom · téléphone ») sur les PDF. Logo : `ChangementLogo` Garder / Remplacer(png) / Retirer / Origine ; fichier PNG, JPG, BMP ou GIF de
+    2 Mo au plus (`VerifierFichierLogo`), réduit à 512 px et mis en PNG par `LogoDuClub.Preparer`. Tout est vérifié avant d'écrire.
+    Écran : `ZoneLogo` (clic, Entrée, glisser-déposer), « Remplacer », corbeille, « Remettre le logo d'origine », `ApercuBandeau`
+    (bannière de l'accueil), pied « Modifié : logo, nom… » + Annuler / Enregistrer (grisés sans modification ; code à l'enregistrement).
+
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
 à côté de la base d'essai : les essais ne touchent jamais les réglages réels. Préfixe des étiquettes : `CodeScanne.Nettoyer(brut, prefixe)`.
@@ -507,7 +517,7 @@ Sauvegardes : `IServiceSauvegarde` (dossier modifiable, dernière sauvegarde, `R
 copie les données actuelles en `materiel_…_avant-restauration.db`, puis réapplique les migrations).
 Sauvegarde complète (`ISauvegardeComplete`, `Data/Sauvegardes/SauvegardeComplete`, `SauvegardeCompleteTests`) : un .zip avec
 `asprenaut-sauvegarde.json` (format, date, version de la base), `materiel.db` (API backup), `reglages.json` (`Reglages` seuls,
-pas `CheminBase` : `IReglagesSauvegardables` / App `ReglagesSauvegardables`) et `Manuels/*.pdf`. Paramètres › Données et
+pas `CheminBase` : `IReglagesSauvegardables` / App `ReglagesSauvegardables`), `Manuels/*.pdf` et `Club/logo.png`. Paramètres › Données et
 sauvegardes : « Faire une sauvegarde complète… » (libre) ; « Restaurer… » accepte aussi un .zip (action RestaurerSauvegarde) :
 tout est vérifié avant (zip, description, base, réglages lisibles), puis base par `RestaurerAsync` (copie de sécurité), réglages
 (ancien fichier copié en `parametres_avant-restauration.json`, dossier des sauvegardes de ce PC gardé, `DeverrouilleAuDemarrage`

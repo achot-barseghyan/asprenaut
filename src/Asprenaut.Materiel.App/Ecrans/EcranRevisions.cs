@@ -59,7 +59,7 @@ public sealed class EcranRevisions : EcranBase
             var registreControles = await _revisions.RegistreAsync();
             var r = _reglages.Actuels;
             await Fichiers.EnregistrerPdfAsync(this, "Enregistrer le registre des contrôles", _revisions.NomFichierRegistre(),
-                chemin => Impression.RegistrePdf.Enregistrer(registreControles, r.NomClub, r.ResponsableMateriel, chemin));
+                chemin => Impression.RegistrePdf.Enregistrer(registreControles, r.NomClub, r.ResponsableComplet, chemin));
         });
 
         // Filtre par type d'entretien et champ de scan (le pistolet ouvre l'intervention de l'équipement).

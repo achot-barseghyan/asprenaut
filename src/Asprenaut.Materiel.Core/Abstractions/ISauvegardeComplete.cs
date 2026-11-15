@@ -4,7 +4,7 @@ namespace Asprenaut.Materiel.Core.Abstractions;
 
 /// <summary>
 /// Sauvegarde complète : un seul fichier .zip avec la base, les réglages (parametres.json, sans le chemin de la base) et les
-/// PDF des manuels. Sert à garder une copie de tout (panne du PC) et à installer le PC du club en une fois.
+/// PDF des manuels (et le logo du club).  Sert à garder une copie de tout (panne du PC) et à installer le PC du club en une fois.
 /// La sauvegarde simple (<see cref="IServiceSauvegarde"/>) ne copie que la base.
 /// </summary>
 public interface ISauvegardeComplete

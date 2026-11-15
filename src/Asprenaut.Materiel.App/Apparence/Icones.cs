@@ -87,6 +87,10 @@ public static class Icones
     public const string Telephone = "M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2";
     public const string Document = "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5";
 
+    // Paramètres › Club (maquette « Paramètres · Club ») : image du logo, envoyer un fichier.
+    public const string Image = "M6 3h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3zM9 7a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM21 15l-5-5L5 21";
+    public const string Envoyer = "M12 16V4M7 9l5-5 5 5M5 20h14";
+
     // Formulaire de l'adhérent (maquette « Ajouter un adhérent »).
     public const string Personne = "M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM4.5 21a7.5 7.5 0 0 1 15 0";
     // Fenêtres « Ajouter un moniteur » (bloc et loupe : inspecteur TIV) et « Ajouter une classe » (groupe).

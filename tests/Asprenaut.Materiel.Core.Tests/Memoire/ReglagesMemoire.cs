@@ -37,3 +37,25 @@ public sealed class SauvegardeFactice : IServiceSauvegarde
     public Task<ResultatOperation> RestaurerAsync(string fichier, CancellationToken ct = default) =>
         Task.FromResult(ResultatOperation.Ok("Sauvegarde restaurée."));
 }
+
+/// <summary>Logo du club en mémoire (Club\logo.png).</summary>
+public sealed class StockageLogoMemoire : IStockageLogo
+{
+    public byte[]? Png { get; private set; }
+
+    public bool Refuser { get; set; }
+
+    public string? Chemin() => Png is null ? null : @"C:\Club\logo.png";
+
+    public void Enregistrer(byte[] png)
+    {
+        if (Refuser)
+        {
+            throw new IOException("Disque plein");
+        }
+
+        Png = png;
+    }
+
+    public void Supprimer() => Png = null;
+}

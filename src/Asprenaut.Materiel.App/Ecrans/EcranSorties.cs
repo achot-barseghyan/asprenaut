@@ -30,6 +30,7 @@ public sealed class EcranSorties : EcranBase
     private readonly ServiceTypesSortie _typesSortie;
     private readonly ServiceMoniteurs _moniteurs;
     private readonly GardeGestion _garde;
+    private readonly LogoDuClub _logoClub;
 
     // Démarrage rapide (onglet En cours) et onglet Modèles.
     private readonly GrilleAdaptative _rapides = new() { LargeurMin = 270, HauteurElement = 172, Ecart = 14, ColonnesMax = ServiceModelesSortie.NombreDemarrageRapide, RangeesVisibles = 1, Margin = new Padding(0, 0, 0, 26) };
@@ -80,7 +81,8 @@ public sealed class EcranSorties : EcranBase
         ServiceModelesSortie modeles,
         ServiceTypesSortie typesSortie,
         ServiceMoniteurs moniteurs,
-        GardeGestion garde)
+        GardeGestion garde,
+        LogoDuClub logoClub)
     {
         _sorties = sorties;
         _reglages = reglages;
@@ -90,6 +92,7 @@ public sealed class EcranSorties : EcranBase
         _typesSortie = typesSortie;
         _moniteurs = moniteurs;
         _garde = garde;
+        _logoClub = logoClub;
 
         // Rappel de la sauvegarde complète hebdomadaire (stockage externe), visible seulement quand elle est à faire.
         var faire = new BoutonArrondi("Faire la sauvegarde ›", StyleBouton.Secondaire, Icones.Telecharger) { Margin = new Padding(14, 0, 0, 0) };
@@ -649,7 +652,7 @@ public sealed class EcranSorties : EcranBase
         inventaire.Click += (_, _) => _navigation.AllerA<EcranInventaire>();
 
         var contenu = Ui.Pile(_date, titre, _resume, Ui.Rangee(true, nouvelle, inventaire));
-        var logo = new LogoClub();
+        var logo = new LogoClub { Image = _logoClub.Image, Initiales = _logoClub.Initiales, AccessibleName = $"Logo du club {_reglages.Actuels.NomClub}" };
         bandeau.Controls.Add(logo);
         bandeau.Controls.Add(contenu);
 

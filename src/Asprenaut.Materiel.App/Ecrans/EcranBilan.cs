@@ -125,7 +125,7 @@ public sealed class EcranBilan : EcranBase
 
         var reglages = _reglages.Actuels;
         await Fichiers.EnregistrerPdfAsync(this, "Enregistrer le rapport pour l'AG", ServiceBilan.NomFichierRapport(bilan.Saison),
-            chemin => RapportBilan.Enregistrer(bilan, reglages.NomClub, reglages.ResponsableMateriel, chemin));
+            chemin => RapportBilan.Enregistrer(bilan, reglages.NomClub, reglages.ResponsableComplet, chemin));
     }
 
     // ================================================================ Mise en page

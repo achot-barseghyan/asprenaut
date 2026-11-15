@@ -129,60 +129,276 @@ public sealed class Logo : ControleDessine
 }
 
 /// <summary>
-/// Logo du club dans une tuile blanche arrondie, entourée d'un halo clair (bandeau d'accueil de l'écran Sorties).
-/// L'image (Ressources/LogoClub.png, ressource LogoClub.png) est chargée une fois et gardée.
+/// Logo du club dans une tuile blanche arrondie, entourée d'un halo clair (bandeau d'accueil de l'écran Sorties, aperçu de
+/// Paramètres › Club). Sans image : tuile translucide bordée de tirets avec les initiales du club.
 /// </summary>
 public sealed class LogoClub : ControleDessine
 {
-    private static Image? _image;
+    private Image? _image;
+    private string _initiales = "?";
 
     public LogoClub()
     {
         Size = new Size(150, 150);
-        AccessibleName = "Logo Asprenaut, Chalon-sur-Saône";
         AccessibleRole = AccessibleRole.Graphic;
+        AccessibleName = "Logo du club";
     }
 
-    private static Image Image
-    {
-        get
-        {
-            if (_image is null)
-            {
-                using var flux = typeof(LogoClub).Assembly.GetManifestResourceStream("LogoClub.png")
-                    ?? throw new InvalidOperationException("Logo du club introuvable (ressource LogoClub.png).");
-                using var lu = Image.FromStream(flux);
-                _image = new Bitmap(lu); // Copie : l'image reste valable après la fermeture du flux.
-            }
+    /// <summary>Image du logo (non disposée ici), ou null : les initiales sont dessinées à la place.</summary>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public Image? Image { get => _image; set => Invalider(ref _image, value); }
 
-            return _image;
-        }
-    }
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public string Initiales { get => _initiales; set => Invalider(ref _initiales, value); }
 
     protected override void Peindre(Graphics g)
     {
-        // Halo de 5 px, puis tuile blanche (rayon 26) et l'image dans une marge de 8 px.
-        var halo = E(5);
-        var r = new RectangleF(0.5f, 0.5f, Width - 2, Height - 2);
-        using (var chemin = Dessin.Arrondi(r, E(26) + halo))
+        // Tuile de 150 : halo de 5 px, rayon 26, image dans une marge de 8 px ; proportions gardées pour les autres tailles.
+        var k = Width / E(150);
+        Peindre(g, new RectangleF(0.5f, 0.5f, Width - 2, Height - 2), _image, _initiales, E(26) * k, E(5) * k, E(8) * k);
+    }
+
+    /// <summary>Dessine une tuile de logo dans <paramref name="r"/> (halo compris).</summary>
+    public static void Peindre(Graphics g, RectangleF r, Image? image, string initiales, float rayon, float halo, float marge)
+    {
+        var tuile = RectangleF.Inflate(r, -halo, -halo);
+        if (image is null)
+        {
+            using (var fond = new SolidBrush(Theme.Teinte(Theme.AccentClair, 0.12f)))
+            using (var chemin = Dessin.Arrondi(tuile, rayon))
+            using (var trait = new Pen(Theme.AccentClair, Math.Max(1.5f, halo / 3f)) { DashStyle = DashStyle.Dash })
+            {
+                g.FillPath(fond, chemin);
+                g.DrawPath(trait, chemin);
+            }
+
+            var police = Theme.PoliceGrasse(Math.Max(8f, tuile.Height * 0.3f * 72f / g.DpiY));
+            TextRenderer.DrawText(g, initiales, police, Rectangle.Round(tuile), Theme.AccentClair,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
+            return;
+        }
+
+        using (var chemin = Dessin.Arrondi(r, rayon + halo))
         using (var pinceau = new SolidBrush(Theme.HaloLogoClub))
         {
             g.FillPath(pinceau, chemin);
         }
 
-        var tuile = RectangleF.Inflate(r, -halo, -halo);
-        using (var chemin = Dessin.Arrondi(tuile, E(26)))
+        using (var chemin = Dessin.Arrondi(tuile, rayon))
         using (var fond = new SolidBrush(Theme.FondLogoClub))
         {
             g.FillPath(fond, chemin);
         }
 
-        var zone = RectangleF.Inflate(tuile, -E(8), -E(8));
-        var image = Image;
+        var zone = RectangleF.Inflate(tuile, -marge, -marge);
         var echelle = Math.Min(zone.Width / image.Width, zone.Height / image.Height);
         var l = image.Width * echelle;
         var h = image.Height * echelle;
         g.InterpolationMode = InterpolationMode.HighQualityBicubic;
         g.DrawImage(image, zone.X + ((zone.Width - l) / 2), zone.Y + ((zone.Height - h) / 2), l, h);
+    }
+}
+
+/// <summary>
+/// Aperçu du bandeau d'accueil dans Paramètres › Club (maquette « Paramètres · Club ») : dégradé du bandeau, tuile du logo,
+/// « BANNIÈRE DE L'ACCUEIL », nom du club et responsable matériel. Suit la saisie.
+/// </summary>
+public sealed class ApercuBandeau : ControleDessine
+{
+    private Image? _image;
+    private string _nom = "";
+    private string _responsable = "";
+    private string _initiales = "?";
+
+    public ApercuBandeau()
+    {
+        Height = 112;
+        AccessibleRole = AccessibleRole.Graphic;
+    }
+
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public Image? Image { get => _image; set => Invalider(ref _image, value); }
+
+    /// <summary>Met à jour le texte (nom du club, ligne du responsable) et les initiales.</summary>
+    public void Afficher(string nom, string responsable, string initiales)
+    {
+        _nom = nom;
+        _responsable = responsable;
+        _initiales = initiales;
+        AccessibleName = $"Aperçu de la bannière de l'accueil : {nom}, {responsable}";
+        Invalidate();
+    }
+
+    protected override void Peindre(Graphics g)
+    {
+        var r = new RectangleF(0.5f, 0.5f, Width - 2, Height - 2);
+        using (var forme = Dessin.Arrondi(r, E(20)))
+        {
+            using var degrade = new LinearGradientBrush(new PointF(0, 0), new PointF(Width * 0.35f, Height + 1), Theme.BandeauHaut, Theme.BandeauBas)
+            {
+                InterpolationColors = new ColorBlend
+                {
+                    Colors = [Theme.BandeauHaut, Theme.BandeauMilieu, Theme.BandeauBas],
+                    Positions = [0f, 0.45f, 1f],
+                },
+            };
+            g.FillPath(degrade, forme);
+            using var bord = new Pen(Theme.Bordure);
+            g.DrawPath(bord, forme);
+        }
+
+        var cote = E(76);
+        var tuile = new RectangleF(E(20), (Height - cote) / 2, cote, cote);
+        LogoClub.Peindre(g, tuile, _image, _initiales, E(16), E(4), E(5));
+
+        var x = (int)(tuile.Right + E(18));
+        var largeur = Math.Max(0, Width - x - (int)E(20));
+        var drapeaux = TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;
+        var kicker = Theme.PoliceTitre(8.25f);
+        var titre = Theme.PoliceGrasse(14.25f);
+        var detail = Theme.Police(9.75f);
+        var hk = TextRenderer.MeasureText("A", kicker, Size.Empty, drapeaux).Height;
+        var ht = TextRenderer.MeasureText("A", titre, Size.Empty, drapeaux).Height;
+        var hd = TextRenderer.MeasureText("A", detail, Size.Empty, drapeaux).Height;
+        var y = (int)((Height - (hk + E(4) + ht + E(3) + hd)) / 2);
+        TextRenderer.DrawText(g, "BANNIÈRE DE L'ACCUEIL", kicker, new Rectangle(x, y, largeur, hk), Theme.AccentClair, drapeaux);
+        y += hk + (int)E(4);
+        TextRenderer.DrawText(g, _nom, titre, new Rectangle(x, y, largeur, ht), Theme.Texte, drapeaux);
+        y += ht + (int)E(3);
+        TextRenderer.DrawText(g, _responsable, detail, new Rectangle(x, y, largeur, hd), Theme.TexteSecondaireClair, drapeaux);
+    }
+}
+
+/// <summary>
+/// Zone du logo de Paramètres › Club : le logo dans un cadre blanc, ou « Glissez votre logo ici » sur un cadre en tirets.
+/// Un clic, Entrée ou Espace demandent un fichier (<see cref="Choisir"/>) ; une image glissée dessus le remplace (<see cref="Deposer"/>).
+/// </summary>
+public sealed class ZoneLogo : ControleDessine
+{
+    private Image? _image;
+    private bool _survol;
+    private bool _glisser;
+
+    public ZoneLogo()
+    {
+        SetStyle(ControlStyles.Selectable, true);
+        TabStop = true;
+        AllowDrop = true;
+        Cursor = Cursors.Hand;
+        Size = new Size(260, 260);
+        AccessibleRole = AccessibleRole.PushButton;
+        AccessibleName = "Logo du club : choisir une image";
+    }
+
+    public event EventHandler? Choisir;
+
+    /// <summary>Fichier glissé sur la zone.</summary>
+    public event EventHandler<string>? Deposer;
+
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public Image? Image { get => _image; set => Invalider(ref _image, value); }
+
+    /// <summary>Carré : la hauteur suit la largeur.</summary>
+    public override Size GetPreferredSize(Size proposedSize) => new(Width, Width);
+
+    protected override void OnSizeChanged(EventArgs e)
+    {
+        base.OnSizeChanged(e);
+        if (Height != Width)
+        {
+            Height = Width;
+        }
+    }
+
+    protected override void OnMouseEnter(EventArgs e) { base.OnMouseEnter(e); Invalider(ref _survol, true); }
+
+    protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); Invalider(ref _survol, false); }
+
+    protected override void OnGotFocus(EventArgs e) { base.OnGotFocus(e); Invalidate(); }
+
+    protected override void OnLostFocus(EventArgs e) { base.OnLostFocus(e); Invalidate(); }
+
+    protected override void OnClick(EventArgs e)
+    {
+        base.OnClick(e);
+        Focus();
+        Choisir?.Invoke(this, EventArgs.Empty);
+    }
+
+    protected override bool IsInputKey(Keys keyData) => keyData is Keys.Enter or Keys.Space || base.IsInputKey(keyData);
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.KeyCode is Keys.Enter or Keys.Space)
+        {
+            e.Handled = true;
+            Choisir?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private static string? FichierGlisse(DragEventArgs e) =>
+        e.Data?.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } fichiers ? fichiers[0] : null;
+
+    protected override void OnDragEnter(DragEventArgs e)
+    {
+        base.OnDragEnter(e);
+        e.Effect = FichierGlisse(e) is null ? DragDropEffects.None : DragDropEffects.Copy;
+        Invalider(ref _glisser, e.Effect != DragDropEffects.None);
+    }
+
+    protected override void OnDragLeave(EventArgs e)
+    {
+        base.OnDragLeave(e);
+        Invalider(ref _glisser, false);
+    }
+
+    protected override void OnDragDrop(DragEventArgs e)
+    {
+        base.OnDragDrop(e);
+        Invalider(ref _glisser, false);
+        if (FichierGlisse(e) is { } fichier)
+        {
+            Deposer?.Invoke(this, fichier);
+        }
+    }
+
+    protected override void Peindre(Graphics g)
+    {
+        var r = new RectangleF(1, 1, Width - 3, Height - 3);
+        var actif = _glisser || _survol || Focused;
+        var fond = _glisser ? Theme.Teinte(Theme.Accent, 0.10f) : ChampSaisie.FondChamp;
+        var couleurBord = actif ? Theme.Accent : _image is null ? Theme.BordureForte : Theme.Bordure;
+        using (var forme = Dessin.Arrondi(r, E(22)))
+        using (var pinceau = new SolidBrush(fond))
+        using (var trait = new Pen(couleurBord, E(1.5f)) { DashStyle = _image is null && !_glisser ? DashStyle.Dash : DashStyle.Solid })
+        {
+            g.FillPath(pinceau, forme);
+            g.DrawPath(trait, forme);
+        }
+
+        if (_image is not null)
+        {
+            var cote = r.Width * 0.72f;
+            var cadre = new RectangleF(r.X + ((r.Width - cote) / 2), r.Y + ((r.Height - cote) / 2), cote, cote);
+            LogoClub.Peindre(g, RectangleF.Inflate(cadre, E(5), E(5)), _image, "", E(26), E(5), E(10));
+            return;
+        }
+
+        // Pas de logo : pictogramme image, « Glissez votre logo ici », « ou cliquez pour choisir un fichier ».
+        var picto = E(34);
+        var titre = Theme.PoliceTitre(10.5f);
+        var detail = Theme.Police(9f);
+        var drapeaux = TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding | TextFormatFlags.WordBreak;
+        var largeur = (int)(r.Width - E(40));
+        var ht = TextRenderer.MeasureText(g, "Glissez votre logo ici", titre, new Size(largeur, 0), drapeaux).Height;
+        var hd = TextRenderer.MeasureText(g, "ou cliquez pour choisir un fichier", detail, new Size(largeur, 0), drapeaux).Height;
+        var y = r.Y + ((r.Height - (picto + E(10) + ht + E(6) + hd)) / 2);
+        Icones.Dessiner(g, Icones.Image, new RectangleF(r.X + ((r.Width - picto) / 2), y, picto, picto), Theme.AccentClair, 1.8f);
+        y += picto + E(10);
+        var x = (int)(r.X + E(20));
+        TextRenderer.DrawText(g, "Glissez votre logo ici", titre, new Rectangle(x, (int)y, largeur, ht), Theme.Texte, drapeaux);
+        y += ht + E(6);
+        TextRenderer.DrawText(g, "ou cliquez pour choisir un fichier", detail, new Rectangle(x, (int)y, largeur, hd), Theme.TexteSecondaire, drapeaux);
     }
 }
