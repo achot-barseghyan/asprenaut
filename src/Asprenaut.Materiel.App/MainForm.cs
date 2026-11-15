@@ -244,13 +244,6 @@ public sealed class MainForm : Form
         Ajouter<EcranRevisions>(EntreeMenu.Revisions, "Révisions", Icones.Revisions);
         Ajouter<EcranParametres>(EntreeMenu.Parametres, "Paramètres", Icones.Parametres);
 
-        var scanner = new CarteScanner { Dock = DockStyle.Bottom, Compact = reduit };
-        if (reduit)
-        {
-            scanner.Height = 48;
-            bulle.SetToolTip(scanner, "Prêt à scanner · Visez l'étiquette QR");
-        }
-
         var numero = Application.ProductVersion.Split('+')[0];
         var version = Ui.Libelle(reduit ? $"v{numero}" : $"Version {numero}", Theme.Police(8.25f), Theme.TexteSecondaire);
         version.Dock = DockStyle.Bottom;
@@ -269,7 +262,7 @@ public sealed class MainForm : Form
         _basculer = basculer;
         var ecart = new Panel { Dock = DockStyle.Bottom, Height = 10, BackColor = Theme.FondMenu };
 
-        // Mode consultation / mode gestion, juste au-dessus de la carte du pistolet.
+        // Mode consultation / mode gestion, juste au-dessus de la version.
         _carteGestion = new CarteModeGestion(_gestion) { Dock = DockStyle.Bottom, Compact = reduit };
         if (reduit)
         {
@@ -290,12 +283,11 @@ public sealed class MainForm : Form
             }
         };
 
-        // Ancrées en bas dans l'ordre inverse de leur ajout : version tout en bas, puis pistolet, mode gestion, réduire le menu.
+        // Ancrées en bas dans l'ordre inverse de leur ajout : version tout en bas, puis mode gestion, réduire le menu.
         panneau.Controls.Add(entrees);
         panneau.Controls.Add(basculer);
         panneau.Controls.Add(ecart);
         panneau.Controls.Add(_carteGestion);
-        panneau.Controls.Add(scanner);
         panneau.Controls.Add(version);
         return panneau;
     }

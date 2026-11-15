@@ -63,7 +63,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
 - **App** : `Program.cs` → `Demarrage` (DI, sauvegarde, migrations, démo en DEBUG) → `MainForm` (menu latéral + zone de contenu).
   Menu réductible : bouton « Réduire le menu » / « Agrandir le menu » en bas (`Reglages.MenuReduit`, `ServiceReglages.ChangerMenuReduit`,
   libre) ; réduit = `Theme.LargeurMenuReduit` (84), entrées `BoutonArrondi.IconeSeule` (trait turquoise sur l'entrée active),
-  `CarteModeGestion.Compact` (cadenas seul), `CarteScanner.Compact` (point seul), noms en bulles ; `RefaireMenu` recrée le menu.
+  `CarteModeGestion.Compact` (cadenas seul), noms en bulles ; `RefaireMenu` recrée le menu.
   `INavigation.AllerA<TEcran>(parametre)` crée l'écran via `ActivatorUtilities` (non retenu par le conteneur), le met à l'échelle
   de l'écran et dispose le précédent (masqué puis disposé, jamais `Controls.Remove` : le retrait déplace tout l'arbre de
   fenêtres vers la « parking window » de WinForms, 1,4 s pour Paramètres). Écrans dans `Ecrans/` (héritent d'`EcranBase` ; Départ/Retour héritent d'`EcranScanBase`
@@ -75,7 +75,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   `Tuile`, `FilAriane`, `BarreRecherche`, `ChampSaisie` (`Icone`, `ADroite` et `IndicatifSiFocus` optionnels), `ChampDate` (remplace le DateTimePicker, blanc et en anglais : saisie jj/mm/aaaa ou `Calendrier` déroulant dessiné, bouton agenda, Alt + ↓ ou F4 ; lundi en premier, « Aujourd'hui » / « Effacer », au-dessus du champ si la place manque),
   `ListeDeroulante` (cadre et bouton repeints par-dessus Windows dans `WndProc`), `ListeMateriel` (styles Depart / ARendre / Rendu),
   `ScanInput` + `BandeauMessage` (scan réussi : `Ressources/Sons/ScanReussi.wav`, ressource `Sons.ScanReussi.wav`, PCM 16 bits mono
-  car `SoundPlayer` ne lit pas tous les WAV ; avertissement / erreur : sons de Windows ; réglage `SonsActifs`), `BandeauAccueil`, `Logo`, `CarteScanner`, `Tableaux` (pastilles et pictogrammes dans les DataGridView),
+  car `SoundPlayer` ne lit pas tous les WAV ; avertissement / erreur : sons de Windows ; réglage `SonsActifs`), `BandeauAccueil`, `Logo`, `Tableaux` (pastilles et pictogrammes dans les DataGridView),
   `FiltreCategories` (puces « Tout 12 / Blocs 3 », `CouleurPoint`, `Unite` et `LibelleTout` optionnels ; aussi les filtres de Membres), `FenetreFormulaire` (fenêtre modale sombre ;
   la validation passe par un service et ne ferme qu'en cas de succès ; largeur et marge réglables ; libellé « Nom * » → étoile ;
   `EnTete(sousTitre, badge, icone)`, `Avatar.Initiales`, `Titre`, `Etiquettes`, `Note`, `Separations` : filet d'en-tête et pied sombre),

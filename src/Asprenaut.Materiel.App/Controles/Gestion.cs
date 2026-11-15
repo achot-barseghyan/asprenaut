@@ -870,7 +870,7 @@ public sealed class CarteModeGestion : Button
         FlatAppearance.BorderSize = 0;
         Cursor = Cursors.Hand;
         Margin = Padding.Empty;
-        Height = 70; // Carte de 58 px + 12 px d'écart avec la carte du pistolet.
+        Height = 70; // Carte de 58 px + 12 px d'écart avec la version en dessous.
         _gestion = gestion;
         Actualiser();
     }
