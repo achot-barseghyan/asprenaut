@@ -1313,10 +1313,8 @@ public sealed class EcranParametres : EcranBase
             origine.Visible = choix != ChoixLogo.Fourni || nouvelle is not null;
 
             var nomAffiche = nom.Valeur.Trim().Length > 0 ? nom.Valeur.Trim() : "Nom du club";
-            var contact = string.Join(" · ", new[] { responsable.Valeur.Trim(), telephone.Valeur.Trim() }.Where(t => t.Length > 0));
             apercu.Image = image;
-            apercu.Afficher(nomAffiche, contact.Length > 0 ? $"Responsable matériel : {contact}" : "Responsable matériel non renseigné",
-                ServiceReglages.InitialesClub(nom.Valeur));
+            apercu.Afficher(nomAffiche, ServiceReglages.InitialesClub(nom.Valeur));
 
             var changements = Changements();
             etat.Text = changements.Count > 0 ? "Modifié : " + string.Join(", ", changements) : "Aucune modification";

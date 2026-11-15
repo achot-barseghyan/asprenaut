@@ -1,5 +1,6 @@
 using System.Drawing.Drawing2D;
 using Asprenaut.Materiel.App.Apparence;
+using Asprenaut.Materiel.Core.Modeles;
 
 namespace Asprenaut.Materiel.App.Controles;
 
@@ -32,11 +33,20 @@ public sealed class BandeauAccueil : Panel, IFondDessine
         var g = e.Graphics;
         Dessin.EffacerAvecParent(this, g);
         Dessin.Qualite(g);
-        var r = new RectangleF(0.5f, 0.5f, Width - 2, Height - 2);
-        using var forme = Dessin.Arrondi(r, Dessin.Echelle(this, 28));
+        PeindreFond(g, Width, Height, Dessin.Echelle(this, 28), Dessin.Echelle(this, 1));
+    }
+
+    /// <summary>
+    /// Fond du bandeau (dégradé, rayons, fond marin, coraux, poissons, bulles, bordure) sur <paramref name="largeur"/> ×
+    /// <paramref name="hauteur"/> pixels : partagé avec l'aperçu de Paramètres › Club (<see cref="ApercuBandeau"/>).
+    /// </summary>
+    public static void PeindreFond(Graphics g, int largeur, int hauteur, float rayon, float epaisseurBord)
+    {
+        var r = new RectangleF(0.5f, 0.5f, largeur - 2, hauteur - 2);
+        using var forme = Dessin.Arrondi(r, rayon);
 
         // Dégradé à 160° : du bleu lagon en haut à gauche vers le bleu profond en bas à droite.
-        using (var degrade = new LinearGradientBrush(new PointF(0, 0), new PointF(Width * 0.35f, Height + 1), Theme.BandeauHaut, Theme.BandeauBas))
+        using (var degrade = new LinearGradientBrush(new PointF(0, 0), new PointF(largeur * 0.35f, hauteur + 1), Theme.BandeauHaut, Theme.BandeauBas))
         {
             degrade.InterpolationColors = new ColorBlend
             {
@@ -48,8 +58,8 @@ public sealed class BandeauAccueil : Panel, IFondDessine
 
         g.SetClip(forme);
         var etat = g.Save();
-        var echelle = Math.Max(Width / 1100f, Height / 230f);
-        g.TranslateTransform(Width - (1100 * echelle), Height - (230 * echelle));
+        var echelle = Math.Max(largeur / 1100f, hauteur / 230f);
+        g.TranslateTransform(largeur - (1100 * echelle), hauteur - (230 * echelle));
         g.ScaleTransform(echelle, echelle);
 
         Remplir(g, [new(640, 0), new(700, 0), new(860, 230), new(760, 230)], Theme.Alpha(Theme.Lumiere, 0.06f));
@@ -71,7 +81,7 @@ public sealed class BandeauAccueil : Panel, IFondDessine
 
         g.Restore(etat);
         g.ResetClip();
-        using var bord = new Pen(Theme.Sur(Theme.BandeauMilieu, Theme.AccentClair, 0.18f), Dessin.Echelle(this, 1));
+        using var bord = new Pen(Theme.Sur(Theme.BandeauMilieu, Theme.AccentClair, 0.18f), epaisseurBord);
         g.DrawPath(bord, forme);
     }
 
@@ -200,72 +210,113 @@ public sealed class LogoClub : ControleDessine
 }
 
 /// <summary>
-/// Aperçu du bandeau d'accueil dans Paramètres › Club (maquette « Paramètres · Club ») : dégradé du bandeau, tuile du logo,
-/// « BANNIÈRE DE L'ACCUEIL », nom du club et responsable matériel. Suit la saisie.
+/// Aperçu du bandeau d'accueil dans Paramètres › Club : réduction fidèle du <see cref="BandeauAccueil"/> de l'écran Sorties
+/// (même fond et décor, logo du club, date du jour, « Bonne plongée, l'équipe ! », résumé, boutons « Nouvelle sortie » et
+/// « Voir l'inventaire »), dessinée à l'échelle d'un bandeau de 230 px logiques. Suit le logo choisi.
 /// </summary>
 public sealed class ApercuBandeau : ControleDessine
 {
+    /// <summary>Hauteur du bandeau de l'accueil reproduit (pixels logiques).</summary>
+    private const float HauteurAccueil = 230;
+
     private Image? _image;
-    private string _nom = "";
-    private string _responsable = "";
     private string _initiales = "?";
 
     public ApercuBandeau()
     {
-        Height = 112;
+        Height = 140;
         AccessibleRole = AccessibleRole.Graphic;
     }
 
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public Image? Image { get => _image; set => Invalider(ref _image, value); }
 
-    /// <summary>Met à jour le texte (nom du club, ligne du responsable) et les initiales.</summary>
-    public void Afficher(string nom, string responsable, string initiales)
+    /// <summary>Résumé sous le titre (sur l'accueil : sorties en cours et matériel dehors).</summary>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public string Resume { get; set; } = "Aucune sortie en cours : tout le matériel est rangé.";
+
+    /// <summary>Met à jour le nom lu par l'accessibilité et les initiales (dessinées sans logo).</summary>
+    public void Afficher(string nom, string initiales)
     {
-        _nom = nom;
-        _responsable = responsable;
         _initiales = initiales;
-        AccessibleName = $"Aperçu de la bannière de l'accueil : {nom}, {responsable}";
+        AccessibleName = $"Aperçu de la bannière de l'accueil : {nom}";
         Invalidate();
     }
 
     protected override void Peindre(Graphics g)
     {
-        var r = new RectangleF(0.5f, 0.5f, Width - 2, Height - 2);
-        using (var forme = Dessin.Arrondi(r, E(20)))
+        // k : rapport entre l'aperçu et le bandeau de l'accueil ; L(v) convertit une mesure logique de l'accueil.
+        var k = Height / E(HauteurAccueil);
+        float L(float v) => E(v) * k;
+        Font Taille(Func<float, Font> police, float points) => police(MathF.Round(points * k * 4) / 4);
+
+        BandeauAccueil.PeindreFond(g, Width, Height, L(28), Math.Max(1f, L(1)));
+
+        // Logo : 150 px à 40 px du bord, centré en hauteur (comme EcranSorties.CreerBandeau).
+        var cote = Math.Min(L(150), Height - (2 * L(23)));
+        var tuile = new RectangleF(L(40), (Height - cote) / 2, cote, cote);
+        var kTuile = cote / E(150);
+        LogoClub.Peindre(g, new RectangleF(tuile.X + 0.5f, tuile.Y + 0.5f, cote - 2, cote - 2), _image, _initiales, E(26) * kTuile, E(5) * kTuile, E(8) * kTuile);
+
+        var drapeaux = TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;
+        var policeDate = Taille(t => Theme.PoliceTitre(t), 9.75f);
+        var policeTitre = Taille(Theme.PoliceGrasse, 25.5f);
+        var policeResume = Taille(t => Theme.Police(t), 11.25f);
+        var policeBouton = Taille(t => Theme.PoliceTitre(t), 11f);
+        var date = DateTime.Today.ToString("dddd d MMMM", Libelles.Culture).ToUpper(Libelles.Culture);
+        const string Titre = "Bonne plongée, l'équipe !";
+        var hDate = TextRenderer.MeasureText(g, date, policeDate, Size.Empty, drapeaux).Height;
+        var hTitre = TextRenderer.MeasureText(g, Titre, policeTitre, Size.Empty, drapeaux).Height;
+        var hResume = TextRenderer.MeasureText(g, Resume, policeResume, Size.Empty, drapeaux).Height;
+        var hBouton = L(Theme.HauteurBouton);
+
+        var x = tuile.Right + L(30);
+        var largeur = Math.Max(0, (int)(Width - x - L(40)));
+        var y = Math.Max(L(15), (Height - (hDate + L(10) + hTitre + L(8) + hResume + L(18) + hBouton)) / 2);
+        TextRenderer.DrawText(g, date, policeDate, new Rectangle((int)x, (int)y, largeur, hDate), Theme.AccentClair, drapeaux);
+        y += hDate + L(10);
+        TextRenderer.DrawText(g, Titre, policeTitre, new Rectangle((int)x, (int)y, largeur, hTitre), Theme.Texte, drapeaux);
+        y += hTitre + L(8);
+        TextRenderer.DrawText(g, Resume, policeResume, new Rectangle((int)(x + L(2)), (int)y, largeur, hResume), Theme.TexteDoux, drapeaux);
+        y += hResume + L(18);
+
+        var fin = PeindreBouton(g, "Nouvelle sortie", Icones.Plus, x, y, policeBouton, k, Theme.Accent, null, Theme.TexteSurAccent);
+        PeindreBouton(g, "Voir l'inventaire", null, fin + L(12), y, policeBouton, k,
+            Theme.Sur(Theme.BandeauMilieu, Theme.Fond, 0.35f), Theme.Sur(Theme.BandeauMilieu, Theme.Lumiere, 0.25f), Theme.Texte);
+    }
+
+    /// <summary>Bouton de l'accueil (<see cref="BoutonArrondi"/>) réduit de <paramref name="k"/> ; retourne son bord droit.</summary>
+    private float PeindreBouton(Graphics g, string texte, string? icone, float x, float y, Font police, float k, Color fond, Color? bordure, Color couleurTexte)
+    {
+        float L(float v) => E(v) * k;
+        var drapeaux = TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix;
+        var mesure = TextRenderer.MeasureText(g, texte, police, Size.Empty, drapeaux);
+        var tailleIcone = L(18);
+        var ecart = L(10);
+        var contenu = mesure.Width + (icone is null ? 0 : tailleIcone + ecart);
+        var largeur = mesure.Width + L(44 + 4) + (icone is null ? 0 : L(28));
+        var r = new RectangleF(x, y, largeur, L(Theme.HauteurBouton));
+        using (var chemin = Dessin.Arrondi(r, L(Theme.RayonBouton)))
+        using (var pinceau = new SolidBrush(fond))
         {
-            using var degrade = new LinearGradientBrush(new PointF(0, 0), new PointF(Width * 0.35f, Height + 1), Theme.BandeauHaut, Theme.BandeauBas)
+            g.FillPath(pinceau, chemin);
+            if (bordure is { } c)
             {
-                InterpolationColors = new ColorBlend
-                {
-                    Colors = [Theme.BandeauHaut, Theme.BandeauMilieu, Theme.BandeauBas],
-                    Positions = [0f, 0.45f, 1f],
-                },
-            };
-            g.FillPath(degrade, forme);
-            using var bord = new Pen(Theme.Bordure);
-            g.DrawPath(bord, forme);
+                using var stylo = new Pen(c, Math.Max(1f, L(1)));
+                g.DrawPath(stylo, chemin);
+            }
         }
 
-        var cote = E(76);
-        var tuile = new RectangleF(E(20), (Height - cote) / 2, cote, cote);
-        LogoClub.Peindre(g, tuile, _image, _initiales, E(16), E(4), E(5));
+        var xc = r.X + ((r.Width - contenu) / 2);
+        if (icone is not null)
+        {
+            Icones.Dessiner(g, icone, new RectangleF(xc, r.Y + ((r.Height - tailleIcone) / 2), tailleIcone, tailleIcone), couleurTexte, 2.2f * k);
+            xc += tailleIcone + ecart;
+        }
 
-        var x = (int)(tuile.Right + E(18));
-        var largeur = Math.Max(0, Width - x - (int)E(20));
-        var drapeaux = TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;
-        var kicker = Theme.PoliceTitre(8.25f);
-        var titre = Theme.PoliceGrasse(14.25f);
-        var detail = Theme.Police(9.75f);
-        var hk = TextRenderer.MeasureText("A", kicker, Size.Empty, drapeaux).Height;
-        var ht = TextRenderer.MeasureText("A", titre, Size.Empty, drapeaux).Height;
-        var hd = TextRenderer.MeasureText("A", detail, Size.Empty, drapeaux).Height;
-        var y = (int)((Height - (hk + E(4) + ht + E(3) + hd)) / 2);
-        TextRenderer.DrawText(g, "BANNIÈRE DE L'ACCUEIL", kicker, new Rectangle(x, y, largeur, hk), Theme.AccentClair, drapeaux);
-        y += hk + (int)E(4);
-        TextRenderer.DrawText(g, _nom, titre, new Rectangle(x, y, largeur, ht), Theme.Texte, drapeaux);
-        y += ht + (int)E(3);
-        TextRenderer.DrawText(g, _responsable, detail, new Rectangle(x, y, largeur, hd), Theme.TexteSecondaireClair, drapeaux);
+        TextRenderer.DrawText(g, texte, police, new Rectangle((int)xc, (int)r.Y, mesure.Width + 2, (int)r.Height), couleurTexte,
+            drapeaux | TextFormatFlags.VerticalCenter | TextFormatFlags.Left);
+        return r.Right;
     }
 }
 
