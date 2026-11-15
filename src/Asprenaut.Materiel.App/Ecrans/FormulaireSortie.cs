@@ -341,7 +341,7 @@ internal static class FormulaireSortie
     }
 
     /// <summary>Colonne de sections, de la hauteur de son contenu.</summary>
-    private static TableLayoutPanel Pile(params Control[] sections)
+    internal static TableLayoutPanel Pile(params Control[] sections)
     {
         var colonne = new TableLayoutPanel
         {
@@ -362,7 +362,7 @@ internal static class FormulaireSortie
     }
 
     /// <summary>Deux colonnes de largeur fixe (maquette : 1,1 / 1), alignées en haut.</summary>
-    private static TableLayoutPanel Corps(Control gauche, Control droite)
+    internal static TableLayoutPanel Corps(Control gauche, Control droite)
     {
         var corps = new TableLayoutPanel
         {

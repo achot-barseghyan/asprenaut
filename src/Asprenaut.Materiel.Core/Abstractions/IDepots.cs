@@ -337,3 +337,18 @@ public interface IJournalRepository
     /// </summary>
     Task<IReadOnlyList<LigneJournal>> ListerAsync(DateTime? depuisUtc, int nombreMax, CancellationToken ct = default);
 }
+
+/// <summary>Modèles de sortie (table modele_sortie, migration 024).</summary>
+public interface IModeleSortieRepository
+{
+    /// <summary>Tous les modèles, par nom.</summary>
+    Task<IReadOnlyList<ModeleSortie>> ListerAsync(CancellationToken ct = default);
+
+    Task<ModeleSortie?> ObtenirAsync(long id, CancellationToken ct = default);
+
+    Task<long> AjouterAsync(ModeleSortie modele, CancellationToken ct = default);
+
+    Task MettreAJourAsync(ModeleSortie modele, CancellationToken ct = default);
+
+    Task<bool> SupprimerAsync(long id, CancellationToken ct = default);
+}

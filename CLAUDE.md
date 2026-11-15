@@ -483,6 +483,21 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     blocs quittent la séance et reviennent dans « À prévoir »). Inspecteurs affichés = ceux choisis (table seance_inspecteur) ;
     l'ancien `PlanifierSeanceAsync(date, heure, lieu)` prend tous les inspecteurs actifs. Journal `SeanceTivModifiee` / `SeanceTivAnnulee`.
 
+40. Modèles de sortie (migration 024, `ServiceModelesSortie`, `ModelesSortieTests`, `ModelesSortieDepotsTests`, maquette « Sorties » v2) :
+    une sortie qui revient toujours pareil (`ModeleSortie` : nom, jour habituel facultatif, type, lieu, intitulé vide = proposé par
+    `IntitulePropose`, responsable, utilisations null = celles du type, `UnParCategorie`, notes). `EnregistrerAsync(id, SaisieModele)` :
+    nom obligatoire, unique sans les majuscules, 40 car. ; intitulé 60, lieu 80, notes 400 ; type proposé et responsable actif (ceux déjà
+    choisis restent acceptés) ; utilisations ≠ type → `CompteurSortie`, règle coupée (types nominatifs seulement, sinon remise) →
+    `PlusieursParCategorie`, demandés une fois à l'enregistrement si ce n'était pas déjà le réglage du modèle. Créer, modifier,
+    dupliquer (« (copie) », « (copie 2) »), supprimer (confirmation) : libres. `CreerSortieAsync` : sortie en préparation datée du
+    prochain jour du modèle (`ProchaineDate`, aujourd'hui compris ; sans jour : aujourd'hui), via `ServiceSortie.CreerAsync(demande,
+    reglagesApprouves: true)` (interne : pas de code redemandé) ; refusé si type masqué / supprimé ou responsable inactif (`FicheModele.Probleme`).
+    Les sorties ne sont pas liées au modèle. Type ou responsable supprimé : SET NULL. Écran Sorties : 3e onglet « Modèles N » (lundi →
+    dimanche puis sans jour, `CarteModele` : jour, intitulé, type, responsable, lieu, compteur, notes, Créer / Modifier / Dupliquer /
+    corbeille) et, dans En cours, « Démarrage rapide » (`DemarrageRapideAsync` : 4 modèles, le plus proche d'abord, `CarteRapide`
+    « AUJOURD'HUI », « Créer la sortie » → `EcranDepart`, « Ajuster » → `AllerA<EcranNouvelleSortie>(FicheModele)` prérempli ; les
+    valeurs protégées y suivent les règles normales), « Gérer les modèles › ». Fenêtre `Ecrans/FormulaireModele`. Export : modeles_sortie.csv.
+
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
 à côté de la base d'essai : les essais ne touchent jamais les réglages réels. Préfixe des étiquettes : `CodeScanne.Nettoyer(brut, prefixe)`.
@@ -551,11 +566,13 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   022 : moniteur.couleur (clé de la couleur de la pastille d'une classe, null = d'après l'id).
   023 : seance_tiv.note et seance_tiv.annulee (0/1), seance_inspecteur (seance_id ON DELETE CASCADE, moniteur_id) ; reprise :
   chaque séance reçoit les inspecteurs TIV actifs.
+  024 : modele_sortie (nom unique NOCASE `ux_modele_sortie_nom`, jour 0–6 null = sans jour, type_sortie_id et moniteur_id ON DELETE
+  SET NULL, lieu, intitule, utilisations null = celles du type, un_par_categorie, notes, cree_le).
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/024_xxx.sql`, sans jamais modifier un script déjà livré
+- Nouvelle migration : ajouter `Migrations/025_xxx.sql`, sans jamais modifier un script déjà livré
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.

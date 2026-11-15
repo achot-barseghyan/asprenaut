@@ -55,6 +55,7 @@ internal static class Demarrage
         services.AddSingleton<ISignalementRepository, SignalementRepository>();
         services.AddSingleton<IAdherentRepository, AdherentRepository>();
         services.AddSingleton<IPrestataireRepository, PrestataireRepository>();
+        services.AddSingleton<IModeleSortieRepository, ModeleSortieRepository>();
         services.AddSingleton<IStockageManuels>(_ => new StockageManuels(StockageManuels.DossierParDefaut(parametres.CheminBase)));
         services.AddSingleton<IReglagesSauvegardables, ReglagesSauvegardables>();
         services.AddSingleton<ISauvegardeComplete>(sp => new SauvegardeComplete(
@@ -81,6 +82,7 @@ internal static class Demarrage
         services.AddSingleton<ServiceSignalements>();
         services.AddSingleton<ServiceAdherents>();
         services.AddSingleton<ServicePrestataires>();
+        services.AddSingleton<ServiceModelesSortie>();
 
         // Interface. Les écrans ne sont pas enregistrés : ServiceNavigation les crée à la demande.
         services.AddSingleton<ServiceNavigation>();

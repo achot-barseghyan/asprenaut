@@ -349,6 +349,38 @@ public sealed class EcranNouvelleSortie : EcranBase
             }
         }
 
+        // « Ajuster » d'un modèle de sortie : formulaire prérempli, pour changer un détail avant de créer.
+        if (parametre is FicheModele modele)
+        {
+            if (_listeTypes.FirstOrDefault(t => t.Id == modele.Type?.Id) is { } typeModele)
+            {
+                _types.Valeur = typeModele.Id;
+                _unParCategorie.Visible = typeModele.Nominatif;
+            }
+
+            _date.Date = modele.Prochaine;
+            _lieu.Valeur = modele.Modele.Lieu;
+            if (modele.Modele.Intitule.Trim().Length > 0)
+            {
+                _titreAuto = false;
+                _majTitre = true;
+                _intitule.Valeur = modele.Modele.Intitule.Trim();
+                _majTitre = false;
+            }
+
+            _notes.Valeur = modele.Modele.Notes;
+            _utilisationsChoisies = modele.UtilisationsModifiees ? modele.Utilisations : null;
+            _unParCategorie.Actif = modele.Modele.UnParCategorie;
+            if (_responsables.FirstOrDefault(r => r.Id == modele.Responsable?.Id) is { } responsableModele)
+            {
+                _choixParGenre[responsableModele.Genre] = responsableModele.Id;
+                if (responsableModele.EstClasse && _genre.SelectedIndex != 1)
+                {
+                    _genre.SelectedIndex = 1;
+                }
+            }
+        }
+
         RemplirPersonnes();
         if (_responsables.Count == 0)
         {

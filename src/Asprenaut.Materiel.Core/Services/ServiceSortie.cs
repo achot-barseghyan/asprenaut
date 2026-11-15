@@ -177,7 +177,14 @@ public sealed class ServiceSortie(
         return date is { } d ? $"{debut} du {d.ToString("dddd", Libelles.Culture)}" : debut;
     }
 
-    public async Task<ResultatOperation> CreerAsync(NouvelleSortie demande, CancellationToken ct = default)
+    public Task<ResultatOperation> CreerAsync(NouvelleSortie demande, CancellationToken ct = default) =>
+        CreerAsync(demande, reglagesApprouves: false, ct);
+
+    /// <summary>
+    /// Création ; <paramref name="reglagesApprouves"/> : utilisations et règle « un par catégorie » déjà acceptées en mode
+    /// gestion à l'enregistrement d'un modèle de sortie (<see cref="ServiceModelesSortie"/>), pas redemandées au lancement.
+    /// </summary>
+    internal async Task<ResultatOperation> CreerAsync(NouvelleSortie demande, bool reglagesApprouves, CancellationToken ct)
     {
         var intitule = demande.Intitule.Trim();
         if (intitule.Length == 0)
@@ -204,14 +211,14 @@ public sealed class ServiceSortie(
 
         // Changer les utilisations du type (compteur) demande le mode gestion.
         var utilisations = demande.Utilisations ?? utilisationsDuType;
-        if (utilisations != utilisationsDuType && gestion?.Exiger(ActionProtegee.CompteurSortie) is { Reussi: false } refusCompteur)
+        if (!reglagesApprouves && utilisations != utilisationsDuType && gestion?.Exiger(ActionProtegee.CompteurSortie) is { Reussi: false } refusCompteur)
         {
             return refusCompteur;
         }
 
         // Un seul équipement par catégorie et par adhérent : activé par défaut, le couper demande le mode gestion.
         var unParCategorie = demande.UnParCategorie ?? true;
-        if (!unParCategorie && gestion?.Exiger(ActionProtegee.PlusieursParCategorie) is { Reussi: false } refusCategorie)
+        if (!reglagesApprouves && !unParCategorie && gestion?.Exiger(ActionProtegee.PlusieursParCategorie) is { Reussi: false } refusCategorie)
         {
             return refusCategorie;
         }

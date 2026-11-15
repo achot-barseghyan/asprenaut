@@ -32,6 +32,8 @@ public sealed class Contexte
     public AdherentRepositoryMemoire DepotAdherents { get; }
     public ServicePrestataires Prestataires { get; }
     public PrestataireRepositoryMemoire DepotPrestataires { get; }
+    public ServiceModelesSortie ModelesSortie { get; }
+    public ModeleSortieRepositoryMemoire DepotModeles { get; }
 
     public Contexte()
     {
@@ -49,6 +51,8 @@ public sealed class Contexte
         DepotAdherents = new AdherentRepositoryMemoire(Db);
         Adherents = new ServiceAdherents(DepotAdherents, journal, Horloge, Gestion, moniteurs);
         Sorties = new ServiceSortie(sorties, moniteurs, journal, Horloge, Reglages, Gestion, types, DepotAdherents);
+        DepotModeles = new ModeleSortieRepositoryMemoire(Db);
+        ModelesSortie = new ServiceModelesSortie(DepotModeles, types, moniteurs, Sorties, Horloge, Gestion);
         Inventaire = new ServiceInventaire(equipements, categories, journal, Horloge, Reglages, Gestion, sorties, DepotRevisions);
         ServiceReglages = new ServiceReglages(Reglages, Stockage, Sauvegardes, Gestion);
         DepotSignalements = new SignalementRepositoryMemoire(Db);

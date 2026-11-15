@@ -132,6 +132,20 @@ public sealed class ExportRepository(FabriqueConnexion fabrique) : IExportReposi
             [new("Code"), new("Équipement"), new("Étape", GenreColonne.EtapeRevision), new("Prestataire"), new("Motif"), new("Note d'envoi"),
              new("Réparé au club par"), new("Parti le", GenreColonne.Date), new("Retour prévu", GenreColonne.Date), new("Fait le", GenreColonne.Date),
              new("Archivée", GenreColonne.OuiNon)]),
+        ("modeles_sortie.csv",
+            $"""
+            SELECT ms.nom,
+                   CASE ms.jour WHEN 1 THEN 'Lundi' WHEN 2 THEN 'Mardi' WHEN 3 THEN 'Mercredi' WHEN 4 THEN 'Jeudi'
+                                WHEN 5 THEN 'Vendredi' WHEN 6 THEN 'Samedi' WHEN 0 THEN 'Dimanche' ELSE '' END,
+                   COALESCE(ts.nom, ''), ms.intitule, COALESCE({Moniteur}, ''), ms.lieu, COALESCE(ms.utilisations, ts.utilisations),
+                   ms.un_par_categorie, ms.notes
+            FROM modele_sortie ms
+            LEFT JOIN type_sortie ts ON ts.id = ms.type_sortie_id
+            LEFT JOIN moniteur m ON m.id = ms.moniteur_id
+            ORDER BY ms.nom COLLATE NOCASE
+            """,
+            [new("Modèle"), new("Jour"), new("Type"), new("Intitulé"), new("Responsable"), new("Lieu"), new("Utilisations"),
+             new("Un équipement par catégorie", GenreColonne.OuiNon), new("Notes")]),
     ];
 
     public async Task<IReadOnlyList<TableExport>> ListerTablesAsync(CancellationToken ct = default)

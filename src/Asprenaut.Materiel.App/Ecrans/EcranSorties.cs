@@ -1,5 +1,6 @@
 using Asprenaut.Materiel.App.Apparence;
 using Asprenaut.Materiel.App.Controles;
+using Asprenaut.Materiel.App.Infrastructure;
 using Asprenaut.Materiel.App.Navigation;
 using Asprenaut.Materiel.Core.Abstractions;
 using Asprenaut.Materiel.Core.Modeles;
@@ -20,10 +21,19 @@ public sealed class EcranSorties : EcranBase
     private readonly ServiceReglages _reglages;
 
     // Onglets et bouton « Nouvelle sortie » du haut (onglet Clôturées ; sur En cours, il est dans le bandeau).
-    private readonly Bascule _onglets = new("En cours", "Clôturées") { AccessibleName = "Sorties" };
+    private readonly Bascule _onglets = new("En cours", "Clôturées", "Modèles") { AccessibleName = "Sorties" };
     private readonly BoutonArrondi _nouvelleHaut = new("Nouvelle sortie", StyleBouton.Principal, Icones.Plus) { Margin = Padding.Empty, Visible = false };
     private readonly Control _panneauEnCours;
     private readonly Control _panneauCloturees;
+    private readonly Control _panneauModeles;
+    private readonly ServiceModelesSortie _modeles;
+    private readonly ServiceTypesSortie _typesSortie;
+    private readonly ServiceMoniteurs _moniteurs;
+    private readonly GardeGestion _garde;
+
+    // Démarrage rapide (onglet En cours) et onglet Modèles.
+    private readonly GrilleAdaptative _rapides = new() { LargeurMin = 270, HauteurElement = 172, Ecart = 14, ColonnesMax = ServiceModelesSortie.NombreDemarrageRapide, RangeesVisibles = 1, Margin = new Padding(0, 0, 0, 26) };
+    private readonly GrilleAdaptative _grilleModeles = new() { LargeurMin = 380, HauteurElement = 318, Ecart = 14, Margin = Padding.Empty };
 
     // Onglet En cours.
     private readonly BandeauMessage _rappelSauvegarde = new() { Height = 76, Margin = Padding.Empty };
@@ -62,12 +72,24 @@ public sealed class EcranSorties : EcranBase
         ("detail", "", 70, null),
     ];
 
-    public EcranSorties(ServiceSortie sorties, IHorloge horloge, INavigation navigation, ServiceReglages reglages)
+    public EcranSorties(
+        ServiceSortie sorties,
+        IHorloge horloge,
+        INavigation navigation,
+        ServiceReglages reglages,
+        ServiceModelesSortie modeles,
+        ServiceTypesSortie typesSortie,
+        ServiceMoniteurs moniteurs,
+        GardeGestion garde)
     {
         _sorties = sorties;
         _reglages = reglages;
         _horloge = horloge;
         _navigation = navigation;
+        _modeles = modeles;
+        _typesSortie = typesSortie;
+        _moniteurs = moniteurs;
+        _garde = garde;
 
         // Rappel de la sauvegarde complète hebdomadaire (stockage externe), visible seulement quand elle est à faire.
         var faire = new BoutonArrondi("Faire la sauvegarde ›", StyleBouton.Secondaire, Icones.Telecharger) { Margin = new Padding(14, 0, 0, 0) };
@@ -83,6 +105,8 @@ public sealed class EcranSorties : EcranBase
         _panneauEnCours = CreerEnCours();
         _panneauCloturees = CreerCloturees();
         _panneauCloturees.Visible = false;
+        _panneauModeles = CreerModeles();
+        _panneauModeles.Visible = false;
 
         // Haut : onglets à gauche, « Nouvelle sortie » à droite (onglet Clôturées).
         _onglets.Changement += (_, _) => AfficherOnglet();
@@ -95,9 +119,10 @@ public sealed class EcranSorties : EcranBase
         haut.Margin = new Padding(0, 0, 0, 24);
 
         var contenu = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent, Margin = Padding.Empty };
-        _panneauEnCours.Dock = _panneauCloturees.Dock = DockStyle.Fill;
+        _panneauEnCours.Dock = _panneauCloturees.Dock = _panneauModeles.Dock = DockStyle.Fill;
         contenu.Controls.Add(_panneauEnCours);
         contenu.Controls.Add(_panneauCloturees);
+        contenu.Controls.Add(_panneauModeles);
 
         Controls.Add(Ui.Colonne((haut, SizeType.AutoSize, 0), (contenu, SizeType.Percent, 100)));
     }
@@ -120,9 +145,121 @@ public sealed class EcranSorties : EcranBase
 
     private void AfficherOnglet()
     {
-        _panneauEnCours.Visible = !Cloturees;
+        _panneauEnCours.Visible = _onglets.SelectedIndex == 0;
         _panneauCloturees.Visible = Cloturees;
+        _panneauModeles.Visible = _onglets.SelectedIndex == 2;
         _nouvelleHaut.Visible = Cloturees;
+    }
+
+    // ---------------------------------------------------------------- Modèles de sortie
+
+    private Control CreerModeles()
+    {
+        var titre = Ui.TitreSection("Modèles de sortie");
+        var precision = Ui.Libelle("Les sorties qui reviennent toujours pareil : cours du lundi, fosse du jeudi…", Theme.Police(10.5f), Theme.TexteSecondaire);
+        precision.Margin = new Padding(0, 4, 0, 0);
+        var textes = Ui.Pile(titre, precision);
+        var nouveau = new BoutonArrondi("Nouveau modèle", StyleBouton.Principal, Icones.Plus) { Margin = Padding.Empty };
+        nouveau.Click += (_, _) => Executer(() => EditerModeleAsync(null));
+        var entete = Ui.Colonnes((textes, SizeType.Percent, 100), (nouveau, SizeType.AutoSize, 0));
+        nouveau.Dock = DockStyle.None;
+        nouveau.Anchor = AnchorStyles.Right;
+        entete.Height = 64;
+        entete.Margin = new Padding(0, 0, 0, 18);
+        return Ui.Colonne((entete, SizeType.Absolute, 64 + 18), (_grilleModeles, SizeType.Percent, 100));
+    }
+
+    /// <summary>Démarrage rapide (4 modèles, les plus proches d'abord), onglet Modèles et nombre de l'onglet.</summary>
+    private async Task AfficherModelesAsync()
+    {
+        var tous = await _modeles.ListerAsync();
+        var rapides = await _modeles.DemarrageRapideAsync();
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        _onglets.DefinirNombre(2, tous.Count);
+        _rapides.HauteurElement = rapides.Count == 0 ? 84 : 172; // Sans modèle : une simple invitation.
+        Remplir(_rapides, rapides.Count == 0
+            ? [new CarteSansModele("Aucun modèle pour l'instant. Créez vos sorties habituelles une fois, puis lancez-les en un clic.", () => Executer(() => EditerModeleAsync(null)))]
+            : rapides.Select(f => (Control)CreerCarteRapide(f)));
+        Remplir(_grilleModeles, tous.Count == 0
+            ? [new CarteSansModele("Aucun modèle. Cliquez sur « Nouveau modèle » pour créer votre première sortie habituelle.", () => Executer(() => EditerModeleAsync(null)))]
+            : tous.Select(f => (Control)CreerCarteModele(f)));
+    }
+
+    private static void Remplir(GrilleAdaptative grille, IEnumerable<Control> cartes)
+    {
+        grille.SuspendLayout();
+        while (grille.Controls.Count > 0)
+        {
+            var c = grille.Controls[0];
+            grille.Controls.RemoveAt(0);
+            c.Dispose();
+        }
+
+        foreach (var carte in cartes)
+        {
+            grille.Controls.Add(carte);
+        }
+
+        grille.ResumeLayout(true);
+    }
+
+    private CarteRapide CreerCarteRapide(FicheModele f)
+    {
+        var carte = new CarteRapide(f);
+        carte.Creer += (_, _) => Executer(() => CreerDepuisModeleAsync(f));
+        carte.Ajuster += (_, _) => _navigation.AllerA<EcranNouvelleSortie>(f);
+        return carte;
+    }
+
+    private CarteModele CreerCarteModele(FicheModele f)
+    {
+        var carte = new CarteModele(f);
+        carte.Creer += (_, _) => Executer(() => CreerDepuisModeleAsync(f));
+        carte.Modifier += (_, _) => Executer(() => EditerModeleAsync(f));
+        carte.Dupliquer += (_, _) => Executer(async () =>
+        {
+            var r = await _modeles.DupliquerAsync(f.Modele.Id);
+            await AfficherModelesAsync();
+            if (r is { Reussi: true, Id: { } id } && await _modeles.ObtenirAsync(id) is { } copie)
+            {
+                await EditerModeleAsync(copie); // La copie s'ouvre : on change le jour, le responsable…
+            }
+        });
+        carte.Supprimer += (_, _) => Executer(async () =>
+        {
+            if (Dialogues.Confirmer(FindForm(), $"Supprimer le modèle « {f.Modele.Nom} » ?\n\nLes sorties déjà créées avec lui ne changent pas."))
+            {
+                await _modeles.SupprimerAsync(f.Modele.Id);
+                await AfficherModelesAsync();
+            }
+        });
+        return carte;
+    }
+
+    private async Task EditerModeleAsync(FicheModele? fiche)
+    {
+        if (await FormulaireModele.OuvrirAsync(FindForm(), fiche, _modeles, _typesSortie, _moniteurs, _garde) && !IsDisposed)
+        {
+            await AfficherModelesAsync();
+        }
+    }
+
+    /// <summary>« Créer la sortie » : la sortie est créée d'après le modèle, puis on passe au scan du départ.</summary>
+    private async Task CreerDepuisModeleAsync(FicheModele fiche)
+    {
+        var r = await _modeles.CreerSortieAsync(fiche.Modele.Id);
+        if (r is { Reussi: true, Id: { } id })
+        {
+            _navigation.AllerA<EcranDepart>(id);
+        }
+        else if (!IsDisposed)
+        {
+            Dialogues.Erreur(FindForm(), r.Message);
+        }
     }
 
     // ---------------------------------------------------------------- Onglet En cours
@@ -132,9 +269,24 @@ public sealed class EcranSorties : EcranBase
         var titreEnCours = Ui.TitreSection("Sorties en cours");
         var precision = Ui.Libelle("matériel encore dehors", Theme.Police(10.5f), Theme.TexteSecondaire);
         precision.Margin = new Padding(10, 7, 0, 0);
+
+        // Démarrage rapide : les modèles du jour et des prochains jours, « Gérer les modèles › » ouvre l'onglet.
+        var titreRapide = Ui.TitreSection("Démarrage rapide");
+        var precisionRapide = Ui.Libelle("vos sorties habituelles en un clic", Theme.Police(10.5f), Theme.TexteSecondaire);
+        precisionRapide.Margin = new Padding(10, 7, 0, 0);
+        var gerer = new BoutonArrondi("Gérer les modèles ›", StyleBouton.Lien) { Margin = Padding.Empty };
+        gerer.Click += (_, _) => _onglets.SelectedIndex = 2;
+        var enteteRapide = Ui.Colonnes((Ui.Rangee(true, titreRapide, precisionRapide), SizeType.Percent, 100), (gerer, SizeType.AutoSize, 0));
+        gerer.Dock = DockStyle.None;
+        gerer.Anchor = AnchorStyles.Right;
+        enteteRapide.Height = Theme.HauteurCliquable;
+        enteteRapide.Margin = new Padding(0, 0, 0, 8);
+
         var colonne = Ui.Colonne(
             (CreerBandeau(), SizeType.Absolute, 230 + 30),
             (_ligneRappel, SizeType.AutoSize, 0),
+            (enteteRapide, SizeType.AutoSize, 0),
+            (_rapides, SizeType.Absolute, 172 + 26),
             (Ui.Rangee(true, titreEnCours, precision), SizeType.AutoSize, 0),
             (_cartes, SizeType.Percent, 100)); // Toutes les sorties en cours ; la grille défile si besoin.
 
@@ -432,6 +584,7 @@ public sealed class EcranSorties : EcranBase
 
         _cartes.ResumeLayout(true);
 
+        await AfficherModelesAsync();
         await AfficherClotureesAsync(_pageCloturees?.Page ?? 1);
     }
 
