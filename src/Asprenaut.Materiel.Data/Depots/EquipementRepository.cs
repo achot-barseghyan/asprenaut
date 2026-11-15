@@ -223,7 +223,7 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
 
 public sealed class MoniteurRepository(FabriqueConnexion fabrique) : IMoniteurRepository
 {
-    private const string Colonnes = "id, genre, nom, prenom, niveau, telephone, abrege, inspecteur_tiv, actif";
+    private const string Colonnes = "id, genre, nom, prenom, niveau, telephone, abrege, couleur, inspecteur_tiv, actif";
 
     public async Task<Moniteur?> ObtenirAsync(long id, CancellationToken ct = default)
     {
@@ -247,8 +247,8 @@ public sealed class MoniteurRepository(FabriqueConnexion fabrique) : IMoniteurRe
         await using var cx = await fabrique.OuvrirAsync(ct);
         moniteur.Id = await cx.ExecuteScalarAsync<long>(new CommandDefinition(
             """
-            INSERT INTO moniteur (genre, nom, prenom, niveau, telephone, abrege, inspecteur_tiv, actif)
-            VALUES (@Genre, @Nom, @Prenom, @Niveau, @Telephone, @Abrege, @InspecteurTiv, @Actif) RETURNING id;
+            INSERT INTO moniteur (genre, nom, prenom, niveau, telephone, abrege, couleur, inspecteur_tiv, actif)
+            VALUES (@Genre, @Nom, @Prenom, @Niveau, @Telephone, @Abrege, @Couleur, @InspecteurTiv, @Actif) RETURNING id;
             """,
             Parametres(moniteur), cancellationToken: ct));
         return moniteur.Id;
@@ -260,7 +260,7 @@ public sealed class MoniteurRepository(FabriqueConnexion fabrique) : IMoniteurRe
         await cx.ExecuteAsync(new CommandDefinition(
             """
             UPDATE moniteur SET genre = @Genre, nom = @Nom, prenom = @Prenom, niveau = @Niveau, telephone = @Telephone,
-                abrege = @Abrege, inspecteur_tiv = @InspecteurTiv, actif = @Actif
+                abrege = @Abrege, couleur = @Couleur, inspecteur_tiv = @InspecteurTiv, actif = @Actif
             WHERE id = @Id;
             """,
             Parametres(moniteur), cancellationToken: ct));
@@ -276,6 +276,7 @@ public sealed class MoniteurRepository(FabriqueConnexion fabrique) : IMoniteurRe
         m.Niveau,
         m.Telephone,
         m.Abrege,
+        m.Couleur,
         m.InspecteurTiv,
         m.Actif,
     };

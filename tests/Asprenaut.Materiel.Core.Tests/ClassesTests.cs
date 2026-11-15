@@ -29,11 +29,57 @@ public class ClassesTests
 
     [Theory]
     [InlineData("Niveau 2", "N2")]
-    [InlineData("Initiateurs", "IN")]
+    [InlineData("niveau3", "N3")]
+    [InlineData("Initiateur", "INIT")]
+    [InlineData("Élèves", "ELEV")]
     [InlineData("Plongée enfants", "PE")]
+    [InlineData("Groupe 12", "G12")]
     [InlineData("Niveau 2 encadrant", "N2")]
+    [InlineData("  ", "")]
     public void L_abreviation_proposee_suit_le_nom(string nom, string attendu) =>
         Assert.Equal(attendu, ServiceMoniteurs.AbregeDe(nom));
+
+    // Règle : la couleur de la pastille d'une classe est une des couleurs proposées ; inconnue = d'après son numéro.
+    [Fact]
+    public async Task Une_classe_garde_la_couleur_de_sa_pastille()
+    {
+        var r = await _ctx.Moniteurs.EnregistrerAsync(new Moniteur { Genre = GenreResponsable.Classe, Nom = "Enfants", Couleur = "rose" });
+        Assert.True(r.Reussi, r.Message);
+        var classe = _ctx.Db.Moniteurs.Single(m => m.Id == r.Id);
+        Assert.Equal(("rose", "rose"), (classe.Couleur, classe.CouleurEffective));
+
+        var autre = await _ctx.Moniteurs.EnregistrerAsync(new Moniteur { Genre = GenreResponsable.Classe, Nom = "Nitrox", Couleur = "fuchsia" });
+        var nitrox = _ctx.Db.Moniteurs.Single(m => m.Id == autre.Id);
+        Assert.Null(nitrox.Couleur);
+        Assert.Contains(nitrox.CouleurEffective, Moniteur.CouleursClasse);
+
+        // Un moniteur n'a pas de couleur de pastille.
+        var pascal = await _ctx.Moniteurs.EnregistrerAsync(new Moniteur { Prenom = "Paul", Nom = "Martin", Couleur = "rose" });
+        Assert.Null(_ctx.Db.Moniteurs.Single(m => m.Id == pascal.Id).Couleur);
+    }
+
+    [Fact]
+    public void Couleur_et_exemples_proposes_pour_une_nouvelle_classe()
+    {
+        var classes = new[]
+        {
+            new Moniteur { Genre = GenreResponsable.Classe, Nom = "Niveau 1", Couleur = "cyan" },
+            new Moniteur { Genre = GenreResponsable.Classe, Nom = "Niveau 2", Couleur = "turquoise" },
+            new Moniteur { Nom = "Durand", Prenom = "Pascal" },
+        };
+        Assert.Equal("vert", ServiceMoniteurs.CouleurProposee(classes));
+        Assert.Equal("cyan", ServiceMoniteurs.CouleurProposee(Moniteur.CouleursClasse.Select(c => new Moniteur { Genre = GenreResponsable.Classe, Couleur = c })));
+        Assert.Equal(["Niveau 3", "Initiateur", "Enfants", "Nitrox"], ServiceMoniteurs.ExemplesClasses(["niveau 1", "Niveau 2"]));
+    }
+
+    // Niveau d'un moniteur : une puce si c'est un niveau proposé (E1… MF2), sinon « autre niveau » tapé à la main.
+    [Theory]
+    [InlineData("mf 1", "MF1")]
+    [InlineData("E3", "E3")]
+    [InlineData("BEES 1", null)]
+    [InlineData(null, null)]
+    public void Le_niveau_d_un_moniteur_est_reconnu_parmi_les_puces(string? niveau, string? attendu) =>
+        Assert.Equal(attendu, ServiceMoniteurs.NiveauPropose(niveau));
 
     // Règle : une classe n'a ni téléphone, ni niveau, ni TIV ; son genre ne change pas à la modification.
     [Fact]

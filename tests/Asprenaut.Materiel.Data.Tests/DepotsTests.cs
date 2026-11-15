@@ -77,18 +77,19 @@ public class DepotsTests : IAsyncLifetime
     public async Task Une_classe_garde_son_genre_et_son_abreviation()
     {
         var depot = new MoniteurRepository(_base.Fabrique);
-        var id = await depot.AjouterAsync(new Moniteur { Genre = GenreResponsable.Classe, Nom = "Plongée enfants", Abrege = "PE" });
+        var id = await depot.AjouterAsync(new Moniteur { Genre = GenreResponsable.Classe, Nom = "Plongée enfants", Abrege = "PE", Couleur = "violet" });
 
         var relue = (await depot.ObtenirAsync(id))!;
-        Assert.Equal((GenreResponsable.Classe, "Plongée enfants", "PE"), (relue.Genre, relue.NomComplet, relue.Abrege));
+        Assert.Equal((GenreResponsable.Classe, "Plongée enfants", "PE", "violet"), (relue.Genre, relue.NomComplet, relue.Abrege, relue.Couleur));
         relue.Abrege = "ENF";
+        relue.Couleur = "sable";
         relue.Actif = false;
         await depot.MettreAJourAsync(relue);
 
         await using var cx = await _base.Fabrique.OuvrirAsync();
         // Le genre est stocké par son nom (CHECK en SQL), pas par sa valeur numérique.
-        Assert.Equal(("Classe", "ENF", 0L), await cx.QuerySingleAsync<(string, string, long)>(
-            "SELECT genre, abrege, actif FROM moniteur WHERE id = @id;", new { id }));
+        Assert.Equal(("Classe", "ENF", "sable", 0L), await cx.QuerySingleAsync<(string, string, string, long)>(
+            "SELECT genre, abrege, couleur, actif FROM moniteur WHERE id = @id;", new { id }));
         await Assert.ThrowsAnyAsync<Exception>(() => cx.ExecuteAsync("INSERT INTO moniteur (nom, prenom, genre) VALUES ('x', '', 'Groupe');"));
 
         // Une sortie dont la classe est responsable : le résumé le dit (« Classe : … »).

@@ -17,6 +17,16 @@ public sealed class Moniteur
     /// <summary>Abréviation d'une classe (N1, N2…), affichée dans sa pastille.</summary>
     public string Abrege { get; set; } = "";
 
+    /// <summary>Couleur de la pastille d'une classe (clé de <see cref="CouleursClasse"/>), ou null : d'après son numéro.</summary>
+    public string? Couleur { get; set; }
+
+    /// <summary>Couleurs possibles de la pastille d'une classe (clés, traduites en couleurs par l'interface).</summary>
+    public static IReadOnlyList<string> CouleursClasse { get; } =
+        ["cyan", "turquoise", "vert", "lime", "jaune", "orange", "corail", "rouge", "rose", "violet", "indigo", "bleu", "sable", "gris"];
+
+    /// <summary>Couleur choisie si elle est connue, sinon une couleur fixe d'après le numéro de la classe.</summary>
+    public string CouleurEffective => Couleur is { } c && CouleursClasse.Contains(c) ? c : CouleursClasse[(int)(Math.Abs(Id) % CouleursClasse.Count)];
+
     /// <summary>Habilité à faire les TIV des blocs du club (jamais pour une classe).</summary>
     public bool InspecteurTiv { get; set; }
 

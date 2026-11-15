@@ -84,6 +84,20 @@ public sealed class ChampSaisie : Panel
         }
     }
 
+    private Color? _couleurBordure;
+
+    /// <summary>Bordure hors focus et hors erreur (« Autre niveau » rempli : violet), ou null : bordure normale.</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Color? CouleurBordure
+    {
+        get => _couleurBordure;
+        set
+        {
+            _couleurBordure = value;
+            Invalidate();
+        }
+    }
+
     /// <summary>Pictogramme à gauche du texte (champ mono-ligne), ou null.</summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public string? Icone { get; set; }
@@ -133,7 +147,7 @@ public sealed class ChampSaisie : Panel
 
     protected override void OnPaintBackground(PaintEventArgs e)
     {
-        Dessin.PeindreFondArrondi(this, e.Graphics, BackColor, Erreur ? Theme.Erreur : Champ.Focused ? Theme.Accent : Theme.BordureForte, Theme.RayonBouton, Erreur ? 1.8f : 1.2f);
+        Dessin.PeindreFondArrondi(this, e.Graphics, BackColor, Erreur ? Theme.Erreur : Champ.Focused ? Theme.Accent : CouleurBordure ?? Theme.BordureForte, Theme.RayonBouton, Erreur ? 1.8f : 1.2f);
         if (Icone is { } icone && !Champ.Multiline)
         {
             var t = Dessin.Echelle(this, 20);

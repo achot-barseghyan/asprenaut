@@ -979,89 +979,450 @@ public sealed class EcranMoniteurs : EcranBase
         return string.Join(" · ", parties);
     }
 
-    /// <summary>Ajout (m = null) ou modification d'un moniteur ou d'une classe dans une petite fenêtre.</summary>
-    private async Task ModifierAsync(Moniteur? m, GenreResponsable genre)
+    /// <summary>Ajout (m = null) ou modification d'un moniteur ou d'une classe.</summary>
+    private Task ModifierAsync(Moniteur? m, GenreResponsable genre) =>
+        genre == GenreResponsable.Classe ? ModifierClasseAsync(m) : ModifierMoniteurAsync(m);
+
+    /// <summary>
+    /// Maquette « Ajouter un moniteur » : en-tête qui montre la fiche pendant la saisie (initiales, niveau, INSPECTEUR TIV),
+    /// trois sections : identité, niveau d'encadrement (puces E1… MF2 ou autre niveau tapé), rôles au club.
+    /// </summary>
+    private async Task ModifierMoniteurAsync(Moniteur? m)
     {
-        var classe = genre == GenreResponsable.Classe;
-        var titre = classe
-            ? m is null ? "Ajouter une classe" : "Modifier la classe"
-            : m is null ? "Ajouter un moniteur" : "Modifier le moniteur";
+        var titre = m is null ? "Ajouter un moniteur" : "Modifier le moniteur";
         if (!_garde.Exiger(FindForm(), ActionProtegee.Moniteurs, titre))
         {
             return;
         }
 
-        ResultatOperation? enregistre = null;
+        var prenom = new ChampSaisie { Valeur = m?.Prenom ?? "", TexteIndicatif = "Ex. Pascal" };
+        var nom = new ChampSaisie { Valeur = m?.Nom ?? "", TexteIndicatif = "Ex. Durand" };
+        var telephone = new ChampSaisie { Valeur = m?.Telephone ?? "", TexteIndicatif = "06 12 34 56 78", Icone = Icones.Telephone };
+        prenom.Champ.AccessibleName = "Prénom";
+        nom.Champ.AccessibleName = "Nom";
+        telephone.Champ.AccessibleName = "Téléphone";
+        telephone.Champ.Font = Theme.PoliceCode(11f);
+
+        // Niveau : une puce s'il est proposé (E1… MF2), sinon dans « Autre niveau » ; l'un efface l'autre.
+        var propose = ServiceMoniteurs.NiveauPropose(m?.Niveau);
+        var niveaux = new ChoixPuces { AccessibleName = "Niveau d'encadrement", Margin = new Padding(0, 0, 0, 12) };
+        niveaux.GroupeDetaille(ServiceMoniteurs.NiveauxEncadrement.Select(n => (n.Code, n.Qualite)), Theme.Encadrement, Theme.TexteSurEncadrement);
+        niveaux.Valeur = propose;
+        var autre = new ChampSaisie { Valeur = propose is null ? m?.Niveau ?? "" : "", TexteIndicatif = "Ex. BEES 1", Size = new Size(170, Theme.HauteurCliquable) };
+        autre.Champ.AccessibleName = "Autre niveau";
+        autre.Champ.MaxLength = Math.Max(ServiceMoniteurs.LongueurMaxAutreNiveau, autre.Valeur.Length);
+        autre.Champ.CharacterCasing = CharacterCasing.Upper;
+        var libelleAutre = Ui.Libelle("Autre niveau :", Theme.Police(9f), Theme.TexteSecondaire);
+        libelleAutre.Margin = new Padding(0, 13, 10, 0);
+        autre.Margin = Padding.Empty;
+        var ligneAutre = Ui.Rangee(true, libelleAutre, autre);
+        ligneAutre.Margin = new Padding(0, 0, 0, 14);
+
+        var tiv = new Interrupteur("Inspecteur TIV") { Checked = m?.InspecteurTiv ?? false };
         var actif = new Interrupteur("Actif") { Checked = m?.Actif ?? true };
-        FenetreFormulaire fenetre;
-        if (classe)
+        string? Niveau() => niveaux.Valeur ?? (autre.Valeur.Trim() is { Length: > 0 } n ? n : null);
+
+        ResultatOperation? enregistre = null;
+        using var fenetre = new FenetreFormulaire(titre, m is null ? "Ajouter" : "Enregistrer", async () =>
         {
-            var nom = new ChampSaisie { Valeur = m?.NomComplet ?? "", TexteIndicatif = "Niveau 1, Niveau 2…" };
-            var abrege = new ChampSaisie { Valeur = m?.Abrege ?? "", TexteIndicatif = "N1" };
-            nom.Champ.AccessibleName = "Nom de la classe";
-            nom.Champ.MaxLength = ServiceMoniteurs.LongueurMaxClasse;
-            abrege.Champ.AccessibleName = "Abréviation";
-            abrege.Champ.MaxLength = ServiceMoniteurs.LongueurMaxAbrege;
-            abrege.Champ.CharacterCasing = CharacterCasing.Upper;
+            // Champs obligatoires vides : bordure rouge (le service refuse et donne le message).
+            prenom.Erreur = prenom.Valeur.Trim().Length == 0;
+            nom.Erreur = nom.Valeur.Trim().Length == 0;
+            enregistre = await _moniteurs.EnregistrerAsync(new Moniteur
+            {
+                Id = m?.Id ?? 0,
+                Genre = GenreResponsable.Moniteur,
+                Prenom = ServiceAdherents.MajusculesMots(prenom.Valeur),
+                Nom = ServiceAdherents.MajusculesMots(nom.Valeur),
+                Niveau = Niveau(),
+                Telephone = telephone.Valeur,
+                InspecteurTiv = tiv.Checked,
+                Actif = actif.Checked,
+            });
+            if (!enregistre.Reussi && (prenom.Erreur || nom.Erreur))
+            {
+                (prenom.Erreur ? prenom : nom).Champ.Focus();
+            }
 
-            // Abréviation proposée d'après le nom, tant qu'elle n'a pas été tapée.
-            nom.Champ.TextChanged += (_, _) => abrege.TexteIndicatif = ServiceMoniteurs.AbregeDe(nom.Valeur) is { Length: > 0 } a ? a : "N1";
+            return enregistre;
+        }, largeur: 640, marge: 24);
 
-            fenetre = new FenetreFormulaire(titre, m is null ? "Ajouter" : "Enregistrer", async () => enregistre = await _moniteurs.EnregistrerAsync(new Moniteur
+        fenetre.EnTete(m is null ? "Nouvelle fiche encadrant" : "Fiche encadrant", icone: Icones.Personne);
+        fenetre.Avatar.Colorer(Theme.Encadrement, Theme.TexteSurEncadrement);
+        fenetre.Note("champs obligatoires");
+        fenetre.Separations = true;
+        if (m is null)
+        {
+            fenetre.Valider.Icone = Icones.Plus;
+        }
+
+        var identite = new SectionFormulaire(1, "Identité");
+        identite.DeuxChamps("Prénom *", prenom, "Nom *", nom);
+        identite.Champ("Téléphone", telephone);
+        fenetre.Ajouter(identite);
+
+        var sectionNiveau = new SectionFormulaire(2, "Niveau d'encadrement");
+        sectionNiveau.Ajouter(niveaux);
+        sectionNiveau.Ajouter(ligneAutre);
+        fenetre.Ajouter(sectionNiveau);
+
+        var roles = new SectionFormulaire(3, "Rôles au club");
+        roles.Ajouter(new CarteAutorisation(new TuileIcone(Icones.InspecteurTiv, null, Theme.Avertissement), "Inspecteur TIV",
+            "Peut faire les TIV des blocs du club.", tiv, Theme.Avertissement));
+        if (m is not null)
+        {
+            var carteActif = roles.Ajouter(new CarteAutorisation(new TuileIcone(Icones.Personne, null, Theme.AccentClair), "Moniteur actif", "", actif, Theme.Accent));
+            void AfficherActif() => carteActif.Description = actif.Checked
+                ? "Proposé comme responsable des sorties."
+                : "Inactif : plus proposé pour les sorties ; son historique est gardé.";
+            actif.CheckedChanged += (_, _) => AfficherActif();
+            AfficherActif();
+        }
+
+        fenetre.Ajouter(roles);
+
+        // Aperçu : initiales et nom dans l'en-tête, étiquettes niveau / INSPECTEUR TIV / INACTIF.
+        void Afficher()
+        {
+            var niveau = Niveau();
+            sectionNiveau.TexteDroite = niveau ?? "non renseigné";
+            sectionNiveau.CouleurDroite = niveau is null ? Theme.TexteSecondaire : Theme.Encadrement;
+            autre.CouleurBordure = niveaux.Valeur is null && niveau is not null ? Theme.Encadrement : null;
+
+            var p = ServiceAdherents.MajusculesMots(prenom.Valeur);
+            var n = ServiceAdherents.MajusculesMots(nom.Valeur);
+            fenetre.Avatar.Initiales = ServiceAdherents.Initiales(p, n);
+            fenetre.Titre(p.Length + n.Length > 0 ? $"{p} {n}".Trim() : titre);
+            var etiquettes = new List<(string, Color)>();
+            if (niveau is not null)
+            {
+                etiquettes.Add((niveau, Theme.Encadrement));
+            }
+
+            if (tiv.Checked)
+            {
+                etiquettes.Add(("Inspecteur TIV", Theme.Avertissement));
+            }
+
+            if (!actif.Checked)
+            {
+                etiquettes.Add(("Inactif", Theme.TexteSecondaire));
+            }
+
+            fenetre.Etiquettes(etiquettes);
+        }
+
+        foreach (var champ in new[] { prenom, nom })
+        {
+            champ.Champ.TextChanged += (_, _) => Afficher();
+            champ.Champ.Leave += (_, _) => champ.Valeur = ServiceAdherents.MajusculesMots(champ.Valeur); // « pascal » → « Pascal ».
+        }
+
+        // 0612345678 → 06 12 34 56 78 pendant la frappe (curseur gardé en fin de saisie).
+        telephone.Champ.TextChanged += (_, _) =>
+        {
+            var forme = ServiceAdherents.FormaterTelephone(telephone.Valeur);
+            if (forme != telephone.Valeur && telephone.Champ.SelectionStart == telephone.Valeur.Length)
+            {
+                telephone.Valeur = forme;
+                telephone.Champ.SelectionStart = forme.Length;
+            }
+        };
+        niveaux.ValeurChangee += (_, _) =>
+        {
+            if (niveaux.Valeur is not null)
+            {
+                autre.Valeur = "";
+            }
+
+            Afficher();
+        };
+        autre.Champ.TextChanged += (_, _) =>
+        {
+            if (autre.Valeur.Trim().Length > 0)
+            {
+                niveaux.Valeur = null;
+            }
+
+            Afficher();
+        };
+        tiv.CheckedChanged += (_, _) => Afficher();
+        actif.CheckedChanged += (_, _) => Afficher();
+        Afficher();
+        fenetre.Shown += (_, _) => prenom.Champ.Focus();
+
+        if (fenetre.ShowDialog(FindForm()) == DialogResult.OK && enregistre?.Id is { } id)
+        {
+            _selection[GenreResponsable.Moniteur] = id;
+            await RechargerAsync();
+        }
+    }
+
+    /// <summary>
+    /// Maquette « Ajouter une classe » : nom et abréviation (proposée d'après le nom tant qu'elle n'est pas tapée, « AUTO »),
+    /// exemples de noms, couleur de la pastille et aperçu.
+    /// </summary>
+    private async Task ModifierClasseAsync(Moniteur? m)
+    {
+        var titre = m is null ? "Ajouter une classe" : "Modifier la classe";
+        if (!_garde.Exiger(FindForm(), ActionProtegee.Moniteurs, titre))
+        {
+            return;
+        }
+
+        var autres = _tous.Select(f => f.Moniteur).Where(c => c.EstClasse && c.Id != m?.Id).ToList();
+        var eleves = m is null ? 0 : (await _adherents.ListerAsync(null, FiltreAdherents.Tous)).Fiches.Count(f => f.Adherent.ClasseId == m.Id);
+        var sorties = m is null ? 0 : _tous.FirstOrDefault(f => f.Moniteur.Id == m.Id)?.SortiesSaison ?? 0;
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        var nom = new ChampSaisie { Valeur = m?.NomComplet ?? "", TexteIndicatif = "Ex. Niveau 1" };
+        nom.Champ.AccessibleName = "Nom de la classe";
+        nom.Champ.MaxLength = ServiceMoniteurs.LongueurMaxClasse;
+        var compteur = Ui.Libelle("0/4", Theme.PoliceGrasse(9f), Theme.TexteSecondaire);
+        compteur.Margin = Padding.Empty;
+        var abrege = new ChampSaisie { Valeur = m?.Abrege ?? "", ADroite = compteur };
+        abrege.Champ.AccessibleName = "Abréviation de la pastille";
+        abrege.Champ.MaxLength = ServiceMoniteurs.LongueurMaxAbrege;
+        abrege.Champ.CharacterCasing = CharacterCasing.Upper;
+        abrege.Champ.TextAlign = HorizontalAlignment.Center;
+        abrege.Champ.Font = Theme.PoliceGrasse(12.75f);
+
+        // « AUTO » : l'abréviation suit le nom tant qu'elle n'a pas été tapée (ou qu'elle a été effacée).
+        var auto = m is null || m.Abrege.Length == 0 || m.Abrege == ServiceMoniteurs.AbregeDe(m.NomComplet);
+        var badgeAuto = new Pastille("AUTO", Theme.Teinte(Theme.Accent, 0.16f), Theme.AccentClair, police: Theme.PoliceGrasse(7f), hauteur: 18)
+        {
+            Margin = new Padding(8, 0, 0, 0),
+            TabStop = false,
+        };
+        var actif = new Interrupteur("Active") { Checked = m?.Actif ?? true };
+        var couleur = new ChoixCouleur(Moniteur.CouleursClasse.Select(k => (k, char.ToUpper(k[0], Libelles.Culture) + k[1..], Theme.CouleurClasse(k))))
+        {
+            AccessibleName = "Couleur de la pastille",
+            Margin = new Padding(0, 0, 0, 18),
+        };
+        couleur.Valeur = m?.CouleurEffective ?? ServiceMoniteurs.CouleurProposee(autres);
+
+        ResultatOperation? enregistre = null;
+        using var fenetre = new FenetreFormulaire(titre, m is null ? "Ajouter" : "Enregistrer", async () =>
+        {
+            nom.Erreur = nom.Valeur.Trim().Length == 0;
+            enregistre = await _moniteurs.EnregistrerAsync(new Moniteur
             {
                 Id = m?.Id ?? 0,
                 Genre = GenreResponsable.Classe,
                 Nom = nom.Valeur,
                 Abrege = abrege.Valeur,
+                Couleur = couleur.Valeur,
                 Actif = actif.Checked,
-            }));
-            fenetre.Champ("Nom de la classe", nom);
-            fenetre.Champ("Abréviation (pastille, 4 caractères au plus)", abrege);
-            if (m is not null)
+            });
+            if (!enregistre.Reussi && nom.Erreur)
             {
-                fenetre.Ajouter(new LigneReglage("Active", "Une classe inactive n'est plus proposée pour les sorties", actif));
+                nom.Champ.Focus();
             }
-        }
-        else
-        {
-            var prenom = new ChampSaisie { Valeur = m?.Prenom ?? "" };
-            var nom = new ChampSaisie { Valeur = m?.Nom ?? "" };
-            var niveau = new ChampSaisie { Valeur = m?.Niveau ?? "", TexteIndicatif = "E3, MF1, MF2…" };
-            var telephone = new ChampSaisie { Valeur = m?.Telephone ?? "", TexteIndicatif = "06 12 34 56 78" };
-            var tiv = new Interrupteur("Inspecteur TIV") { Checked = m?.InspecteurTiv ?? false };
-            prenom.Champ.AccessibleName = "Prénom";
-            nom.Champ.AccessibleName = "Nom";
-               telephone.Champ.AccessibleName = "Téléphone";
 
-            fenetre = new FenetreFormulaire(titre, m is null ? "Ajouter" : "Enregistrer", async () => enregistre = await _moniteurs.EnregistrerAsync(new Moniteur
-            {
-                Id = m?.Id ?? 0,
-                Genre = GenreResponsable.Moniteur,
-                Prenom = prenom.Valeur,
-                Nom = nom.Valeur,
-                Niveau = niveau.Valeur,
-                Telephone = telephone.Valeur,
-                InspecteurTiv = tiv.Checked,
-                Actif = actif.Checked,
-            }));
-            fenetre.Champ("Prénom", prenom);
-            fenetre.Champ("Nom", nom);
-            fenetre.Champ("Niveau", niveau);
-            fenetre.Champ("Téléphone", telephone);
-            fenetre.Ajouter(new LigneReglage("Inspecteur TIV", "Peut faire les TIV des blocs du club", tiv, filet: false));
-            if (m is not null)
-            {
-                fenetre.Ajouter(new LigneReglage("Actif", "Un moniteur inactif n'est plus proposé pour les sorties", actif));
-            }
+            return enregistre;
+        }, largeur: 640, marge: 24);
+
+        fenetre.EnTete("Un groupe d'élèves qui sort ensemble, avec sa pastille.", icone: Icones.Groupe);
+        fenetre.Avatar.Tuile = true;
+        fenetre.Avatar.Size = new Size(46, 46);
+        fenetre.Separations = true;
+        if (m is null)
+        {
+            fenetre.Valider.Icone = Icones.Plus;
         }
 
-        using (fenetre)
+        // Nom (toute la place) | Abréviation (150 px), libellés au-dessus.
+        var libelleAbrege = Ui.Rangee(true, Ui.LibelleChamp("Abréviation"), badgeAuto);
+        libelleAbrege.Controls[0].Margin = Padding.Empty;
+        libelleAbrege.Margin = new Padding(7, 0, 0, 8);
+        var libelleNom = FenetreFormulaire.LibelleChamp("Nom de la classe *");
+        libelleNom.Margin = new Padding(0, 0, 7, 8);
+        nom.Margin = new Padding(0, 0, 7, 0);
+        abrege.Margin = new Padding(7, 0, 0, 0);
+        var rangee = new TableLayoutPanel { ColumnCount = 2, RowCount = 2, AutoSize = true, BackColor = Color.Transparent, Margin = new Padding(0, 0, 0, 18) };
+        rangee.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        rangee.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 164));
+        rangee.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        rangee.RowStyles.Add(new RowStyle(SizeType.Absolute, Theme.HauteurChamp));
+        nom.Dock = abrege.Dock = DockStyle.Fill;
+        libelleAbrege.Anchor = AnchorStyles.Left | AnchorStyles.Bottom;
+        rangee.Controls.Add(libelleNom, 0, 0);
+        rangee.Controls.Add(libelleAbrege, 1, 0);
+        rangee.Controls.Add(nom, 0, 1);
+        rangee.Controls.Add(abrege, 1, 1);
+        fenetre.Ajouter(rangee);
+
+        void PoserAbrege(string valeur)
         {
-            if (fenetre.ShowDialog(FindForm()) == DialogResult.OK && enregistre?.Id is { } id)
+            var avant = auto;
+            abrege.Valeur = valeur; // Son TextChanged remettrait « auto » à faux.
+            auto = avant;
+        }
+
+        var exemples = m is null ? ServiceMoniteurs.ExemplesClasses(autres.Select(c => c.NomComplet)) : [];
+        if (exemples.Count > 0)
+        {
+            var puces = new ChoixPuces { Actions = true, AccessibleName = "Exemples de noms de classe", Margin = new Padding(0, 0, 0, 18) };
+            puces.Groupe("", exemples.Select(e => (e, e)));
+            puces.PuceActivee += (_, exemple) =>
             {
-                _selection[genre] = id;
-                await RechargerAsync();
+                auto = true;
+                nom.Valeur = exemple;
+                PoserAbrege(ServiceMoniteurs.AbregeDe(exemple));
+                nom.Champ.Focus();
+                nom.Champ.SelectionStart = exemple.Length;
+            };
+            fenetre.Ajouter(Ui.LibelleChamp("Exemples"));
+            fenetre.Ajouter(puces);
+        }
+
+        fenetre.Ajouter(Ui.LibelleChamp("Couleur de la pastille"));
+        fenetre.Ajouter(couleur);
+
+        var apercu = new ApercuClasse { Margin = new Padding(0, 0, 0, 4) };
+        apercu.Detail = $"{Libelles.Pluriel(eleves, "élève")} · {Libelles.Pluriel(sorties, "sortie")} cette saison";
+        fenetre.Ajouter(apercu);
+
+        if (m is not null)
+        {
+            var carteActif = new CarteAutorisation(new TuileIcone(Icones.Groupe, null, Theme.AccentClair), "Classe active", "", actif, Theme.Accent)
+            {
+                Margin = new Padding(0, 14, 0, 0),
+            };
+            void AfficherActif() => carteActif.Description = actif.Checked
+                ? "Proposée comme responsable des sorties et comme formation des adhérents."
+                : "Inactive : plus proposée ; ses sorties et ses élèves sont gardés.";
+            actif.CheckedChanged += (_, _) => AfficherActif();
+            AfficherActif();
+            fenetre.Ajouter(carteActif);
+        }
+
+        void Afficher()
+        {
+            var valeur = abrege.Valeur.Trim();
+            badgeAuto.Visible = auto && valeur.Length > 0;
+            compteur.Text = $"{valeur.Length}/{ServiceMoniteurs.LongueurMaxAbrege}";
+            compteur.ForeColor = valeur.Length == ServiceMoniteurs.LongueurMaxAbrege ? Theme.AccentClair : Theme.TexteSecondaire;
+            abrege.PerformLayout(); // Le compteur a pu changer de largeur.
+            apercu.Definir(valeur.Length > 0 ? valeur : "?", nom.Valeur.Trim(), couleur.Valeur, actif.Checked);
+        }
+
+        nom.Champ.TextChanged += (_, _) =>
+        {
+            if (auto)
+            {
+                PoserAbrege(ServiceMoniteurs.AbregeDe(nom.Valeur));
             }
+
+            Afficher();
+        };
+        abrege.Champ.TextChanged += (_, _) =>
+        {
+            var sansEspace = abrege.Valeur.Replace(" ", "", StringComparison.Ordinal);
+            if (sansEspace != abrege.Valeur)
+            {
+                abrege.Valeur = sansEspace;
+                abrege.Champ.SelectionStart = sansEspace.Length;
+                return; // Le TextChanged suivant fait le reste.
+            }
+
+            auto = sansEspace.Length == 0;
+            Afficher();
+        };
+        couleur.ValeurChangee += (_, _) => Afficher();
+        actif.CheckedChanged += (_, _) => Afficher();
+        Afficher();
+        fenetre.Shown += (_, _) => nom.Champ.Focus();
+
+        if (fenetre.ShowDialog(FindForm()) == DialogResult.OK && enregistre?.Id is { } id)
+        {
+            _selection[GenreResponsable.Classe] = id;
+            await RechargerAsync();
+        }
+    }
+
+    /// <summary>
+    /// Aperçu de la pastille d'une classe (fenêtre « Ajouter une classe ») : grande pastille, nom et détail, puce comme dans
+    /// une liste, rappel de l'usage. Dessiné en un seul contrôle, hauteur fixe.
+    /// </summary>
+    private sealed class ApercuClasse : ControleDessine
+    {
+        private string _abrege = "?";
+        private string _nom = "";
+        private string _couleur = Moniteur.CouleursClasse[0];
+        private bool _actif = true;
+
+        public ApercuClasse()
+        {
+            Height = 150;
+            TabStop = false;
+            AccessibleRole = AccessibleRole.Graphic;
+        }
+
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public string Detail { get; set; } = "";
+
+        public void Definir(string abrege, string nom, string couleur, bool actif)
+        {
+            (_abrege, _nom, _couleur, _actif) = (abrege, nom, couleur, actif);
+            AccessibleName = $"Aperçu : pastille {abrege}, {(nom.Length > 0 ? nom : "classe sans nom")}";
+            Invalidate();
+        }
+
+        protected override void Peindre(Graphics g)
+        {
+            var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
+            using (var chemin = Dessin.Arrondi(r, E(18)))
+            {
+                using var fond = new SolidBrush(Theme.Sur(Theme.Surface, Theme.Fond, 0.3f));
+                g.FillPath(fond, chemin);
+                using var bord = new Pen(Theme.Bordure, E(1));
+                g.DrawPath(bord, chemin);
+            }
+
+            var x = E(16);
+            Dessin.Texte(g, "APERÇU", Theme.PoliceGrasse(8.25f), Rectangle.Round(new RectangleF(x, E(14), Width - (2 * x), E(18))), Theme.TexteSecondaire);
+
+            // Grande pastille, nom et détail.
+            var degrade = Theme.DegradeClasse(_couleur);
+            var y = E(42);
+            var d = E(52);
+            Avatar.Dessiner(g, new RectangleF(x, y, d, d), _abrege, degrade, _actif, true, this);
+            var nom = _nom.Length > 0 ? _nom : "Nom de la classe";
+
+            // Puce comme dans une liste, à droite (si la place le permet).
+            var policePuce = Theme.PoliceTitre(9.75f);
+            var hPuce = E(40);
+            var lPuce = E(5 + 30 + 8 + 14) + TextRenderer.MeasureText(_nom.Length > 0 ? _nom : "Classe", policePuce).Width;
+            var xPuce = Width - x - lPuce;
+            var gauche = x + d + E(14);
+            var avecPuce = xPuce - gauche > E(160);
+            var largeurTextes = (int)((avecPuce ? xPuce - E(12) : Width - x) - gauche);
+            Dessin.Texte(g, nom, Theme.PoliceTitre(12f), Rectangle.Round(new RectangleF(gauche, y + E(4), largeurTextes, E(24))), _nom.Length > 0 ? Theme.Texte : Theme.TexteSecondaire);
+            Dessin.Texte(g, Detail, Theme.Police(9.75f), Rectangle.Round(new RectangleF(gauche, y + E(28), largeurTextes, E(20))), Theme.TexteSecondaireClair);
+            if (avecPuce)
+            {
+                var zone = new RectangleF(xPuce, y + ((d - hPuce) / 2), lPuce, hPuce);
+                using (var chemin = Dessin.Arrondi(zone, hPuce / 2))
+                {
+                    using var fond = new SolidBrush(ChampSaisie.FondChamp);
+                    g.FillPath(fond, chemin);
+                    using var bord = new Pen(Theme.Bordure, E(1));
+                    g.DrawPath(bord, chemin);
+                }
+
+                var petite = E(30);
+                Avatar.Dessiner(g, new RectangleF(zone.X + E(5), zone.Y + ((hPuce - petite) / 2), petite, petite), _abrege, degrade, _actif, true, this);
+                var xTexte = zone.X + E(5) + petite + E(8);
+                Dessin.Texte(g, _nom.Length > 0 ? _nom : "Classe", policePuce, Rectangle.Round(new RectangleF(xTexte, zone.Y, zone.Right - xTexte - E(10), hPuce)), Theme.Texte);
+            }
+
+            Dessin.Texte(g, "La pastille représente la classe dans Membres. 4 caractères au plus.", Theme.Police(9f),
+                Rectangle.Round(new RectangleF(x, Height - E(36), Width - (2 * x), E(20))), Theme.TexteSecondaire);
         }
     }
 
@@ -1088,9 +1449,9 @@ public sealed class EcranMoniteurs : EcranBase
             ? (m.Abrege.Length > 0 ? m.Abrege : ServiceMoniteurs.AbregeDe(m.NomComplet))
             : $"{m.Prenom.FirstOrDefault()}{m.Nom.FirstOrDefault()}".ToUpper(Libelles.Culture);
 
-        /// <summary>Les classes commencent plus loin dans les dégradés (comme la maquette) : N1 n'a pas la couleur du premier moniteur.</summary>
+        /// <summary>Classe : la couleur choisie pour sa pastille ; moniteur : d'après sa place dans la liste.</summary>
         public static (Color Clair, Color Fonce) Degrade(Moniteur m, int index) =>
-            Theme.DegradesAvatar[(index + (m.EstClasse ? 2 : 0)) % Theme.DegradesAvatar.Length];
+            m.EstClasse ? Theme.DegradeClasse(m.CouleurEffective) : Theme.DegradesAvatar[index % Theme.DegradesAvatar.Length];
 
         protected override void Peindre(Graphics g) => Dessiner(g, new RectangleF(0, 0, Width - 1, Height - 1), _initiales, _degrade, _actif, _classe, this);
 

@@ -66,30 +66,55 @@ public sealed class AvatarEntete : ControleDessine
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public string Initiales { get => _initiales; set => Invalider(ref _initiales, value); }
 
+    private Color? _couleur;
+    private Color? _texteSurCouleur;
+    private bool _tuile;
+
+    /// <summary>Couleur du rond (violet d'un moniteur) et du texte des initiales posé dessus ; null = turquoise de l'accent.</summary>
+    public void Colorer(Color couleur, Color texteSurCouleur)
+    {
+        _couleur = couleur;
+        _texteSurCouleur = texteSurCouleur;
+        Invalidate();
+    }
+
+    /// <summary>Carré arrondi au bord plein plutôt que rond pointillé (en-tête de « Ajouter une classe »).</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool Tuile { get => _tuile; set => Invalider(ref _tuile, value); }
+
     protected override void Peindre(Graphics g)
     {
         var r = new RectangleF(E(1), E(1), Width - E(2) - 1, Height - E(2) - 1);
+        var couleur = _couleur ?? Theme.Accent;
         if (_initiales.Length > 0)
         {
-            using var degrade = new LinearGradientBrush(r, Theme.AccentClair, Theme.Retour, 45f);
+            var (clair, fonce) = _couleur is { } c ? (Theme.Sur(c, Theme.Texte, 0.25f), c) : (Theme.AccentClair, Theme.Retour);
+            using var degrade = new LinearGradientBrush(r, clair, fonce, 45f);
             g.FillEllipse(degrade, r);
-            Dessin.Texte(g, _initiales, Theme.PoliceGrasse(14f), Rectangle.Round(r), Theme.TexteSurAccent, centre: true);
+            Dessin.Texte(g, _initiales, Theme.PoliceGrasse(14f), Rectangle.Round(r), _texteSurCouleur ?? Theme.TexteSurAccent, centre: true);
             return;
         }
 
-        using (var fond = new SolidBrush(Theme.Teinte(Theme.Accent, 0.16f)))
+        using var forme = _tuile ? Dessin.Arrondi(r, r.Height * 0.3f) : new GraphicsPath();
+        if (!_tuile)
         {
-            g.FillEllipse(fond, r);
+            forme.AddEllipse(r);
         }
 
-        using (var stylo = new Pen(Theme.Teinte(Theme.Accent, 0.55f), E(1.2f)) { DashStyle = DashStyle.Dash })
+        using (var fond = new SolidBrush(Theme.Teinte(couleur, _tuile ? 0.13f : 0.16f)))
         {
-            g.DrawEllipse(stylo, r);
+            g.FillPath(fond, forme);
+        }
+
+        using (var stylo = new Pen(Theme.Teinte(couleur, _tuile ? 0.4f : 0.55f), E(1.2f)) { DashStyle = _tuile ? DashStyle.Solid : DashStyle.Dash })
+        {
+            g.DrawPath(stylo, forme);
         }
 
         if (_icone.Length > 0)
         {
-            Icones.Dessiner(g, _icone, RectangleF.Inflate(r, -Width * 0.29f, -Height * 0.29f), Theme.AccentClair);
+            var marge = _tuile ? 0.25f : 0.29f;
+            Icones.Dessiner(g, _icone, RectangleF.Inflate(r, -Width * marge, -Height * marge), _couleur ?? Theme.AccentClair);
         }
     }
 }
@@ -213,19 +238,25 @@ public sealed class SectionFormulaire : Carte
 }
 
 /// <summary>
-/// Puces à choix unique, rangées par groupes (« Classe » : Niveau 1, Niveau 2… Autonome), titre du groupe à gauche,
-/// retour à la ligne si la place manque. Un clic sur la puce choisie la retire (aucun choix). Clavier : flèches, Espace.
-/// Un seul contrôle dessiné.
+/// Puces à choix unique, rangées par groupes (« Classe » : Niveau 1, Niveau 2… Autonome), titre du groupe à gauche (facultatif),
+/// détail facultatif sous le texte (« E1 / Initiateur »), retour à la ligne si la place manque. Un clic sur la puce choisie
+/// la retire (aucun choix). Clavier : flèches, Espace. Un seul contrôle dessiné.
+/// <see cref="Actions"/> : puces-raccourcis au contour turquoise (« Exemples ») qui ne restent pas choisies.
 /// </summary>
 public sealed class ChoixPuces : ControleDessine
 {
     private const int LargeurTitre = 92;
     private const int HauteurPuce = 40;
+    private const int HauteurPuceDetail = 44;
     private const int EcartPuces = 6;
     private const int EcartLignes = 10;
 
-    private readonly List<(string Titre, Color Couleur, List<(string Valeur, string Texte)> Puces)> _groupes = [];
-    private readonly List<(RectangleF Zone, string Valeur, string Texte, Color Couleur)> _zones = [];
+    private sealed record Puce(string Valeur, string Texte, string? Detail);
+
+    private sealed record GroupePuces(string Titre, Color Couleur, Color TexteChoisi, List<Puce> Puces);
+
+    private readonly List<GroupePuces> _groupes = [];
+    private readonly List<(RectangleF Zone, Puce Puce, GroupePuces Groupe)> _zones = [];
     private readonly List<(RectangleF Zone, string Titre)> _titres = [];
     private readonly ToolTip _bulle = new();
     private string? _valeur;
@@ -264,8 +295,22 @@ public sealed class ChoixPuces : ControleDessine
     /// <summary>La puce choisie a changé (clic, clavier ou code).</summary>
     public event EventHandler? ValeurChangee;
 
-    /// <summary>Ajoute un groupe de puces (valeur, texte affiché).</summary>
-    public void Groupe(string titre, IEnumerable<(string Valeur, string Texte)> puces, Color? couleur = null)
+    /// <summary>Puces-raccourcis : un clic lève <see cref="PuceActivee"/> sans rien garder de choisi.</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool Actions { get; set; }
+
+    /// <summary>Une puce a été cliquée en mode <see cref="Actions"/> (sa valeur).</summary>
+    public event EventHandler<string>? PuceActivee;
+
+    /// <summary>Ajoute un groupe de puces (valeur, texte affiché) ; titre vide = pas de colonne de titre.</summary>
+    public void Groupe(string titre, IEnumerable<(string Valeur, string Texte)> puces, Color? couleur = null, Color? texteChoisi = null) =>
+        AjouterGroupe(titre, puces.Select(p => new Puce(p.Valeur, p.Texte, null)), couleur, texteChoisi);
+
+    /// <summary>Puces à deux lignes, sans titre de groupe : valeur en gras, détail dessous (« E1 » / « Initiateur »).</summary>
+    public void GroupeDetaille(IEnumerable<(string Valeur, string Detail)> puces, Color couleur, Color texteChoisi) =>
+        AjouterGroupe("", puces.Select(p => new Puce(p.Valeur, p.Valeur, p.Detail)), couleur, texteChoisi);
+
+    private void AjouterGroupe(string titre, IEnumerable<Puce> puces, Color? couleur, Color? texteChoisi)
     {
         var liste = puces.ToList();
         if (liste.Count == 0)
@@ -273,7 +318,7 @@ public sealed class ChoixPuces : ControleDessine
             return;
         }
 
-        _groupes.Add((titre, couleur ?? Theme.Accent, liste));
+        _groupes.Add(new GroupePuces(titre, couleur ?? Theme.Accent, texteChoisi ?? Theme.TexteSurAccent, liste));
         _largeurPlacee = -1;
         PerformLayout();
     }
@@ -295,6 +340,8 @@ public sealed class ChoixPuces : ControleDessine
         }
     }
 
+    private Font PolicePuce => Actions ? Theme.PoliceGrasse(9f) : Theme.PoliceGrasse(10f);
+
     private void Placer(int largeur)
     {
         if (largeur == _largeurPlacee || largeur <= 0)
@@ -305,38 +352,42 @@ public sealed class ChoixPuces : ControleDessine
         _largeurPlacee = largeur;
         _zones.Clear();
         _titres.Clear();
-        var police = Theme.PoliceGrasse(10f);
-        var gauche = E(LargeurTitre);
-        var hauteur = E(HauteurPuce);
+        var police = PolicePuce;
         var y = 0f;
-        foreach (var (titre, couleur, puces) in _groupes)
+        var derniere = 0f;
+        foreach (var groupe in _groupes)
         {
-            _titres.Add((new RectangleF(0, y, gauche, hauteur), titre));
+            var gauche = groupe.Titre.Length > 0 ? E(LargeurTitre) : 0;
+            var hauteur = E(groupe.Puces.Any(p => p.Detail is not null) ? HauteurPuceDetail : HauteurPuce);
+            _titres.Add((new RectangleF(0, y, gauche, hauteur), groupe.Titre));
             var x = gauche;
-            foreach (var (valeur, texte) in puces)
+            foreach (var puce in groupe.Puces)
             {
-                var l = Math.Max(E(52), TextRenderer.MeasureText(texte, police).Width + E(22));
+                var texte = TextRenderer.MeasureText(puce.Texte, police).Width;
+                var detail = puce.Detail is null ? 0 : TextRenderer.MeasureText(puce.Detail, Theme.Police(7.5f)).Width;
+                var l = Math.Max(E(Actions ? 40 : 56), Math.Max(texte, detail) + E(Actions ? 26 : 28));
                 if (x > gauche && x + l > largeur)
                 {
                     x = gauche;
                     y += hauteur + E(EcartPuces);
                 }
 
-                _zones.Add((new RectangleF(x, y, l, hauteur), valeur, texte, couleur));
+                _zones.Add((new RectangleF(x, y, l, hauteur), puce, groupe));
                 x += l + E(EcartPuces);
             }
 
+            derniere = hauteur;
             y += hauteur + E(EcartLignes);
         }
 
-        _hauteur = (int)Math.Ceiling(Math.Max(hauteur, y - E(EcartLignes))) + 2;
+        _hauteur = (int)Math.Ceiling(Math.Max(derniere, y - E(EcartLignes))) + 2;
         Invalidate();
     }
 
     protected override void Peindre(Graphics g)
     {
         Placer(Width);
-        var police = Theme.PoliceGrasse(10f);
+        var police = PolicePuce;
         foreach (var (zone, titre) in _titres)
         {
             Dessin.Texte(g, titre, Theme.Police(9.75f), Rectangle.Round(zone), Theme.TexteSecondaire);
@@ -344,23 +395,42 @@ public sealed class ChoixPuces : ControleDessine
 
         for (var i = 0; i < _zones.Count; i++)
         {
-            var (zone, valeur, texte, couleur) = _zones[i];
-            var choisie = valeur == _valeur;
+            var (zone, puce, groupe) = _zones[i];
+            var choisie = !Actions && puce.Valeur == _valeur;
             var r = new RectangleF(zone.X + 0.5f, zone.Y + 0.5f, zone.Width - 1, zone.Height - 1);
-            using var chemin = Dessin.Arrondi(r, E(10));
-            using (var fond = new SolidBrush(choisie ? couleur : ChampSaisie.FondChamp))
+            using var chemin = Dessin.Arrondi(r, Actions ? r.Height / 2 : E(10));
+            var survol = i == _survol;
+            var fondNormal = Actions ? (survol ? Theme.Teinte(Theme.Accent, 0.10f) : Theme.Sur(Theme.Surface, Theme.Fond, 0.3f)) : ChampSaisie.FondChamp;
+            using (var fond = new SolidBrush(choisie ? groupe.Couleur : fondNormal))
             {
                 g.FillPath(fond, chemin);
             }
 
             var focus = Focused && i == _focus;
-            var bordure = choisie ? couleur : focus || i == _survol ? Theme.AccentClair : Theme.BordureForte;
+            var bordure = choisie ? groupe.Couleur
+                : focus ? Theme.AccentClair
+                : survol ? (Actions ? Theme.AccentClair : Theme.Sur(ChampSaisie.FondChamp, groupe.Couleur, 0.6f))
+                : Actions ? Theme.Sur(Theme.Surface, Theme.Accent, 0.3f) : Theme.BordureForte;
             using (var stylo = new Pen(bordure, focus ? E(2) : E(1)))
             {
                 g.DrawPath(stylo, chemin);
             }
 
-            Dessin.Texte(g, texte, police, Rectangle.Round(zone), choisie ? Theme.TexteSurAccent : Theme.Texte, centre: true);
+            var couleurTexte = choisie ? groupe.TexteChoisi : Actions ? Theme.AccentClair : Theme.Texte;
+            if (puce.Detail is null)
+            {
+                Dessin.Texte(g, puce.Texte, police, Rectangle.Round(zone), couleurTexte, centre: true);
+                continue;
+            }
+
+            // Deux lignes : « E1 » en gras, « Initiateur » en petit dessous.
+            var petite = Theme.Police(7.5f);
+            var hTexte = TextRenderer.MeasureText("E", police).Height;
+            var hDetail = TextRenderer.MeasureText("I", petite).Height;
+            var haut = zone.Y + ((zone.Height - hTexte - hDetail + E(2)) / 2);
+            Dessin.Texte(g, puce.Texte, police, Rectangle.Round(new RectangleF(zone.X, haut, zone.Width, hTexte)), couleurTexte, centre: true);
+            var couleurDetail = choisie ? Theme.Sur(groupe.Couleur, groupe.TexteChoisi, 0.75f) : Theme.TexteSecondaire;
+            Dessin.Texte(g, puce.Detail, petite, Rectangle.Round(new RectangleF(zone.X, haut + hTexte - E(2), zone.Width, hDetail)), couleurDetail, centre: true);
         }
     }
 
@@ -375,7 +445,7 @@ public sealed class ChoixPuces : ControleDessine
         {
             _survol = i;
             Invalidate();
-            var texte = i >= 0 && _zones[i].Texte != _zones[i].Valeur ? _zones[i].Valeur : null;
+            var texte = i >= 0 && _zones[i].Puce.Texte != _zones[i].Puce.Valeur ? _zones[i].Puce.Valeur : null;
             _bulle.SetToolTip(this, texte); // « N2 » : la bulle donne le niveau entier.
         }
     }
@@ -398,7 +468,17 @@ public sealed class ChoixPuces : ControleDessine
         }
     }
 
-    private void Basculer(int i) => Valeur = _zones[i].Valeur == _valeur ? null : _zones[i].Valeur;
+    private void Basculer(int i)
+    {
+        var valeur = _zones[i].Puce.Valeur;
+        if (Actions)
+        {
+            PuceActivee?.Invoke(this, valeur);
+            return;
+        }
+
+        Valeur = valeur == _valeur ? null : valeur;
+    }
 
     protected override bool IsInputKey(Keys keyData) =>
         keyData is Keys.Left or Keys.Right or Keys.Up or Keys.Down || base.IsInputKey(keyData);
@@ -433,8 +513,181 @@ public sealed class ChoixPuces : ControleDessine
     protected override void OnGotFocus(EventArgs e)
     {
         base.OnGotFocus(e);
-        var choisie = _zones.FindIndex(z => z.Valeur == _valeur);
+        var choisie = _zones.FindIndex(z => z.Puce.Valeur == _valeur);
         _focus = choisie >= 0 ? choisie : Math.Min(_focus, Math.Max(0, _zones.Count - 1));
+        Invalidate();
+    }
+
+    protected override void OnLostFocus(EventArgs e)
+    {
+        base.OnLostFocus(e);
+        Invalidate();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _bulle.Dispose();
+        }
+
+        base.Dispose(disposing);
+    }
+}
+
+/// <summary>
+/// Pastilles de couleur à choisir (une par clé), rondes de 44 px, 7 par ligne ; la choisie est entourée et cochée.
+/// Clavier : flèches, Espace. Un seul contrôle dessiné.
+/// </summary>
+public sealed class ChoixCouleur : ControleDessine
+{
+    private const int Taille = 44;
+    private const int Ecart = 8;
+    private const int ParLigne = 7;
+
+    private readonly List<(string Cle, string Nom, Color Couleur)> _couleurs;
+    private readonly ToolTip _bulle = new();
+    private string _valeur;
+    private int _survol = -1;
+    private int _focus;
+
+    public ChoixCouleur(IEnumerable<(string Cle, string Nom, Color Couleur)> couleurs)
+    {
+        _couleurs = couleurs.ToList();
+        _valeur = _couleurs.Count > 0 ? _couleurs[0].Cle : "";
+        SetStyle(ControlStyles.Selectable, true);
+        TabStop = true;
+        Cursor = Cursors.Hand;
+        var lignes = Math.Max(1, (_couleurs.Count + ParLigne - 1) / ParLigne);
+        Size = new Size((ParLigne * Taille) + ((ParLigne - 1) * Ecart), (lignes * Taille) + ((lignes - 1) * Ecart));
+    }
+
+    /// <summary>Clé de la couleur choisie.</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public string Valeur
+    {
+        get => _valeur;
+        set
+        {
+            if (_valeur == value || _couleurs.All(c => c.Cle != value))
+            {
+                return;
+            }
+
+            _valeur = value;
+            Invalidate();
+            ValeurChangee?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    public event EventHandler? ValeurChangee;
+
+    private RectangleF Zone(int i) =>
+        new(E((i % ParLigne) * (Taille + Ecart)), E((i / ParLigne) * (Taille + Ecart)), E(Taille), E(Taille));
+
+    protected override void Peindre(Graphics g)
+    {
+        for (var i = 0; i < _couleurs.Count; i++)
+        {
+            var (cle, _, couleur) = _couleurs[i];
+            var zone = Zone(i);
+            var choisie = cle == _valeur;
+            using (var pinceau = new SolidBrush(couleur))
+            {
+                g.FillEllipse(pinceau, RectangleF.Inflate(zone, -E(8), -E(8)));
+            }
+
+            var focus = Focused && i == _focus;
+            if (choisie || focus || i == _survol)
+            {
+                var anneau = RectangleF.Inflate(zone, -E(1.5f), -E(1.5f));
+                using var stylo = new Pen(choisie ? couleur : Theme.AccentClair, E(choisie || focus ? 2 : 1));
+                g.DrawEllipse(stylo, anneau);
+            }
+
+            if (choisie)
+            {
+                Icones.Dessiner(g, Icones.Coche, RectangleF.Inflate(zone, -E(14), -E(14)), Theme.TexteSurAvatar);
+            }
+        }
+    }
+
+    private int Sous(Point p)
+    {
+        for (var i = 0; i < _couleurs.Count; i++)
+        {
+            if (Zone(i).Contains(p))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        var i = Sous(e.Location);
+        Cursor = i >= 0 ? Cursors.Hand : Cursors.Default;
+        if (i != _survol)
+        {
+            _survol = i;
+            Invalidate();
+            _bulle.SetToolTip(this, i >= 0 ? _couleurs[i].Nom : null);
+        }
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        base.OnMouseLeave(e);
+        _survol = -1;
+        Invalidate();
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e);
+        Focus();
+        if (Sous(e.Location) is var i and >= 0)
+        {
+            _focus = i;
+            Valeur = _couleurs[i].Cle;
+        }
+    }
+
+    protected override bool IsInputKey(Keys keyData) =>
+        keyData is Keys.Left or Keys.Right or Keys.Up or Keys.Down || base.IsInputKey(keyData);
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        var avant = _focus;
+        _focus = e.KeyCode switch
+        {
+            Keys.Left => Math.Max(0, _focus - 1),
+            Keys.Right => Math.Min(_couleurs.Count - 1, _focus + 1),
+            Keys.Up => _focus >= ParLigne ? _focus - ParLigne : _focus,
+            Keys.Down => Math.Min(_couleurs.Count - 1, _focus + ParLigne),
+            _ => _focus,
+        };
+        if (e.KeyCode == Keys.Space && _focus < _couleurs.Count)
+        {
+            Valeur = _couleurs[_focus].Cle;
+        }
+        else if (avant == _focus)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        Invalidate();
+    }
+
+    protected override void OnGotFocus(EventArgs e)
+    {
+        base.OnGotFocus(e);
+        _focus = Math.Max(0, _couleurs.FindIndex(c => c.Cle == _valeur));
         Invalidate();
     }
 

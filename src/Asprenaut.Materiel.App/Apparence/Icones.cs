@@ -88,7 +88,10 @@ public static class Icones
 
     // Formulaire de l'adhérent (maquette « Ajouter un adhérent »).
     public const string Personne = "M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM4.5 21a7.5 7.5 0 0 1 15 0";
-    public const string CarteLicence = "M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM6 10h5M6 14h3M14 9h4v6h-4z";
+    // Fenêtres « Ajouter un moniteur » (bloc et loupe : inspecteur TIV) et « Ajouter une classe » (groupe).
+    public const string InspecteurTiv = "M9 7h6v13a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1zM10 7V4h4v3M14.5 15.5a3 3 0 1 0 6 0 3 3 0 1 0-6 0M20 18l2 2";
+    public const string Groupe = "M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 20c0-3 3-5 6-5s6 2 6 5M16 5a3 3 0 0 1 0 6M18 15c2 .6 3 2.4 3 5";
+    public const string CarteLicence ="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM6 10h5M6 14h3M14 9h4v6h-4z";
     public const string CoeurPouls = "M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7zM3.5 12H9l1-2 2 4.5 2-7 1.5 4.5h5";
     public const string Calendrier = "M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM3 10h18M8 3v4M16 3v4M12 13v5M9.5 15.5h5";
 

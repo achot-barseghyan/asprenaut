@@ -28,21 +28,67 @@ public sealed class ServiceMoniteurs(IMoniteurRepository moniteurs, ISortieRepos
     public const int LongueurMaxClasse = 30;
     public const int LongueurMaxAbrege = 4;
 
-    /// <summary>Abréviation proposée pour une classe : « Niveau 2 » → « N2 », « Initiateurs » → « IN », « Plongée enfants » → « PE ».</summary>
+    /// <summary>
+    /// Abréviation proposée pour une classe : « Niveau 2 » → « N2 », « Initiateur » → « INIT » (un mot : 4 lettres),
+    /// « Plongée enfants » → « PE » (initiales, nombres gardés : « Groupe 12 » → « G12 »), accents retirés.
+    /// </summary>
     public static string AbregeDe(string nom)
     {
-        var mots = nom.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var propre = SansAccents(nom).Trim();
+        var mots = propre.Split([' ', '-'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (mots.Length == 0)
         {
             return "";
         }
 
-        var chiffres = new string(nom.Where(char.IsDigit).ToArray());
-        var abrege = chiffres.Length > 0
-            ? $"{mots[0][0]}{chiffres}"
-            : mots.Length == 1 ? mots[0][..Math.Min(2, mots[0].Length)] : string.Concat(mots.Take(3).Select(m => m[0]));
-        abrege = abrege.ToUpper(Libelles.Culture);
+        string abrege;
+        if (System.Text.RegularExpressions.Regex.Match(propre, @"^niveau\s*(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase) is { Success: true } niveau)
+        {
+            abrege = $"N{niveau.Groups[1].Value}";
+        }
+        else if (mots.Length == 1)
+        {
+            abrege = mots[0];
+        }
+        else
+        {
+            abrege = string.Concat(mots.Select(m => m.All(char.IsDigit) ? m : m[..1]));
+        }
+
+        abrege = new string(abrege.Where(char.IsLetterOrDigit).ToArray()).ToUpper(Libelles.Culture);
         return abrege[..Math.Min(LongueurMaxAbrege, abrege.Length)];
+    }
+
+    private static string SansAccents(string texte) =>
+        new(texte.Normalize(System.Text.NormalizationForm.FormD)
+            .Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark).ToArray());
+
+    /// <summary>Niveaux d'encadrement proposés en puces dans la fiche d'un moniteur (code, qualité) ; un autre niveau peut être tapé.</summary>
+    public static IReadOnlyList<(string Code, string Qualite)> NiveauxEncadrement { get; } =
+        [("E1", "Initiateur"), ("E2", "Initiateur"), ("E3", "Moniteur"), ("E4", "Moniteur"), ("MF1", "Fédéral"), ("MF2", "Fédéral")];
+
+    /// <summary>Longueur maximale d'un niveau tapé à la main (« BEES 1 »).</summary>
+    public const int LongueurMaxAutreNiveau = 12;
+
+    /// <summary>Le niveau proposé en puce qui correspond au texte (majuscules et espaces ignorés), ou null : autre niveau.</summary>
+    public static string? NiveauPropose(string? niveau)
+    {
+        var cle = (niveau ?? "").Replace(" ", "", StringComparison.Ordinal);
+        return NiveauxEncadrement.Select(n => n.Code).FirstOrDefault(c => string.Equals(c, cle, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Noms de classe proposés à l'ajout, sans ceux qui existent déjà (majuscules ignorées).</summary>
+    public static IReadOnlyList<string> ExemplesClasses(IEnumerable<string> existantes)
+    {
+        var deja = new HashSet<string>(existantes, StringComparer.OrdinalIgnoreCase);
+        return new[] { "Niveau 1", "Niveau 2", "Niveau 3", "Initiateur", "Enfants", "Nitrox" }.Where(e => !deja.Contains(e)).ToList();
+    }
+
+    /// <summary>Couleur proposée pour une nouvelle classe : la première que n'a encore aucune classe (sinon la première).</summary>
+    public static string CouleurProposee(IEnumerable<Moniteur> classes)
+    {
+        var prises = classes.Where(c => c.EstClasse).Select(c => c.CouleurEffective).ToHashSet();
+        return Moniteur.CouleursClasse.FirstOrDefault(c => !prises.Contains(c)) ?? Moniteur.CouleursClasse[0];
     }
 
     /// <summary>La saison du club commence le 1er septembre.</summary>
@@ -209,6 +255,7 @@ public sealed class ServiceMoniteurs(IMoniteurRepository moniteurs, ISortieRepos
             Genre = GenreResponsable.Classe,
             Nom = nom,
             Abrege = abrege,
+            Couleur = saisie.Couleur is { } couleur && Moniteur.CouleursClasse.Contains(couleur) ? couleur : null,
             Actif = saisie.Actif,
         };
 

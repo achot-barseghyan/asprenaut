@@ -222,6 +222,40 @@ public static class Theme
 
     public static readonly Color TexteSurAvatar = Hex("#061A2E");
 
+    /// <summary>
+    /// Couleur de la pastille d'une classe (clé de <see cref="Moniteur.CouleursClasse"/>), fixe dans les deux thèmes comme les
+    /// avatars : abréviation en <see cref="TexteSurAvatar"/> (contraste ≥ 7:1 sur chacune).
+    /// </summary>
+    public static Color CouleurClasse(string cle) => cle switch
+    {
+        "turquoise" => Hex("#2BC4B0"),
+        "vert" => Hex("#3FD99A"),
+        "lime" => Hex("#C6F36B"),
+        "jaune" => Hex("#FFD166"),
+        "orange" => Hex("#FFA94D"),
+        "corail" => Hex("#FFB48F"),
+        "rouge" => Hex("#FF8A7A"),
+        "rose" => Hex("#FF9EC7"),
+        "violet" => Hex("#B9A6FF"),
+        "indigo" => Hex("#8F9CFF"),
+        "bleu" => Hex("#8CC4FF"),
+        "sable" => Hex("#E8C99B"),
+        "gris" => Hex("#C3D0DC"),
+        _ => Hex("#5FE3EA"),
+    };
+
+    /// <summary>Dégradé d'une pastille de classe : du plus clair à sa couleur.</summary>
+    public static (Color Clair, Color Fonce) DegradeClasse(string cle)
+    {
+        var c = CouleurClasse(cle);
+        return (Melanger(c, Color.White, 0.35f), c);
+    }
+
+    /// <summary>Encadrement (fiche d'un moniteur : puces de niveau, étiquette du niveau, rond de l'en-tête) : violet de la maquette.</summary>
+    public static Color Encadrement => _p.Prestataire;
+
+    public static Color TexteSurEncadrement => _p.TexteSurPrestataire;
+
     private static Palette CreerSombre()
     {
         var surface = Hex("#0A2640");

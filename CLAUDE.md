@@ -80,9 +80,11 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   la validation passe par un service et ne ferme qu'en cas de succès ; largeur et marge réglables ; libellé « Nom * » → étoile ;
   `EnTete(sousTitre, badge, icone)`, `Avatar.Initiales`, `Titre`, `Etiquettes`, `Note`, `Separations` : filet d'en-tête et pied sombre),
   `SectionsFormulaire.cs` (maquette « Ajouter un adhérent ») : `SectionFormulaire` (« 1 IDENTITÉ », texte à droite), `ChoixPuces`
-  (puces à choix unique par groupes, un seul contrôle dessiné, re-clic = aucun choix, flèches + Espace), `CarteAutorisation` (tuile, titre,
-  description, `Interrupteur` coloré, carte teintée si active, `Dessous` retiré / remis plutôt que masqué), `TuileIcone`, `AvatarEntete`,
-  `LibelleObligatoire`. Ces contrôles sont `AutoSize` + `GrowAndShrink` et se mesurent à la largeur du parent quand la largeur proposée
+  (puces à choix unique par groupes, un seul contrôle dessiné, re-clic = aucun choix, flèches + Espace ; titre de groupe facultatif,
+  `GroupeDetaille` : puces à deux lignes « E1 / Initiateur » ; `Actions` : puces-raccourcis « Exemples » → `PuceActivee`), `ChoixCouleur`
+  (pastilles de couleur, 7 par ligne), `CarteAutorisation` (tuile, titre,
+  description, `Interrupteur` coloré, carte teintée si active, `Dessous` retiré / remis plutôt que masqué), `TuileIcone`, `AvatarEntete`
+  (`Colorer` : violet du moniteur ; `Tuile` : carré arrondi de « Ajouter une classe »), `LibelleObligatoire` ; `ChampSaisie.CouleurBordure`. Ces contrôles sont `AutoSize` + `GrowAndShrink` et se mesurent à la largeur du parent quand la largeur proposée
   vaut 0 ou 1 (un TableLayoutPanel sonde avec 1 : les puces une par ligne gonflaient la fenêtre) ; les décoratifs ont `TabStop = false`, `Interrupteur`, `SelecteurNombre`, `Bascule` (options côte à côte, nombres), `ChoixResponsable`, `CarteSection`, `LigneReglage`,
   `ListeChoix` (liste de choix dessinée, badge + titre + détail, clic ou flèches), `JournalHistorique` (journal par jour dessiné dans un seul contrôle défilant : seule la partie visible est peinte, le clic sur un
   code est retrouvé par calcul — à préférer à un contrôle par ligne dès qu'une liste peut compter des milliers d'éléments).
@@ -256,8 +258,15 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     est responsable d'une sortie comme un moniteur. Rangée dans la table moniteur (`Moniteur.Genre` = `GenreResponsable.Classe`,
     colonne moniteur.genre) : sortie.moniteur_id reste l'unique responsable. Classe : nom obligatoire (dans `Nom`, prénom vide),
     unique sans tenir compte des majuscules, 30 caractères au plus ; abréviation de la pastille (`Abrege`, 4 au plus, proposée par
-    `ServiceMoniteurs.AbregeDe` : « Niveau 2 » → « N2 ») ; ni téléphone, ni niveau, ni TIV (jamais inspecteur). Le genre ne change
-    pas à la modification. Journal `ClasseCreee` / `ClasseModifiee`. Afficher `SortieResume.LibelleResponsable`
+    `ServiceMoniteurs.AbregeDe` : « Niveau 2 » → « N2 », un mot → 4 lettres « INIT », sinon initiales « PE », accents retirés) ;
+    couleur de la pastille (migration 022, `Moniteur.Couleur`, clé de `Moniteur.CouleursClasse`, inconnue = null → `CouleurEffective`
+    d'après l'id ; `Theme.CouleurClasse` / `DegradeClasse`, fixes dans les deux thèmes ; `ServiceMoniteurs.CouleurProposee` = première
+    libre) ; ni téléphone, ni niveau, ni TIV (jamais inspecteur). Le genre ne change pas à la modification.
+    Fenêtres (maquettes « Ajouter un moniteur » / « Ajouter une classe », `EcranMoniteurs.ModifierMoniteurAsync` / `ModifierClasseAsync`) :
+    moniteur en trois sections (Identité, Niveau d'encadrement : puces `ServiceMoniteurs.NiveauxEncadrement` E1… MF2 ou « Autre
+    niveau » tapé, `NiveauPropose` ; Rôles au club : carte Inspecteur TIV, + carte « Moniteur actif » en modification), en-tête violet
+    (`Theme.Encadrement`) avec initiales et étiquettes ; classe : nom | abréviation (« AUTO » tant qu'elle suit le nom, compteur 0/4),
+    exemples (`ExemplesClasses`, à l'ajout, sans les noms pris), couleur, aperçu (`ApercuClasse`), carte « Classe active » en modification. Journal `ClasseCreee` / `ClasseModifiee`. Afficher `SortieResume.LibelleResponsable`
     (« Moniteur : … » / « Classe : … »). App : onglets `Bascule` dans `EcranMoniteurs` (ordre : Adhérents, ouvert à l'arrivée, puis Moniteurs et Classes ; `OngletAdherents` / `OngletMoniteurs` / `OngletClasses`), `ChoixResponsable` (Moniteur | Classe
     puis la liste) dans Nouvelle sortie et Modifier la sortie. Filtres de l'écran Membres (`FiltresMembresTests`) : onglet Moniteurs, recherche (prénom, nom, niveau, téléphone, accents ignorés) et puces Tous / Actifs / Inspecteurs TIV / Matériel dehors / Inactifs (`ServiceMoniteurs.Filtrer` → `ListeMoniteurs`, nombres après la recherche) ; onglet Adhérents, recherche, liste « formation en cours » (toutes, les classes actives, « Sans formation » = `ServiceAdherents.SansNiveau`) et puces Tous / Matériel dehors / Non rendu / Nitrox / Désactivés ; pas de filtre pour les classes ; chaque onglet a sa recherche. Données de démo : chargées si aucun moniteur (genre Moniteur).
 25. Manuels (`ServiceManuels`, migration 009, écran `EcranManuels`, maquette « Manuels ») : consultation libre ; ajouter, modifier,
@@ -513,11 +522,12 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   020 : categorie.icone et categorie.couleur (clés, null = d'après le nom).
   021 : adherent.classe_id (formation en cours = une classe, table moniteur genre Classe) ; reprise : niveau texte → classe du même nom,
   classe créée pour un niveau sans classe (« Autonome »).
+  022 : moniteur.couleur (clé de la couleur de la pastille d'une classe, null = d'après l'id).
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/022_xxx.sql`, sans jamais modifier un script déjà livré
+- Nouvelle migration : ajouter `Migrations/023_xxx.sql`, sans jamais modifier un script déjà livré
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.
