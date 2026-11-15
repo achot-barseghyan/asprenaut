@@ -1,0 +1,737 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Guide d'utilisation et de configuration</title>
+<style>
+  @page { size: A4; margin: 18mm 17mm 20mm 17mm;
+    @bottom-left { content: "Matériel du club · Guide d'utilisation"; font: 8pt "Segoe UI", sans-serif; color: #7a8794; }
+    @bottom-right { content: counter(page); font: 8pt "Segoe UI", sans-serif; color: #7a8794; } }
+  @page couverture { margin: 0; @bottom-left { content: none } @bottom-right { content: none } }
+  :root { --encre: #16222e; --doux: #4a5866; --trait: #d7dee5; --turquoise: #0e8f8a; --fond: #eef6f6;
+          --or: #a5720b; --orfond: #fbf3df; --rouge: #b42b2b; --rougefond: #fbeaea; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 9.5pt/1.45 "Segoe UI", "Segoe UI Variable", Arial, sans-serif; color: var(--encre); background: #fff; }
+  h1, h2, h3 { line-height: 1.2; break-after: avoid; }
+  h2 { font-size: 17pt; margin: 0 0 4mm; padding-bottom: 2mm; border-bottom: 2px solid var(--turquoise); color: var(--encre); }
+  h2 .num { color: var(--turquoise); margin-right: 3mm; }
+  h3 { font-size: 11pt; margin: 5mm 0 1.5mm; color: var(--encre); }
+  p { margin: 0 0 2.5mm; }
+  ul, ol { margin: 0 0 3mm; padding-left: 6mm; }
+  li { margin-bottom: 1mm; }
+  section.chapitre { break-before: page; }
+  .partie { break-before: page; display: flex; flex-direction: column; justify-content: center; height: 240mm; }
+  .partie .lettre { font-size: 60pt; font-weight: 700; color: var(--turquoise); line-height: 1; }
+  .partie h1 { font-size: 26pt; margin: 4mm 0 3mm; }
+  .partie p { font-size: 12pt; color: var(--doux); max-width: 130mm; }
+  b, strong { font-weight: 600; }
+  .ui { font-weight: 600; background: #eef1f4; border: 1px solid var(--trait); border-radius: 3px; padding: 0 4px; white-space: nowrap; font-size: 9.5pt; }
+  .chemin { font-weight: 600; color: var(--turquoise); }
+  code { font-family: Consolas, monospace; font-size: 9pt; background: #eef1f4; padding: 0 3px; border-radius: 3px; }
+  .encadre { border-left: 4px solid var(--turquoise); background: var(--fond); padding: 3mm 4mm; margin: 3mm 0 4mm; border-radius: 0 4px 4px 0; break-inside: avoid; }
+  .encadre.attention { border-color: var(--or); background: var(--orfond); }
+  .encadre.danger { border-color: var(--rouge); background: var(--rougefond); }
+  .encadre .titre { font-weight: 700; display: block; margin-bottom: 1mm; }
+  .encadre p:last-child, .encadre ul:last-child { margin-bottom: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0 3mm; font-size: 9pt; break-inside: auto; }
+  th { text-align: left; background: #e3ecef; font-weight: 600; padding: 1.2mm 2.5mm; border-bottom: 1px solid #b9c7cf; }
+  td { padding: 1.2mm 2.5mm; border-bottom: 1px solid var(--trait); vertical-align: top; }
+  tr { break-inside: avoid; }
+  ol.etapes { list-style: none; padding: 0; counter-reset: e; }
+  ol.etapes > li { counter-increment: e; position: relative; padding-left: 10mm; margin-bottom: 2.5mm; break-inside: avoid; }
+  ol.etapes > li::before { content: counter(e); position: absolute; left: 0; top: 0; width: 6.5mm; height: 6.5mm; border-radius: 50%;
+    background: var(--turquoise); color: #fff; font-weight: 700; font-size: 9pt; text-align: center; line-height: 6.5mm; }
+  .cycle { display: flex; align-items: stretch; gap: 0; margin: 3mm 0 5mm; break-inside: avoid; }
+  .cycle .etat { flex: 1; border: 1.5px solid var(--turquoise); border-radius: 5px; padding: 2.5mm; text-align: center; background: #fff; }
+  .cycle .etat b { display: block; font-size: 10pt; }
+  .cycle .etat span { font-size: 8.5pt; color: var(--doux); }
+  .cycle .fleche { width: 18mm; display: flex; flex-direction: column; justify-content: center; text-align: center; font-size: 8pt; color: var(--doux); }
+  .cycle .fleche::after { content: "→"; font-size: 15pt; color: var(--turquoise); line-height: 1; }
+  .deux { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+  .carte { border: 1px solid var(--trait); border-radius: 5px; padding: 3mm 4mm; break-inside: avoid; }
+  .carte h3 { margin-top: 0; }
+
+  /* Couverture */
+  .couverture { page: couverture; height: 297mm; width: 210mm; position: relative; background: #0f2530; color: #fff; overflow: hidden; }
+  .couverture .vague { position: absolute; left: 0; right: 0; bottom: 0; height: 120mm; }
+  .couverture .contenu { position: absolute; left: 22mm; right: 22mm; top: 60mm; }
+  .couverture .sur { text-transform: uppercase; letter-spacing: 2.5px; font-size: 10pt; color: #7fd6cf; font-weight: 600; }
+  .couverture h1 { font-size: 34pt; margin: 4mm 0 5mm; line-height: 1.1; }
+  .couverture .sous { font-size: 13pt; color: #c9dadf; max-width: 150mm; }
+  .couverture .pied { position: absolute; left: 22mm; bottom: 18mm; font-size: 9.5pt; color: #c9dadf; }
+
+  /* Sommaire */
+  .sommaire { break-before: page; }
+  .sommaire h2 { border: 0; }
+  .sommaire .groupe { font-weight: 700; color: var(--turquoise); margin: 5mm 0 1.5mm; text-transform: uppercase; font-size: 9pt; letter-spacing: 1px; }
+  .sommaire ol { list-style: none; padding: 0; margin: 0; }
+  .sommaire li { display: flex; border-bottom: 1px dotted #c2ccd4; padding: 1.4mm 0; margin: 0; }
+  .sommaire li .n { width: 9mm; color: var(--turquoise); font-weight: 700; }
+  .sommaire li .t { flex: 1; }
+  .sommaire li .d { color: var(--doux); font-size: 9pt; }
+</style>
+</head>
+<body>
+
+<!-- ============ COUVERTURE ============ -->
+<div class="couverture">
+  <svg class="vague" viewBox="0 0 210 120" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M0 40 C 40 20, 70 60, 110 42 S 180 20, 210 38 L210 120 L0 120 Z" fill="#12424b"/>
+    <path d="M0 62 C 50 45, 90 80, 130 62 S 190 48, 210 60 L210 120 L0 120 Z" fill="#0e8f8a" opacity=".55"/>
+    <path d="M0 86 C 40 74, 80 100, 125 86 S 185 74, 210 84 L210 120 L0 120 Z" fill="#0e8f8a"/>
+  </svg>
+  <div class="contenu">
+    <div class="sur">Matériel du club · Application Windows</div>
+    <h1>Guide d'utilisation<br>et de configuration</h1>
+    <p class="sous">Suivre les sorties et retours du matériel de plongée (blocs, gilets, détendeurs, combinaisons…),
+      les révisions, les TIV et les adhérents, avec un simple pistolet scanner.</p>
+  </div>
+  <div class="pied">Pour les clubs qui installent l'application · Édition novembre 2026</div>
+</div>
+
+<!-- ============ SOMMAIRE ============ -->
+<div class="sommaire">
+  <h2>Sommaire</h2>
+  <p>Ce guide a deux parties. La <b>partie A</b> s'adresse à la personne qui installe et prépare l'application pour le club
+    (responsable matériel, bureau). La <b>partie B</b> s'adresse à tous les bénévoles qui font partir et rentrer le matériel.</p>
+  <div class="groupe">Avant de commencer</div>
+  <ol>
+    <li><span class="n">1</span><span class="t">L'application en bref</span><span class="d">vocabulaire, écrans</span></li>
+  </ol>
+  <div class="groupe">Partie A · Installer et configurer</div>
+  <ol>
+    <li><span class="n">2</span><span class="t">Installer l'application</span><span class="d">PC, pistolet, premier lancement</span></li>
+    <li><span class="n">3</span><span class="t">Renseigner la fiche du club</span><span class="d">nom, logo, responsable</span></li>
+    <li><span class="n">4</span><span class="t">Protéger avec un code gestionnaire</span><span class="d">mode consultation / gestion</span></li>
+    <li><span class="n">5</span><span class="t">Régler le pistolet scanner</span><span class="d">étiquettes QR, test</span></li>
+    <li><span class="n">6</span><span class="t">Saisir le matériel</span><span class="d">catégories, codes, fiches</span></li>
+    <li><span class="n">7</span><span class="t">Membres : moniteurs, classes, adhérents</span><span class="d">import Excel</span></li>
+    <li><span class="n">8</span><span class="t">Types de sortie et règles</span><span class="d">utilisations, sorties nominatives</span></li>
+    <li><span class="n">9</span><span class="t">Révisions, prestataires et TIV</span><span class="d">délais, compteur d'utilisation</span></li>
+    <li><span class="n">10</span><span class="t">Sauvegardes et changement de PC</span><span class="d">à faire chaque semaine</span></li>
+  </ol>
+  <div class="groupe">Partie B · Utiliser au quotidien</div>
+  <ol>
+    <li><span class="n">11</span><span class="t">Une sortie, du départ au retour</span><span class="d">le cœur de l'application</span></li>
+    <li><span class="n">12</span><span class="t">Sorties nominatives</span><span class="d">un nom à chaque scan</span></li>
+    <li><span class="n">13</span><span class="t">Matériel manquant et problèmes signalés</span><span class="d"></span></li>
+    <li><span class="n">14</span><span class="t">Suivre les révisions</span><span class="d">les 5 colonnes</span></li>
+    <li><span class="n">15</span><span class="t">Inventaire, fiche de suivi, manuels</span><span class="d"></span></li>
+    <li><span class="n">16</span><span class="t">Historique et bilan de saison</span><span class="d">pour l'AG</span></li>
+  </ol>
+  <div class="groupe">Annexes</div>
+  <ol>
+    <li><span class="n">17</span><span class="t">En cas de problème</span><span class="d">questions fréquentes</span></li>
+    <li><span class="n">18</span><span class="t">Réglages par défaut</span><span class="d">aide-mémoire</span></li>
+  </ol>
+</div>
+
+<!-- ============ 1 ============ -->
+<section class="chapitre">
+  <h2><span class="num">1</span>L'application en bref</h2>
+  <p>L'application garde la trace de <b>qui a pris quel matériel, pour quelle sortie, et s'il est revenu</b>. Chaque
+    équipement porte une étiquette QR ; on la scanne au départ et au retour. Tout le reste (révisions à prévoir, compteur
+    d'utilisation, bilan de fin de saison) se calcule à partir de ces scans.</p>
+  <p>Elle fonctionne sur <b>un seul PC Windows, sans internet</b>. Les données restent sur ce PC.</p>
+
+  <h3>Les écrans du menu de gauche</h3>
+  <table>
+    <tr><th style="width:32mm">Écran</th><th>À quoi il sert</th></tr>
+    <tr><td><b>Sorties</b></td><td>Page d'accueil. Sorties en cours, sorties clôturées, modèles de sortie. On y crée une nouvelle sortie.</td></tr>
+    <tr><td><b>Inventaire</b></td><td>Tout le matériel du club, son état, sa prochaine révision, son nombre d'utilisations.</td></tr>
+    <tr><td><b>Manuels</b></td><td>Les notices PDF des fabricants, consultables et imprimables.</td></tr>
+    <tr><td><b>Membres</b></td><td>Adhérents, moniteurs et classes (Niveau 1, Niveau 2…).</td></tr>
+    <tr><td><b>Historique</b></td><td>Le journal de tout ce qui s'est passé, et la vie de chaque équipement.</td></tr>
+    <tr><td><b>Bilan de saison</b></td><td>Chiffres de la saison pour l'assemblée générale, exportables en PDF.</td></tr>
+    <tr><td><b>Révisions</b></td><td>Révisions, TIV, requalifications, réparations et envois chez les prestataires.</td></tr>
+    <tr><td><b>Paramètres</b></td><td>Deux onglets : <span class="ui">Paramètres</span> (fonctionnement de l'application) et
+      <span class="ui">Configuration du club</span> (club, types de sortie, prestataires…).</td></tr>
+  </table>
+  <p>Le bouton <span class="ui">Réduire le menu</span>, en bas du menu, ne garde que les icônes pour laisser plus de place.</p>
+
+  <h3>Vocabulaire</h3>
+  <table>
+    <tr><th style="width:32mm">Mot</th><th>Signification</th></tr>
+    <tr><td><b>Code</b></td><td>L'identifiant d'un équipement, écrit sur son étiquette : <code>A24</code>, <code>S12</code>, <code>BLOC-031</code>…</td></tr>
+    <tr><td><b>Sortie</b></td><td>Une séance (piscine, fosse, mer, lac, baptême…) pour laquelle du matériel part et revient.</td></tr>
+    <tr><td><b>Responsable</b></td><td>Le moniteur, ou la classe, qui encadre la sortie.</td></tr>
+    <tr><td><b>Dehors</b></td><td>Équipement parti en sortie et pas encore rendu.</td></tr>
+    <tr><td><b>Manquant</b></td><td>Équipement encore dehors quand la sortie a été clôturée.</td></tr>
+    <tr><td><b>Hors service</b></td><td>Équipement qui ne doit pas partir (problème, réparation, chez le prestataire).</td></tr>
+    <tr><td><b>Réformé</b></td><td>Équipement retiré définitivement. On ne supprime jamais un équipement : on le réforme, son historique reste.</td></tr>
+    <tr><td><b>Mode gestion</b></td><td>Mode ouvert par le code gestionnaire, qui permet les actions sensibles (voir chapitre 4).</td></tr>
+  </table>
+
+  <div class="encadre">
+    <span class="titre">Les messages de l'application</span>
+    <p>Après chaque scan, un bandeau s'affiche avec un son : <b>vert</b> = c'est fait, <b>jaune</b> = c'est fait mais
+      attention (révision dépassée…), <b>rouge</b> = refusé, rien n'a changé. Il suffit de lire le message : il dit quoi faire.</p>
+  </div>
+</section>
+
+<!-- ============ PARTIE A ============ -->
+<div class="partie">
+  <div class="lettre">A</div>
+  <h1>Installer et configurer</h1>
+  <p>Pour la personne qui prépare l'application avant que les bénévoles ne s'en servent. Comptez une soirée,
+    surtout pour saisir le matériel et importer les adhérents.</p>
+</div>
+
+<!-- ============ 2 ============ -->
+<section class="chapitre">
+  <h2><span class="num">2</span>Installer l'application</h2>
+  <h3>Ce qu'il faut</h3>
+  <ul>
+    <li>Un PC sous <b>Windows 10 (version 1809 ou plus récente) ou Windows 11</b>, 64 bits. Rien d'autre à installer.</li>
+    <li>Un <b>pistolet scanner USB</b> qui lit les QR codes, en mode « clavier » (le réglage d'usine de la plupart des pistolets).
+      Un téléphone utilisé comme clavier Bluetooth fonctionne aussi.</li>
+    <li>Des <b>étiquettes QR</b> sur le matériel (médailles, autocollants). Voir le chapitre 5 pour leur contenu.</li>
+  </ul>
+
+  <h3>Installation</h3>
+  <ol class="etapes">
+    <li>Copiez le fichier de l'application (un seul fichier <code>.exe</code>) dans un dossier du PC, par exemple
+      <code>C:\Matériel du club\</code>. Évitez le Bureau et les clés USB.</li>
+    <li>Faites un clic droit sur le fichier › <span class="ui">Envoyer vers</span> › <span class="ui">Bureau (créer un raccourci)</span>,
+      pour que les bénévoles le trouvent facilement.</li>
+    <li>Double-cliquez. Au tout premier lancement, Windows peut afficher « Windows a protégé votre ordinateur » :
+      cliquez sur <span class="ui">Informations complémentaires</span> puis <span class="ui">Exécuter quand même</span>.</li>
+  </ol>
+  <p>L'application s'ouvre sur l'écran <b>Sorties</b>, vide. Les catégories de matériel (Blocs, Gilets, Détendeurs,
+    Combinaisons, Palmes, Masques, Ordinateurs, Autre), six types de sortie (Piscine, Fosse, Mer, Lac, Baptême, Autre)
+    et quatre classes (Niveau 1 à 4) sont déjà créés : vous pourrez les modifier.</p>
+
+  <h3>Où sont les données ?</h3>
+  <p>Toutes les données sont rangées dans le dossier <code>%LOCALAPPDATA%\Asprenaut\</code> du compte Windows
+    (tapez ce chemin dans la barre d'adresse de l'explorateur) :</p>
+  <table>
+    <tr><th style="width:52mm">Fichier ou dossier</th><th>Contenu</th></tr>
+    <tr><td><code>materiel.db</code></td><td>La base de données : matériel, sorties, membres, historique.</td></tr>
+    <tr><td><code>parametres.json</code></td><td>Les réglages (dont le code gestionnaire, chiffré).</td></tr>
+    <tr><td><code>Sauvegardes\</code></td><td>Une copie automatique de la base à chaque lancement (les 20 dernières).</td></tr>
+    <tr><td><code>Manuels\</code></td><td>Les notices PDF ajoutées.</td></tr>
+    <tr><td><code>erreurs.log</code></td><td>Le détail technique des erreurs, utile pour un dépannage.</td></tr>
+  </table>
+  <div class="encadre attention">
+    <span class="titre">Un seul compte Windows</span>
+    <p>Les données sont propres au compte Windows. Si plusieurs comptes existent sur le PC, utilisez toujours le même
+      pour l'application, sinon chacun verra une base différente.</p>
+  </div>
+
+  <h3>Ordre conseillé pour la configuration</h3>
+  <ol>
+    <li>Fiche du club (chapitre 3)</li>
+    <li>Code gestionnaire (chapitre 4)</li>
+    <li>Test du pistolet (chapitre 5)</li>
+    <li>Matériel (chapitre 6), puis membres (chapitre 7)</li>
+    <li>Types de sortie, révisions, prestataires (chapitres 8 et 9)</li>
+    <li>Première sauvegarde complète (chapitre 10)</li>
+  </ol>
+</section>
+
+<!-- ============ 3 ============ -->
+<section class="chapitre">
+  <h2><span class="num">3</span>Renseigner la fiche du club</h2>
+  <p><span class="chemin">Paramètres › Configuration du club › Club</span></p>
+  <p>C'est la première chose à faire : le nom du club apparaît en haut du menu, sur l'écran d'accueil et sur tous les
+    documents imprimés (bilan, registre des contrôles, fiches de suivi).</p>
+  <table>
+    <tr><th style="width:48mm">Champ</th><th>Conseil</th></tr>
+    <tr><td><b>Nom du club</b> (obligatoire)</td><td>Le nom court utilisé au quotidien. Remplacez le nom proposé par celui de votre club.</td></tr>
+    <tr><td><b>Numéro d'affiliation</b></td><td>Votre numéro de club fédéral. Il est repris dans l'identification des équipements.</td></tr>
+    <tr><td><b>Responsable matériel</b> et <b>téléphone</b></td><td>Imprimés sur les documents ; le responsable est proposé comme intervenant des réparations faites au club.</td></tr>
+    <tr><td><b>Logo</b></td><td>Cliquez sur la zone du logo ou glissez-y une image (PNG, JPG, BMP ou GIF, 2 Mo au plus).
+      La corbeille le retire : des initiales s'affichent à la place. L'aperçu montre le résultat sur l'écran d'accueil.</td></tr>
+  </table>
+  <p>Cliquez sur <span class="ui">Enregistrer</span> en bas de la carte. Tant que rien n'a changé, le bouton reste grisé.</p>
+  <div class="encadre attention">
+    <span class="titre">Club qui reçoit l'application d'un autre club</span>
+    <p>L'application peut être livrée avec le nom et le logo du club qui l'a créée. Remplacez-les tous les deux ici avant
+      toute utilisation.</p>
+  </div>
+</section>
+
+<!-- ============ 4 ============ -->
+<section class="chapitre">
+  <h2><span class="num">4</span>Protéger avec un code gestionnaire</h2>
+  <p><span class="chemin">Paramètres › Sécurité · mode gestion</span></p>
+  <p>Sans code, tout le monde peut tout faire. Avec un <b>code de 4 à 6 chiffres</b>, l'application démarre en
+    <b>mode consultation</b> : les bénévoles font les sorties normalement, mais les actions sensibles demandent le code.</p>
+
+  <div class="deux">
+    <div class="carte">
+      <h3>Libre, sans code</h3>
+      <ul>
+        <li>Créer ou modifier une sortie en préparation</li>
+        <li>Scanner au départ et au retour, valider le départ</li>
+        <li>Clôturer une sortie où tout est rendu</li>
+        <li>Signaler un problème « à surveiller »</li>
+        <li>Consulter tous les écrans, tester le pistolet</li>
+        <li>Faire une sauvegarde</li>
+      </ul>
+    </div>
+    <div class="carte">
+      <h3>Code demandé</h3>
+      <ul>
+        <li>Ajouter ou modifier du matériel, des membres</li>
+        <li>Révisions, atelier, séances TIV</li>
+        <li>Supprimer une sortie</li>
+        <li>Changer les utilisations d'une sortie</li>
+        <li>Mettre hors service, rendre un manquant après clôture</li>
+        <li>Tous les paramètres, restaurer une sauvegarde</li>
+      </ul>
+    </div>
+  </div>
+
+  <p style="margin-top:3mm">Un bouton protégé porte une <b>petite pastille jaune avec un cadenas</b>. En cliquant dessus, un pavé
+    de chiffres s'ouvre ; une fois le code tapé, le mode gestion reste ouvert (carte en bas du menu) jusqu'à :</p>
+  <ul>
+    <li>une durée sans activité, réglée par « Rester déverrouillé » : 5, 15 (par défaut), 30 ou 60 minutes ;</li>
+    <li>la fermeture de l'application (option « Verrouiller à la fermeture ») ;</li>
+    <li>un clic sur la carte du mode gestion dans le menu.</li>
+  </ul>
+  <p>Après 5 codes faux d'affilée, la saisie est bloquée une minute. Pour changer ou retirer le code, l'ancien est demandé.</p>
+  <div class="encadre danger">
+    <span class="titre">Code oublié</span>
+    <p>Fermez l'application, ouvrez le fichier <code>%LOCALAPPDATA%\Asprenaut\parametres.json</code> avec le Bloc-notes,
+      supprimez la ligne qui commence par <code>"CodeGestionnaire"</code>, enregistrez, relancez. L'application n'a plus de
+      code : définissez-en un nouveau.</p>
+  </div>
+  <p>Un conseil : notez le code dans un endroit sûr connu du bureau, et ne le donnez qu'aux responsables matériel.</p>
+</section>
+
+<!-- ============ 5 ============ -->
+<section class="chapitre">
+  <h2><span class="num">5</span>Régler le pistolet scanner</h2>
+  <p><span class="chemin">Paramètres › Pistolet scanner</span></p>
+  <h3>Tester</h3>
+  <ol class="etapes">
+    <li>Branchez le pistolet sur un port USB. Windows le reconnaît comme un clavier, sans pilote.</li>
+    <li>Cliquez sur <span class="ui">Tester le pistolet</span> et scannez une étiquette.</li>
+    <li>L'application affiche le code lu. S'il est correct, le pistolet est prêt.</li>
+  </ol>
+  <p>La plupart des pistolets tapent le code puis la touche Entrée. Ceux qui n'envoient pas Entrée fonctionnent aussi :
+    l'application reconnaît la frappe très rapide du pistolet et valide seule après un court instant. À la main, il faut
+    taper le code puis appuyer sur Entrée.</p>
+  <div class="encadre attention">
+    <span class="titre">Le code lu est faux (lettres changées, « & » à la place de « 1 »…)</span>
+    <p>Le pistolet est réglé en clavier américain (QWERTY) alors que le PC est en AZERTY. Scannez la carte de réglage
+      « French keyboard » / « Clavier français » du manuel du pistolet.</p>
+  </div>
+
+  <h3>Que mettre dans les étiquettes QR ?</h3>
+  <p>Deux formats sont compris :</p>
+  <table>
+    <tr><th style="width:62mm">Contenu du QR code</th><th>Ce que lit l'application</th></tr>
+    <tr><td><code>A24</code> ou <code>BLOC-031</code></td><td>Le code tel quel (espaces retirés, mis en majuscules).</td></tr>
+    <tr><td><code>(Detendeur) A24 Mon Club 71-0025</code></td><td>Format « médaille » : le code est le mot qui suit
+      la parenthèse (<code>A24</code>), le type entre parenthèses aide à choisir la catégorie d'un équipement inconnu.
+      La suite est libre (nom du club, numéro…).</td></tr>
+  </table>
+  <p>Choisissez des codes courts et uniques. La convention proposée par l'application :</p>
+  <ul>
+    <li><code>A01</code>, <code>A02</code>… détendeurs adultes ; <code>E01</code>… détendeurs enfants ; <code>S01</code>… gilets stab ;</li>
+    <li>pour le reste, un préfixe par catégorie : <code>BLOC-001</code>, <code>COMBI-001</code>…</li>
+  </ul>
+  <p>Quand on crée un équipement, l'application propose le code suivant dans la même forme (A24 → A25, BLOC-034 → BLOC-035).</p>
+  <p>Les QR codes se fabriquent avec n'importe quel générateur gratuit ; des médailles gravées résistent mieux à l'eau
+    et au chlore que des autocollants.</p>
+</section>
+
+<!-- ============ 6 ============ -->
+<section class="chapitre">
+  <h2><span class="num">6</span>Saisir le matériel</h2>
+  <p><span class="chemin">Inventaire › Ajouter un équipement</span> (code demandé)</p>
+  <h3>La méthode la plus rapide : scanner</h3>
+  <p>Scannez une étiquette au départ d'une sortie : si le code est inconnu,
+    l'application ouvre la fiche de création avec le code déjà rempli et la catégorie devinée. Il ne reste qu'à compléter.</p>
+
+  <h3>La fiche d'un équipement</h3>
+  <table>
+    <tr><th style="width:44mm">Champ</th><th>Remarque</th></tr>
+    <tr><td><b>Code, nom, catégorie</b></td><td>Obligatoires. Le nom sert aussi de « modèle » pour le compteur d'utilisation (chapitre 9) : donnez le même nom aux équipements identiques.</td></tr>
+    <tr><td><b>Taille</b></td><td>Sert à repérer les tailles qui manquent dans le bilan de saison.</td></tr>
+    <tr><td><b>Marque, modèle, n° de série</b></td><td>Pour les registres. Pour un détendeur : premier étage, deuxième étage, octopus, manomètre, montage étrier ou DIN.</td></tr>
+    <tr><td><b>Dernière révision</b></td><td>Saisissez la date de la dernière révision connue : l'application calcule la prochaine.</td></tr>
+    <tr><td><b>Dates de TIV et de requalification</b></td><td>Pour les blocs uniquement.</td></tr>
+    <tr><td><b>Nitrox</b></td><td>Pour les blocs et détendeurs. Au départ d'une sortie nominative, seul un adhérent certifié nitrox peut le prendre.</td></tr>
+  </table>
+
+  <h3>Catégories</h3>
+  <p>Dans la fiche, la liste des catégories permet d'en <b>créer</b> une nouvelle (nom, pictogramme, couleur) et de
+    <b>supprimer</b> celles qui ne servent à rien. Une catégorie utilisée par un équipement ne peut pas être supprimée.</p>
+  <div class="encadre">
+    <span class="titre">Pour que les révisions se calculent bien</span>
+    <p>Gardez les noms de catégorie qui commencent par « Blocs » pour les blocs (TIV et requalification), « Détendeurs »
+      et « Gilets » : les délais de révision et les tuiles de problèmes sont réglés d'après ces noms.</p>
+  </div>
+
+  <h3>Modifier, réformer</h3>
+  <p>Le crayon de la colonne <b>Actions</b> modifie la fiche. Un équipement ne se supprime pas : passez son état à
+    <b>Réformé</b>. Il disparaît des sorties et des révisions mais reste dans l'historique.</p>
+
+  <h3>Manuels des fabricants</h3>
+  <p><span class="chemin">Manuels › Ajouter</span> : choisissez le PDF, indiquez la marque, la catégorie et, si vous voulez,
+    le sommaire (une ligne par section, page à la fin : <code>8.2 Entretien ; 17</code>) et le délai de révision du fabricant.
+    Le manuel est relié automatiquement aux équipements de la même marque et de la même catégorie, et un bouton
+    <span class="ui">Manuel</span> apparaît sur leurs lignes au départ et au retour.</p>
+</section>
+
+<!-- ============ 7 ============ -->
+<section class="chapitre">
+  <h2><span class="num">7</span>Membres : moniteurs, classes, adhérents</h2>
+  <p><span class="chemin">Membres</span> — trois onglets. Ajouter ou modifier demande le code.</p>
+  <table>
+    <tr><th style="width:30mm">Onglet</th><th>Rôle</th></tr>
+    <tr><td><b>Adhérents</b></td><td>Les plongeurs du club. Ils ne sont jamais responsables d'une sortie, mais reçoivent le matériel dans les sorties nominatives (chapitre 12).</td></tr>
+    <tr><td><b>Moniteurs</b></td><td>Les encadrants, responsables des sorties. Niveau d'encadrement (E1… MF2), téléphone,
+      case <b>Inspecteur TIV</b> (seuls les inspecteurs peuvent enregistrer une TIV).</td></tr>
+    <tr><td><b>Classes</b></td><td>Un groupe en formation (Niveau 1, Niveau 2…) peut être responsable d'une sortie comme un
+      moniteur. Abréviation de 4 lettres au plus et couleur de pastille.</td></tr>
+  </table>
+  <p>On ne supprime pas un membre : on le <b>désactive</b>. Il n'est plus proposé mais reste dans l'historique.</p>
+
+  <h3>Importer les adhérents depuis Excel</h3>
+  <ol class="etapes">
+    <li>Onglet <span class="ui">Adhérents</span> › <span class="ui">Modèle Excel à remplir</span> : enregistrez le classeur
+      proposé. Il contient les bonnes colonnes, des listes déroulantes et un mode d'emploi.</li>
+    <li>Remplissez-le (ou collez-y l'export de votre logiciel de licences). Seules les colonnes <b>Nom</b> et <b>Prénom</b>
+      sont obligatoires ; <b>Formation en cours</b>, <b>Licence</b>, <b>Téléphone</b>, <b>Nitrox</b> et
+      <b>CACI valable jusqu'au</b> sont facultatives.</li>
+    <li><span class="ui">Importer</span> et choisissez le fichier (.xlsx ou .csv). Un adhérent déjà connu (même licence, sinon
+      même nom et prénom) est mis à jour ; les autres sont ajoutés ; personne n'est retiré.</li>
+  </ol>
+  <p>Vous pouvez réimporter le fichier à chaque début de saison : une case vide ne change rien.</p>
+
+  <h3>CACI (certificat médical)</h3>
+  <p>Cochez <b>CACI</b> et indiquez sa date de fin. Un CACI expiré empêche l'adhérent de recevoir du matériel dans une
+    sortie nominative ; une pastille « CACI BIENTÔT » apparaît 30 jours avant la fin, et le filtre
+    <span class="ui">CACI à renouveler</span> les liste. Si vous ne gérez pas les CACI, laissez la case décochée : aucun contrôle n'est fait.</p>
+</section>
+
+<!-- ============ 8 ============ -->
+<section class="chapitre">
+  <h2><span class="num">8</span>Types de sortie et règles</h2>
+  <h3>Types de sortie et utilisations</h3>
+  <p><span class="chemin">Paramètres › Configuration du club › Types de sortie et utilisations</span></p>
+  <p>Ajoutez, renommez, réordonnez les types (40 caractères au plus). Pour chaque type :</p>
+  <ul>
+    <li><b>Utilisations par sortie</b> (1 à 10) : combien « compte » une sortie de ce type pour l'usure du matériel.
+      Par défaut : piscine, fosse, baptême, autre = 1 ; lac = 2 ; mer = 4.</li>
+    <li><b>Nom de l'adhérent à chaque scan</b> : la sortie devient nominative (chapitre 12). Coché d'origine pour Mer et Lac.</li>
+  </ul>
+  <p>Un type déjà utilisé ne se supprime pas : l'œil le <b>masque</b> (il n'est plus proposé, les anciennes sorties le gardent).</p>
+
+  <h3>Règles des sorties</h3>
+  <p><span class="chemin">Paramètres › Règles des sorties</span></p>
+  <table>
+    <tr><th style="width:62mm">Réglage</th><th>Effet</th></tr>
+    <tr><td><b>Alerte si non rendu après</b> (1 jour par défaut)</td><td>Une sortie en cours avec du matériel dehors depuis ce nombre de jours apparaît en orange.</td></tr>
+    <tr><td><b>Départ si révision dépassée</b></td><td>Activé : le matériel part avec un avertissement. Coupé : il est refusé.</td></tr>
+    <tr><td><b>Confirmer la clôture</b></td><td>Demande confirmation s'il reste du matériel dehors.</td></tr>
+    <tr><td><b>Code pour clôturer avec des manquants</b></td><td>Exige le code gestionnaire pour clôturer une sortie incomplète.</td></tr>
+  </table>
+
+  <h3>Modèles de sortie</h3>
+  <p><span class="chemin">Sorties › Modèles › Nouveau modèle</span></p>
+  <p>Pour les sorties qui reviennent chaque semaine (« Piscine du mardi ») : jour habituel, type, lieu, responsable,
+    notes. Sur l'écran Sorties, le <b>Démarrage rapide</b> propose les prochains modèles : un clic sur
+    <span class="ui">Créer la sortie</span> et l'on passe directement au scan.</p>
+
+  <h3>Affichage</h3>
+  <p><span class="chemin">Paramètres › Affichage</span> : thème sombre ou clair. Les sons des scans se coupent dans <span class="chemin">Paramètres › Pistolet scanner</span> (« Sons de confirmation »).</p>
+</section>
+
+<!-- ============ 9 ============ -->
+<section class="chapitre">
+  <h2><span class="num">9</span>Révisions, prestataires et TIV</h2>
+  <h3>Délais</h3>
+  <p>L'application calcule les échéances selon ces délais, modifiables dans les paramètres :</p>
+  <table>
+    <tr><th style="width:62mm">Contrôle</th><th>Délai par défaut</th></tr>
+    <tr><td>TIV des blocs</td><td>12 mois</td></tr>
+    <tr><td>Requalification des blocs</td><td>6 ans (vaut aussi TIV)</td></tr>
+    <tr><td>Révision des détendeurs</td><td>24 mois</td></tr>
+    <tr><td>Révision des gilets</td><td>pas de date obligatoire (suivi par le compteur d'utilisation)</td></tr>
+    <tr><td>Autres catégories</td><td>12 mois</td></tr>
+    <tr><td>Résultat « à surveiller »</td><td>nouveau contrôle dans 6 mois</td></tr>
+  </table>
+  <p>Si un manuel du fabricant indique un autre délai, l'écran Manuels le signale et propose
+    <span class="ui">Régler le club</span> pour reprendre celui du fabricant.</p>
+
+  <h3>Compteur d'utilisation</h3>
+  <p><span class="chemin">Paramètres › Configuration du club › Compteur d'utilisation</span></p>
+  <p>Chaque retour ajoute les utilisations de la sortie au compteur de l'équipement, remis à zéro à chaque révision.
+    Fixez un <b>seuil</b> par catégorie (100 par défaut pour détendeurs et gilets, 0 = désactivé), et si besoin un seuil
+    propre à un modèle ou à un équipement. À 90 % du seuil, l'équipement est proposé dans Révisions ; au seuil, il part
+    avec un avertissement, ou il est refusé si vous activez <b>Bloquer au seuil</b>.</p>
+
+  <h3>Prestataires</h3>
+  <p><span class="chemin">Paramètres › Configuration du club › Prestataires</span> : les magasins et organismes à qui vous
+    envoyez du matériel. Ils sont proposés lors d'un envoi. On ne les supprime pas, on les désactive.</p>
+
+  <h3>Séance TIV</h3>
+  <p><span class="chemin">Paramètres › Configuration du club › Séance TIV</span> : planifiez la prochaine séance (date, heure,
+    lieu, inspecteurs). Les blocs dont la TIV tombe au plus tard 30 jours après sont listés « à préparer ». Si votre club
+    ne fait pas ses TIV lui-même, coupez <b>Afficher dans Révisions</b>.</p>
+
+  <h3>Problèmes signalés</h3>
+  <p><span class="chemin">Paramètres › Configuration du club › Problèmes signalés</span> : les tuiles de causes proposées
+    quand un bénévole signale un problème (« Débit continu », « Fuite »…), par catégorie. Ajoutez, réordonnez, et cochez
+    <b>Précision obligatoire</b> pour une tuile comme « Autre ».</p>
+</section>
+
+<!-- ============ 10 ============ -->
+<section class="chapitre">
+  <h2><span class="num">10</span>Sauvegardes et changement de PC</h2>
+  <p><span class="chemin">Paramètres › Données et sauvegardes</span></p>
+  <p>L'application copie sa base à chaque lancement, sur le même disque. Cela protège d'une fausse manœuvre,
+    <b>pas d'une panne du PC ni d'un vol</b>. Pour cela il faut une sauvegarde complète sur une clé USB ou un disque externe.</p>
+
+  <h3>Sauvegarde complète — une fois par semaine</h3>
+  <ol class="etapes">
+    <li>Branchez une clé USB.</li>
+    <li><span class="ui">Faire une sauvegarde complète…</span> et choisissez la clé. Un fichier <code>.zip</code> est créé :
+      base, réglages, manuels et logo.</li>
+    <li>Rangez la clé ailleurs que près du PC.</li>
+  </ol>
+  <p>Au bout de 7 jours sans sauvegarde complète, un bandeau jaune le rappelle sur l'écran Sorties, avec un bouton
+    <span class="ui">Faire la sauvegarde ›</span>. Le dossier choisi est reproposé la fois suivante.</p>
+
+  <h3>Restaurer, ou installer un nouveau PC</h3>
+  <ol class="etapes">
+    <li>Installez l'application sur le nouveau PC (chapitre 2) et lancez-la une fois.</li>
+    <li><span class="ui">Paramètres › Données et sauvegardes › Restaurer…</span> (code demandé s'il y en a un) et choisissez le <code>.zip</code>.</li>
+    <li>L'application vérifie le fichier, garde une copie des données actuelles, restaure tout et redémarre.</li>
+  </ol>
+  <div class="encadre">
+    <span class="titre">Préparer sur un autre PC</span>
+    <p>Vous pouvez tout configurer chez vous (matériel, adhérents, réglages), faire une sauvegarde complète, puis la
+      restaurer sur le PC du club.</p>
+  </div>
+
+  <h3>Exports</h3>
+  <p><span class="ui">Exporter CSV</span> crée un dossier avec un fichier par table (matériel, sorties, adhérents,
+    révisions…), lisible dans Excel. L'inventaire, l'historique et les utilisations d'un équipement ont aussi leur propre export.</p>
+</section>
+
+<!-- ============ PARTIE B ============ -->
+<div class="partie">
+  <div class="lettre">B</div>
+  <h1>Utiliser au quotidien</h1>
+  <p>Pour tous les bénévoles. Le geste de base : <b>scanner chaque équipement quand il part et quand il revient.</b>
+    L'application fait le reste.</p>
+</div>
+
+<!-- ============ 11 ============ -->
+<section class="chapitre">
+  <h2><span class="num">11</span>Une sortie, du départ au retour</h2>
+  <div class="cycle">
+    <div class="etat"><b>En préparation</b><span>on scanne ce qui part</span></div>
+    <div class="fleche">Valider<br>le départ</div>
+    <div class="etat"><b>En cours</b><span>on scanne ce qui revient</span></div>
+    <div class="fleche">Clôturer</div>
+    <div class="etat"><b>Clôturée</b><span>dans l'historique</span></div>
+  </div>
+
+  <h3>1. Créer la sortie</h3>
+  <p><span class="ui">Sorties › Nouvelle sortie</span>, ou un modèle du <b>Démarrage rapide</b>.</p>
+  <ol>
+    <li><b>Type</b> : cliquez sur une tuile (Piscine, Mer…).</li>
+    <li><b>Quand et où</b> : date et lieu ; les raccourcis proposent aujourd'hui, demain, le week-end et les derniers lieux.</li>
+    <li><b>Responsable</b> : un moniteur ou une classe.</li>
+    <li><b>Règles et notes</b> si besoin.</li>
+  </ol>
+  <p>L'aperçu de droite résume la sortie. Cliquez sur <span class="ui">Créer et scanner le matériel</span>.</p>
+
+  <h3>2. Scanner le départ</h3>
+  <p>Scannez chaque équipement. Il s'ajoute à la liste avec un bip. Pas besoin de cliquer dans le champ : il reste prêt.</p>
+  <ul>
+    <li><b>Scanné deux fois ?</b> Ignoré, « déjà scanné ».</li>
+    <li><b>Code inconnu ?</b> La fiche de création s'ouvre (code gestionnaire demandé).</li>
+    <li><b>Hors service ou réformé ?</b> Refusé : laissez-le au local.</li>
+    <li><b>Révision dépassée ?</b> Il part, avec un message jaune (ou refusé selon les réglages).</li>
+    <li><b>Erreur ?</b> Le bouton <span class="ui">Retirer</span> sur la ligne, tant que le départ n'est pas validé.</li>
+  </ul>
+  <p>Quand tout est scanné : <span class="ui">Valider le départ</span>. On peut encore ajouter du matériel ensuite.
+    Les boutons <span class="ui">Modifier la sortie</span> et <span class="ui">Supprimer</span> (sortie vide) sont en haut à droite.</p>
+
+  <h3>3. Scanner le retour</h3>
+  <p>Sur l'écran Sorties, carte de la sortie › <span class="ui">Scanner le retour</span>. Scannez chaque équipement rendu :
+    il passe dans la colonne « Rendu ». Un équipement d'une autre sortie scanné ici est proposé au retour dans sa sortie.</p>
+  <p>S'il y a un souci avec un équipement (fuite, sangle cassée), cliquez sur <span class="ui">Signaler un problème</span>
+    tout de suite (chapitre 13).</p>
+
+  <h3>4. Clôturer</h3>
+  <p><span class="ui">Clôturer la sortie</span>. Si tout est rendu, c'est fini. S'il reste du matériel dehors, l'application
+    affiche le nombre et propose <span class="ui">Clôturer avec du matériel manquant</span> : ces équipements deviennent <b>Manquants</b>.</p>
+  <div class="encadre">
+    <span class="titre">Ne pas clôturer trop tôt</span>
+    <p>Une sortie en cours peut rester ouverte jusqu'au lendemain, le temps que tout le matériel revienne. Elle passe en
+      orange quand le retour tarde.</p>
+  </div>
+</section>
+
+<!-- ============ 12 ============ -->
+<section class="chapitre">
+  <h2><span class="num">12</span>Sorties nominatives</h2>
+  <p>Pour les sorties où chacun repart avec son matériel (mer, lac), on note <b>à qui</b> est confié chaque équipement.
+    La sortie affiche le badge « Nom obligatoire à chaque scan ».</p>
+  <ol class="etapes">
+    <li>Scannez l'équipement. Le panneau « À qui est ce détendeur ? » remplace la zone de scan.</li>
+    <li>Cliquez sur l'un des derniers adhérents proposés, ou tapez quelques lettres du nom puis Entrée (flèches pour choisir).</li>
+    <li>Le panneau se ferme, scannez l'équipement suivant.</li>
+  </ol>
+  <p>Tant qu'un équipement attend son adhérent, le scan suivant et la validation du départ sont refusés.
+    <span class="ui">Annuler ce scan</span> retire l'équipement en attente.</p>
+  <h3>Refus possibles</h3>
+  <ul>
+    <li>Adhérent désactivé.</li>
+    <li>CACI expiré.</li>
+    <li>Équipement nitrox pour un adhérent non certifié.</li>
+    <li>Deuxième équipement de la même catégorie pour le même adhérent (« A déjà A12 »). Cette règle se coupe
+      dans la sortie (« Un équipement par catégorie et par adhérent ») avec le code gestionnaire.</li>
+  </ul>
+  <p>Au retour, le nom de l'adhérent s'affiche sur chaque équipement encore dehors. Un manquant garde le nom de la
+    personne qui l'avait pris.</p>
+</section>
+
+<!-- ============ 13 ============ -->
+<section class="chapitre">
+  <h2><span class="num">13</span>Matériel manquant et problèmes signalés</h2>
+  <h3>Un manquant réapparaît</h3>
+  <p>Il suffit de le scanner : au départ d'une nouvelle sortie, il est noté « retrouvé » dans son ancienne sortie puis part
+    normalement. Depuis une sortie clôturée (ouverte d'un clic depuis l'onglet Clôturées), on peut aussi le scanner ou cliquer
+    <span class="ui">Marquer rendu</span> sur sa ligne (code gestionnaire demandé).</p>
+
+  <h3>Signaler un problème</h3>
+  <p>Au retour (bouton <span class="ui">Signaler un problème</span> ou drapeau sur la ligne) ou depuis l'inventaire (drapeau de la colonne Actions) :</p>
+  <ol class="etapes">
+    <li>Choisissez la cause (tuile) et ajoutez une précision si besoin.</li>
+    <li>Choisissez la gravité :
+      <ul>
+        <li><b>À surveiller</b> : l'équipement reste en service, une pastille le signale dans l'inventaire.</li>
+        <li><b>Hors service</b> : il ne part plus (code gestionnaire demandé).</li>
+      </ul>
+    </li>
+  </ol>
+  <p>Le problème apparaît en tête de la colonne « À prévoir » des Révisions. La prochaine intervention enregistrée le ferme
+    et, si c'est lui qui avait mis l'équipement hors service, le remet en service.</p>
+</section>
+
+<!-- ============ 14 ============ -->
+<section class="chapitre">
+  <h2><span class="num">14</span>Suivre les révisions</h2>
+  <p><span class="chemin">Révisions</span> — réservé en pratique au responsable matériel (code demandé pour toute action).</p>
+  <table>
+    <tr><th style="width:42mm">Colonne</th><th>Contenu et actions</th></tr>
+    <tr><td><b>1 · À prévoir</b></td><td>Calculée : échéance proche ou dépassée, 90 % du compteur, problème signalé,
+      intervention prévue. Actions : <span class="ui">Réparer au club</span>, <span class="ui">Envoyer chez un prestataire</span>, ou séance TIV pour un bloc.</td></tr>
+    <tr><td><b>2 · Réparation interne</b></td><td>Travail fait au club, et la carte de la prochaine séance TIV. <span class="ui">Enregistrer le résultat</span>.</td></tr>
+    <tr><td><b>3 · À envoyer</b></td><td>Prêt à partir chez le prestataire. <span class="ui">Marquer comme parti</span> le jour du départ (l'équipement passe hors service).</td></tr>
+    <tr><td><b>4 · Chez le prestataire</b></td><td>En réparation à l'extérieur ; en rouge si la date de retour prévue est passée. <span class="ui">Retour du prestataire</span>.</td></tr>
+    <tr><td><b>5 · Fait</b></td><td>Les interventions des 30 derniers jours. <span class="ui">Archiver tout</span> pour faire le ménage (rien n'est supprimé).</td></tr>
+  </table>
+  <h3>Enregistrer une intervention</h3>
+  <p>Date, nature, intervenant (inspecteur obligatoire pour une TIV), résultat et description :</p>
+  <ul>
+    <li><b>Conforme</b> : la prochaine échéance est recalculée, le compteur repart à zéro.</li>
+    <li><b>À surveiller</b> : nouveau contrôle dans 6 mois.</li>
+    <li><b>Refusé</b> : l'équipement passe hors service.</li>
+  </ul>
+  <p>Le bouton <span class="ui">Ajouter une intervention</span> en haut de page permet de prévoir une intervention
+    (« Changer la membrane ») ou d'en noter une déjà faite. Scanner une étiquette ouvre directement ce panneau.</p>
+  <p><span class="ui">Registre PDF</span> imprime le registre des contrôles, à présenter en cas de vérification.</p>
+  <p>Les colonnes peuvent être repliées avec l'œil de leur en-tête pour se concentrer sur les autres.</p>
+</section>
+
+<!-- ============ 15 ============ -->
+<section class="chapitre">
+  <h2><span class="num">15</span>Inventaire, fiche de suivi, manuels</h2>
+  <h3>Inventaire</h3>
+  <p>Filtrez par catégorie (puces en haut) et cherchez par code, nom, marque, modèle ou numéro de série. La colonne
+    <b>Utilisation</b> montre le compteur (« 64 / 80 utilisations », jaune à 90 %, rouge au seuil) ; le lien
+    <span class="ui">Voir les sorties</span> détaille chaque sortie de l'équipement.</p>
+  <p>Colonne <b>Actions</b> : fiche de suivi EPI, signaler un problème, modifier. <span class="ui">Exporter CSV</span>
+    exporte les lignes affichées.</p>
+
+  <h3>Fiche de suivi EPI</h3>
+  <p>Clic sur le nom d'un équipement (ou double-clic, ou Entrée). La fiche réunit ses composants (premier étage, deuxième
+    étage, octopus, manomètre), toutes ses interventions, ses problèmes signalés, et s'imprime en PDF avec
+    <span class="ui">Imprimer la fiche</span>.</p>
+
+  <h3>Manuels</h3>
+  <p>Ouvrez une notice, cliquez sur une section du sommaire pour y aller, imprimez une partie ou tout. Les bénévoles
+    peuvent les consulter sans code.</p>
+</section>
+
+<!-- ============ 16 ============ -->
+<section class="chapitre">
+  <h2><span class="num">16</span>Historique et bilan de saison</h2>
+  <h3>Historique</h3>
+  <p>Le journal, jour par jour, de tous les départs, retours, contrôles et modifications. Période : 7 jours, 30 jours,
+    saison (depuis le 1er septembre) ou tout. Cliquez sur un code pour voir la vie de l'équipement. Le journal s'exporte en CSV.</p>
+
+  <h3>Bilan de saison</h3>
+  <p>Saison en cours ou précédente (du 1er septembre au 31 août). L'écran montre :</p>
+  <ul>
+    <li>le nombre de sorties et d'équipements sortis, mois par mois ;</li>
+    <li>le matériel perdu et retrouvé ;</li>
+    <li>les groupes <b>en tension</b> (catégorie et taille presque toujours dehors lors des grosses sorties) : utile pour décider des achats ;</li>
+    <li>le matériel <b>peu sorti</b> (moins de 3 sorties) ;</li>
+    <li>les contrôles faits par famille.</li>
+  </ul>
+  <p>Le bouton d'export crée un PDF prêt à présenter à l'assemblée générale.</p>
+  <div class="encadre">
+    <span class="titre">Comment l'enregistrer en PDF</span>
+    <p>Les documents passent par l'imprimante « Microsoft Print to PDF », présente sur tous les Windows 10 et 11.
+      Si elle a été supprimée : Paramètres Windows › Imprimantes › Ajouter une imprimante.</p>
+  </div>
+</section>
+
+<!-- ============ 17 ============ -->
+<section class="chapitre">
+  <h2><span class="num">17</span>En cas de problème</h2>
+  <table>
+    <tr><th style="width:62mm">Problème</th><th>Solution</th></tr>
+    <tr><td>Le scan ne fait rien.</td><td>Vérifiez que l'écran de départ ou de retour est affiché et que la fenêtre de
+      l'application est au premier plan (cliquez dessus). Testez le pistolet dans Paramètres.</td></tr>
+    <tr><td>Le code lu est faux.</td><td>Pistolet en clavier QWERTY : scannez sa carte de réglage « clavier français » (chapitre 5).</td></tr>
+    <tr><td>« Déjà dehors dans une autre sortie ».</td><td>L'équipement n'a pas été scanné au retour d'une sortie précédente. Faites son retour dans cette sortie (l'application le propose).</td></tr>
+    <tr><td>Un bouton porte un cadenas jaune.</td><td>Action réservée : le code gestionnaire est demandé (chapitre 4).</td></tr>
+    <tr><td>Code gestionnaire oublié.</td><td>Voir l'encadré rouge du chapitre 4.</td></tr>
+    <tr><td>Une fausse manœuvre a abîmé les données.</td><td>Restaurez une sauvegarde : celles du dossier <code>Sauvegardes\</code> (une par lancement) ou la dernière sauvegarde complète. Les données actuelles sont gardées en copie avant.</td></tr>
+    <tr><td>Le PC est mort ou volé.</td><td>Nouveau PC, installation, puis restauration de la dernière sauvegarde complète (chapitre 10).</td></tr>
+    <tr><td>Message « erreur inattendue ».</td><td>Notez ce que vous faisiez et transmettez le fichier <code>%LOCALAPPDATA%\Asprenaut\erreurs.log</code> à la personne qui maintient l'application.</td></tr>
+    <tr><td>L'impression PDF ne marche pas.</td><td>Réinstallez l'imprimante « Microsoft Print to PDF » (chapitre 16).</td></tr>
+  </table>
+</section>
+
+<!-- ============ 18 ============ -->
+<section class="chapitre">
+  <h2><span class="num">18</span>Réglages par défaut</h2>
+  <p>Valeurs à l'installation. Toutes se changent dans <b>Paramètres</b>, avec le code gestionnaire.</p>
+  <table>
+    <tr><th style="width:80mm">Réglage</th><th>Par défaut</th></tr>
+    <tr><td>Code gestionnaire</td><td>aucun (tout est libre)</td></tr>
+    <tr><td>Retour en consultation sans activité</td><td>15 minutes</td></tr>
+    <tr><td>Sortie en retard</td><td>matériel dehors depuis 1 jour</td></tr>
+    <tr><td>Badge « révision proche »</td><td>30 jours avant (15, 30 ou 60)</td></tr>
+    <tr><td>Révisions « à planifier »</td><td>dans les 90 jours</td></tr>
+    <tr><td>Départ si révision dépassée</td><td>autorisé, avec avertissement</td></tr>
+    <tr><td>TIV / requalification</td><td>12 mois / 6 ans</td></tr>
+    <tr><td>Révision détendeurs / gilets / autres</td><td>24 mois / sans date / 12 mois</td></tr>
+    <tr><td>Contrôle après « à surveiller »</td><td>6 mois</td></tr>
+    <tr><td>Seuil d'utilisation détendeurs et gilets</td><td>100 utilisations, prévenu à 90 %, pas de blocage</td></tr>
+    <tr><td>Utilisations par sortie</td><td>Piscine, Fosse, Baptême, Autre : 1 · Lac : 2 · Mer : 4</td></tr>
+    <tr><td>Sorties nominatives</td><td>Mer et Lac</td></tr>
+    <tr><td>Un équipement par catégorie et par adhérent</td><td>activé dans chaque sortie</td></tr>
+    <tr><td>Rappel de sauvegarde complète</td><td>tous les 7 jours</td></tr>
+    <tr><td>Sauvegardes automatiques gardées</td><td>20</td></tr>
+    <tr><td>CACI « à renouveler »</td><td>30 jours avant la fin</td></tr>
+    <tr><td>Séance TIV dans Révisions</td><td>affichée</td></tr>
+  </table>
+</section>
+
+</body>
+</html>
