@@ -509,6 +509,8 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     2 Mo au plus (`VerifierFichierLogo`), réduit à 512 px et mis en PNG par `LogoDuClub.Preparer`. Tout est vérifié avant d'écrire.
     Écran : `ZoneLogo` (clic, Entrée, glisser-déposer), « Remplacer », corbeille, « Remettre le logo d'origine », `ApercuBandeau`
     (bannière de l'accueil), pied « Modifié : logo, nom… » + Annuler / Enregistrer (grisés sans modification ; code à l'enregistrement).
+    Le nom du club s'affiche en haut du menu (une ligne, « … » si trop long, nom entier en bulle) : `ServiceReglages.ClubChange`
+    → `MainForm.RefaireMenu`.
 
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit

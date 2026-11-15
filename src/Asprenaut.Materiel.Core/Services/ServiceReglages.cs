@@ -16,6 +16,9 @@ public sealed class ServiceReglages(
 
     public Reglages Actuels => reglages;
 
+    /// <summary>Fiche du club enregistrée (nom, logo…) : le menu affiche le nouveau nom.</summary>
+    public event EventHandler? ClubChange;
+
     /// <summary>Tous les paramètres, thème compris, sont une action protégée.</summary>
     private ResultatOperation Autorisation() => gestion?.Exiger(ActionProtegee.Parametres) ?? ResultatOperation.Ok("");
 
@@ -336,6 +339,7 @@ public sealed class ServiceReglages(
         reglages.ResponsableMateriel = responsable;
         reglages.TelephoneResponsable = telephone;
         stockage.Enregistrer(reglages);
+        ClubChange?.Invoke(this, EventArgs.Empty);
         return ResultatOperation.Ok("Club enregistré.");
     }
 

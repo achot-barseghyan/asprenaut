@@ -17,6 +17,17 @@ public class ClubTests
     }
 
     [Fact]
+    public void Le_nouveau_nom_du_club_est_annonce_pour_le_menu()
+    {
+        string? nomAnnonce = null;
+        _service.ClubChange += (_, _) => nomAnnonce = _service.Actuels.NomClub;
+
+        Assert.True(_service.ChangerClub(new SaisieClub("Club de Chalon", "", "", "")).Reussi);
+
+        Assert.Equal("Club de Chalon", nomAnnonce);
+    }
+
+    [Fact]
     public void La_fiche_du_club_est_enregistree_et_le_telephone_mis_en_forme()
     {
         var r = _service.ChangerClub(new SaisieClub("  Asprenaut Chalon ", " 14 71-0025 ", " Marc Petit ", "0612345678"));
@@ -38,9 +49,12 @@ public class ClubTests
     [InlineData("Club", "", "", "+33 6 12 34 56 78 poste 12", "Téléphone trop long (20 caractères au plus).")]
     public void Une_fiche_incorrecte_est_refusee_sans_rien_changer(string nom, string numero, string responsable, string telephone, string message)
     {
+        var annonces = 0;
+        _service.ClubChange += (_, _) => annonces++;
         var r = _service.ChangerClub(new SaisieClub(nom, numero, responsable, telephone, ChangementLogo.Remplacer([1, 2])));
 
         Assert.False(r.Reussi);
+        Assert.Equal(0, annonces);
         Assert.Equal(message, r.Message);
         Assert.Equal("Asprenaut", _ctx.Reglages.NomClub);
         Assert.Null(_logos.Png);

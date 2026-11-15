@@ -52,6 +52,7 @@ public sealed class MainForm : Form
         _navigation.Attacher(contenu);
         _navigation.EcranChange += (_, ecran) => SelectionnerMenu(ecran.Menu);
         Theme.Changement += ChangerTheme;
+        _reglages.ClubChange += ChangerTheme; // Nouveau nom du club : menu refait.
 
         // Mode gestion : carte du menu à jour, retour automatique en consultation vérifié toutes les 5 s.
         _gestion.EtatChange += ActualiserGestion;
@@ -69,6 +70,7 @@ public sealed class MainForm : Form
         if (disposing)
         {
             Theme.Changement -= ChangerTheme;
+            _reglages.ClubChange -= ChangerTheme;
             _gestion.EtatChange -= ActualiserGestion;
             _minuterie.Dispose();
         }
@@ -188,18 +190,27 @@ public sealed class MainForm : Form
         panneau.Disposed += (_, _) => bulle.Dispose();
 
         // Marque : pastille ronde du logo, nom du club (logo seul en menu réduit).
+        var nomClub = _reglages.Actuels.NomClub;
         var logo = new Logo { Margin = Padding.Empty };
         Control marque;
         if (reduit)
         {
             marque = logo;
             logo.Margin = new Padding((interieur - 46) / 2, 0, 0, 34);
-            bulle.SetToolTip(logo, "Asprenaut · Matériel du club");
+            bulle.SetToolTip(logo, $"{nomClub} · Matériel du club");
         }
         else
         {
+            // Nom du club (Paramètres › Club) sur une ligne, coupé par « … » s'il est trop long (nom entier en bulle).
+            var police = Theme.PoliceGrasse(13.5f);
+            var hauteur = (int)Math.Ceiling(TextRenderer.MeasureText("Ag", police).Height * 96f / DeviceDpi);
+            var titre = Ui.Libelle(nomClub, police);
+            titre.AutoSize = false;
+            titre.AutoEllipsis = true;
+            titre.Size = new Size(interieur - 6 - 46 - 12, hauteur);
+            bulle.SetToolTip(titre, nomClub);
             var nom = Ui.Pile(
-                Ui.Libelle("Asprenaut", Theme.PoliceGrasse(13.5f)),
+                titre,
                 Ui.Libelle("Matériel du club", Theme.Police(9f), Theme.TexteSecondaire));
             marque = Ui.Rangee(true, logo, nom);
             marque.Margin = new Padding(6, 0, 0, 34);
