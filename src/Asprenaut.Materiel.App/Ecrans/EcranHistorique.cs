@@ -18,7 +18,15 @@ public sealed class EcranHistorique : EcranBase
     private readonly ServiceHistorique _historique;
     private readonly ListeDeroulante _periode = new() { Width = 236, Margin = new Padding(0, 0, 10, 0), AccessibleName = "Période" };
     private readonly FiltreCategories _filtre = new(Theme.AccentClair) { Margin = new Padding(0, 0, 0, 16), Unite = "événement" };
-    private readonly JournalHistorique _journal = new() { Margin = new Padding(0, 0, 22, 0) };
+    private readonly JournalHistorique _journal = new();
+    private readonly BoutonArrondi _plusAncien = new("Afficher plus ancien", StyleBouton.Secondaire, Icones.ChevronBas)
+    {
+        Anchor = AnchorStyles.None,
+        Margin = new Padding(0, 12, 0, 0),
+        Visible = false,
+        AccessibleName = "Afficher les événements plus anciens",
+    };
+    private int _lots = 1;
     private readonly ChampSaisie _code = new() { TexteIndicatif = "Scannez ou tapez un code", Icone = Icones.Qr };
     private readonly Panel _fiche = new() { AutoScroll = true, BackColor = Theme.Surface, Margin = Padding.Empty };
     private IReadOnlyList<EvenementHistorique> _evenements = [];
@@ -38,7 +46,16 @@ public sealed class EcranHistorique : EcranBase
         {
             if (!_chargement)
             {
-                Executer(RechargerAsync);
+                _lots = 1;
+                Executer(() => RechargerAsync());
+            }
+        };
+        _plusAncien.Click += (_, _) =>
+        {
+            if (!_chargement)
+            {
+                _lots++;
+                Executer(() => RechargerAsync(garderDefilement: true));
             }
         };
         var exporter = new BoutonArrondi("Exporter CSV", StyleBouton.Secondaire, Icones.Telecharger);
@@ -80,10 +97,16 @@ public sealed class EcranHistorique : EcranBase
             (_code, SizeType.Absolute, Theme.HauteurChamp + 18),
             (_fiche, SizeType.Percent, 100)));
 
+        // Journal, puis « Afficher plus ancien » s'il reste des événements avant (lus par lots de 5000).
+        var colonneJournal = Ui.Colonne(
+            (_journal, SizeType.Percent, 100),
+            (_plusAncien, SizeType.AutoSize, 0));
+        colonneJournal.Margin = new Padding(0, 0, 22, 0);
+
         Controls.Add(Ui.Colonne(
             (Ui.Entete(Ui.Pile(Ui.Titre(Titre), Ui.SousTitre("Tout ce qui s'est passé : départs, retours, sorties, révisions et matériel.")), exporter, _periode), SizeType.AutoSize, 0),
             (_filtre, SizeType.Absolute, 44 + 16),
-            (Ui.Colonnes((_journal, SizeType.Percent, 63), (carteFiche, SizeType.Percent, 37)), SizeType.Percent, 100)));
+            (Ui.Colonnes((colonneJournal, SizeType.Percent, 63), (carteFiche, SizeType.Percent, 37)), SizeType.Percent, 100)));
     }
 
     public override string Titre => "Historique";
@@ -114,12 +137,13 @@ public sealed class EcranHistorique : EcranBase
         _code.Champ.Focus();
     }
 
-    private async Task RechargerAsync()
+    private async Task RechargerAsync(bool garderDefilement = false)
     {
         _chargement = true;
+        JournalLu lu;
         try
         {
-            _evenements = await _historique.ListerAsync(Periode);
+            lu = await _historique.ListerLotsAsync(Periode, _lots);
         }
         finally
         {
@@ -131,12 +155,14 @@ public sealed class EcranHistorique : EcranBase
             return;
         }
 
+        _evenements = lu.Evenements;
+        _plusAncien.Visible = lu.PlusAnciens;
         _filtre.Afficher(_evenements.Count, ServiceHistorique.TypesFiltrables.Select(t => (ServiceHistorique.Libelle(t), _evenements.Count(e => e.Type == t))));
-        AfficherJournal();
+        AfficherJournal(garderDefilement);
         _code.Champ.Focus();
     }
 
-    private void AfficherJournal()
+    private void AfficherJournal(bool garderDefilement = false)
     {
         var type = TypeChoisi;
         var aujourdHui = DateOnly.FromDateTime(DateTime.Now);
@@ -150,13 +176,13 @@ public sealed class EcranHistorique : EcranBase
                     e.Moment.ToString("HH:mm", Libelles.Culture), e.Titre, e.Detail, e.Code, FicheVie.Icone(e.Type), FicheVie.Couleur(e.Type))).ToList());
             })
             .ToList();
-        _journal.Afficher(jours, type is null ? "Rien sur cette période." : "Aucun événement de ce type sur la période.");
+        _journal.Afficher(jours, type is null ? "Rien sur cette période." : "Aucun événement de ce type sur la période.", garderDefilement);
     }
 
     private async Task ExporterAsync()
     {
         var type = TypeChoisi;
-        var evenements = (await _historique.ListerAsync(Periode, regrouper: false)).Where(e => type is null || e.Type == type).ToList();
+        var evenements = (await _historique.ListerLotsAsync(Periode, _lots, regrouper: false)).Evenements.Where(e => type is null || e.Type == type).ToList();
         if (evenements.Count == 0)
         {
             Dialogues.Information(FindForm(), "Rien à exporter sur cette période.");

@@ -43,14 +43,16 @@ public sealed class JournalHistorique : ScrollableControl
     /// <summary>Clic sur le code d'un équipement.</summary>
     public event EventHandler<string>? CodeChoisi;
 
-    public void Afficher(IReadOnlyList<JourJournal> jours, string messageVide)
+    /// <summary>Remplace le journal ; <paramref name="garderDefilement"/> : reste au même endroit (lignes plus anciennes ajoutées en bas).</summary>
+    public void Afficher(IReadOnlyList<JourJournal> jours, string messageVide, bool garderDefilement = false)
     {
+        var position = -AutoScrollPosition.Y;
         _jours = jours;
         _messageVide = messageVide;
         _survol = null;
-        AutoScrollPosition = Point.Empty;
         AccessibleDescription = jours.Count == 0 ? messageVide : $"{jours.Sum(j => j.Lignes.Count)} événements";
         MettreAJourTaille();
+        AutoScrollPosition = garderDefilement ? new Point(0, position) : Point.Empty;
         Invalidate();
     }
 

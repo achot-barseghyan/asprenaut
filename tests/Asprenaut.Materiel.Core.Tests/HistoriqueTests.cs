@@ -364,4 +364,31 @@ public class HistoriqueTests
         Assert.Equal(("Vendredi 6 novembre", ""), ServiceHistorique.LibelleJour(new DateOnly(2026, 11, 6), aujourdHui));
         Assert.Equal(("Mardi 4 novembre 2025", ""), ServiceHistorique.LibelleJour(new DateOnly(2025, 11, 4), aujourdHui));
     }
+
+    // Règle : le journal se lit par lots de 5000 ; « Afficher plus ancien » ajoute un lot, sans rien perdre.
+    [Fact]
+    public async Task Le_journal_se_lit_par_lots_et_dit_s_il_reste_plus_ancien()
+    {
+        _ctx.Db.Journal.Clear();
+        var total = ServiceHistorique.NombreMax + 10;
+        for (var i = 0; i < total; i++)
+        {
+            _ctx.Db.Journal.Add(new EntreeJournal
+            {
+                Id = i + 1,
+                Horodatage = Contexte.Maintenant.AddMinutes(-i),
+                Action = "Note",
+                Details = $"Entrée {i}",
+            });
+        }
+
+        var premier = await _ctx.Historique.ListerLotsAsync(PeriodeHistorique.Tout, 1);
+        var deux = await _ctx.Historique.ListerLotsAsync(PeriodeHistorique.Tout, 2);
+
+        Assert.Equal(ServiceHistorique.NombreMax, premier.Evenements.Count);
+        Assert.True(premier.PlusAnciens);
+        Assert.Equal(total, deux.Evenements.Count);
+        Assert.False(deux.PlusAnciens);
+        Assert.Equal(1, deux.Evenements[0].Id); // Toujours les plus récents d'abord.
+    }
 }

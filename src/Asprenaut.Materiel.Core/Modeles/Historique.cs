@@ -69,6 +69,9 @@ public sealed record EvenementHistorique(
     string? Code,
     int Nombre = 1);
 
+/// <summary>Événements lus du journal ; <see cref="PlusAnciens"/> : il en reste d'autres plus anciens sur la période.</summary>
+public sealed record JournalLu(IReadOnlyList<EvenementHistorique> Evenements, bool PlusAnciens);
+
 /// <summary>Passage d'un équipement dans une sortie (table sortie_equipement + sortie + moniteur).</summary>
 public sealed class PassageSortie
 {

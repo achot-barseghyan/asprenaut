@@ -20,7 +20,7 @@ public sealed class ServiceHistorique(
     Reglages reglages,
     ISignalementRepository? signalements = null)
 {
-    /// <summary>Nombre maximum d'entrées lues (période « Tout » sur une base ancienne).</summary>
+    /// <summary>Entrées du journal lues par lot (« Afficher plus ancien » en ajoute un de plus).</summary>
     public const int NombreMax = 5000;
 
     /// <summary>Deux scans de la même sortie à moins de 15 minutes d'écart sont regroupés.</summary>
@@ -101,13 +101,27 @@ public sealed class ServiceHistorique(
     };
 
     /// <summary>Événements de la période, les plus récents d'abord ; scans rapprochés regroupés si demandé.</summary>
-    public async Task<IReadOnlyList<EvenementHistorique>> ListerAsync(PeriodeHistorique periode, bool regrouper = true, CancellationToken ct = default)
+    public async Task<IReadOnlyList<EvenementHistorique>> ListerAsync(PeriodeHistorique periode, bool regrouper = true, CancellationToken ct = default) =>
+        (await ListerLotsAsync(periode, 1, regrouper, ct)).Evenements;
+
+    /// <summary>
+    /// Les <paramref name="lots"/> × <see cref="NombreMax"/> entrées les plus récentes de la période, relues depuis le début
+    /// (un regroupement n'est jamais coupé entre deux lots) ; <see cref="JournalLu.PlusAnciens"/> dit s'il en reste avant.
+    /// </summary>
+    public async Task<JournalLu> ListerLotsAsync(PeriodeHistorique periode, int lots, bool regrouper = true, CancellationToken ct = default)
     {
         var depuis = PremierJour(periode) is { } jour
             ? jour.ToDateTime(TimeOnly.MinValue, DateTimeKind.Local).ToUniversalTime()
             : (DateTime?)null;
-        var lignes = await journal.ListerAsync(depuis, NombreMax, ct);
-        return regrouper ? Regrouper(lignes) : lignes.Select(Decrire).ToList();
+        var nombre = Math.Max(1, lots) * NombreMax;
+        var lignes = await journal.ListerAsync(depuis, nombre + 1, ct);
+        var plusAnciens = lignes.Count > nombre;
+        if (plusAnciens)
+        {
+            lignes = lignes.Take(nombre).ToList();
+        }
+
+        return new JournalLu(regrouper ? Regrouper(lignes) : lignes.Select(Decrire).ToList(), plusAnciens);
     }
 
     /// <summary>

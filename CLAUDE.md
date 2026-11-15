@@ -189,7 +189,9 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     SortieId`, à renseigner pour toute nouvelle action journalisée). Type d'événement d'après l'action (`TypeDe`) ; titre et détail
     calculés depuis l'équipement, la sortie et le moniteur liés, sinon le texte enregistré. Scans d'une même sortie, même action,
     à moins de 15 minutes et le même jour → un seul événement « Retour : 3 équipements ». Périodes : 7 jours, 30 jours, saison
-    (1er septembre), tout (5000 entrées au plus). Vie d'un équipement reconstituée depuis sortie_equipement, controle et atelier
+    (1er septembre), tout ; lecture par lots de 5000 (`ListerLotsAsync` → `JournalLu.PlusAnciens`), bouton
+    « Afficher plus ancien » sous le journal qui relit un lot de plus (regroupements jamais coupés, défilement gardé ;
+    l'export suit les lots affichés). Vie d'un équipement reconstituée depuis sortie_equipement, controle et atelier
     (manquant puis retrouvé si rendu après la clôture), pas depuis le journal.
 16. Mode gestion (`ServiceGestion`, maquette « Déverrouillage » et Paramètres › Sécurité) : sans code gestionnaire, rien n'est verrouillé.
     Avec un code (4 à 6 chiffres, haché PBKDF2-SHA256 salé dans `Reglages.CodeGestionnaire`), l'appli démarre en consultation ;
