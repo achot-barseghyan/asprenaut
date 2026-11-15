@@ -74,7 +74,19 @@ public sealed class SeanceTiv
     public DateOnly DateSeance { get; set; }
     public string Heure { get; set; } = "";
     public string Lieu { get; set; } = "";
+
+    /// <summary>Note libre (ce qu'il faut apporter, à qui s'adresser…), 200 caractères au plus.</summary>
+    public string Note { get; set; } = "";
+
+    /// <summary>Annulée : plus proposée ni affichée (rien n'est supprimé).</summary>
+    public bool Annulee { get; set; }
+
+    /// <summary>Inspecteurs TIV choisis pour la séance (table seance_inspecteur), lus par le dépôt.</summary>
+    public List<long> InspecteurIds { get; set; } = [];
 }
+
+/// <summary>Ce qu'on tape pour planifier ou modifier une séance TIV.</summary>
+public sealed record SaisieSeance(DateOnly Date, string? Heure, string? Lieu, IReadOnlyList<long> InspecteurIds, string? Note = null);
 
 /// <summary>Date du dernier contrôle d'un type pour un équipement.</summary>
 public sealed class DernierControle

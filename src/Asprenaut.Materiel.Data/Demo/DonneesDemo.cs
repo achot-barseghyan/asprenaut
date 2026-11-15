@@ -104,6 +104,9 @@ public static class DonneesDemo
         await cx.ExecuteAsync(
             "INSERT INTO seance_tiv (date_seance, heure, lieu) VALUES (@date, '9:00', 'Local du club');",
             new { date = FormatIso.Ecrire(aujourdHui.AddDays(14)) }, tx);
+        await cx.ExecuteAsync(
+            "INSERT INTO seance_inspecteur (seance_id, moniteur_id) SELECT s.id, m.id FROM seance_tiv s, moniteur m WHERE m.inspecteur_tiv = 1 AND m.actif = 1 AND m.genre = 'Moniteur';",
+            transaction: tx);
 
         await cx.ExecuteAsync(
             "INSERT INTO journal (horodatage, action, details) VALUES (@maintenant, 'DonneesDemo', 'Données de démonstration chargées');",

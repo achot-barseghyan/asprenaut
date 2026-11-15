@@ -84,7 +84,24 @@ public sealed class RevisionRepositoryMemoire(BaseMemoire db) : IRevisionReposit
     }
 
     public Task<SeanceTiv?> ProchaineSeanceAsync(DateOnly aPartirDu, CancellationToken ct = default) =>
-        Task.FromResult(Seances.Where(s => s.DateSeance >= aPartirDu).OrderBy(s => s.DateSeance).FirstOrDefault());
+        Task.FromResult(Seances.Where(s => s.DateSeance >= aPartirDu && !s.Annulee).OrderBy(s => s.DateSeance).FirstOrDefault());
+
+    public Task<SeanceTiv?> ObtenirSeanceAsync(long id, CancellationToken ct = default) =>
+        Task.FromResult(Seances.FirstOrDefault(s => s.Id == id));
+
+    public Task ModifierSeanceAsync(SeanceTiv seance, CancellationToken ct = default)
+    {
+        var i = Seances.FindIndex(s => s.Id == seance.Id);
+        Seances[i] = seance;
+        return Task.CompletedTask;
+    }
+
+    public Task AnnulerSeanceAsync(long id, CancellationToken ct = default)
+    {
+        Seances.First(s => s.Id == id).Annulee = true;
+        Planifies.RemoveWhere(p => p.Seance == id);
+        return Task.CompletedTask;
+    }
 
     // --- Étapes (table revision) ---
 

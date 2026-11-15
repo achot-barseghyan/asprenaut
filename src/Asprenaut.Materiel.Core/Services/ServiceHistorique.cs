@@ -51,6 +51,8 @@ public sealed class ServiceHistorique(
         [ActionsJournal.EnvoiAtelier] = (TypeEvenement.Revision, "Envoi en atelier"),
         [ActionsJournal.RetourAtelier] = (TypeEvenement.Revision, "Retour d'atelier"),
         [ActionsJournal.SeanceTivPlanifiee] = (TypeEvenement.Revision, "Séance TIV planifiée"),
+        [ActionsJournal.SeanceTivModifiee] = (TypeEvenement.Revision, "Séance TIV modifiée"),
+        [ActionsJournal.SeanceTivAnnulee] = (TypeEvenement.Revision, "Séance TIV annulée"),
         [ActionsJournal.AjoutSeanceTiv] = (TypeEvenement.Revision, "Ajouté à la séance TIV"),
         [ActionsJournal.RetraitSeanceTiv] = (TypeEvenement.Revision, "Retiré de la séance TIV"),
         [ActionsJournal.RevisionEtape] = (TypeEvenement.Revision, "Révision"),

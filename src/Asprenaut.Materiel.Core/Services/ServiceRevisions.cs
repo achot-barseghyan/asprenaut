@@ -1127,21 +1127,139 @@ public sealed class ServiceRevisions(
 
     // ---------------------------------------------------------------- Séances TIV
 
-    public async Task<ResultatOperation> PlanifierSeanceAsync(DateOnly date, string? heure, string? lieu, CancellationToken ct = default)
+    public const int LongueurHeureSeance = 10;
+    public const int LongueurLieuSeance = 60;
+    public const int LongueurNoteSeance = 200;
+
+    /// <summary>Séance avec tous les inspecteurs TIV actifs (comme avant le choix des inspecteurs).</summary>
+    public async Task<ResultatOperation> PlanifierSeanceAsync(DateOnly date, string? heure, string? lieu, CancellationToken ct = default) =>
+        await PlanifierSeanceAsync(new SaisieSeance(date, heure, lieu, (await InspecteursTivAsync(ct)).Select(m => m.Id).ToList()), ct);
+
+    /// <summary>Nouvelle séance TIV : date à venir, heure, lieu, inspecteurs choisis, note (règle 39).</summary>
+    public async Task<ResultatOperation> PlanifierSeanceAsync(SaisieSeance saisie, CancellationToken ct = default)
     {
         if (gestion?.Exiger(ActionProtegee.Revisions) is { Reussi: false } refus)
         {
             return refus;
         }
 
-        if (date < horloge.AujourdHui)
+        var seance = new SeanceTiv();
+        if (await VerifierSeanceAsync(saisie, seance, [], ct) is { } erreur)
         {
-            return ResultatOperation.Echec("Choisissez une date à venir.");
+            return ResultatOperation.Echec(erreur);
         }
 
-        var id = await revisions.AjouterSeanceAsync(new SeanceTiv { DateSeance = date, Heure = (heure ?? "").Trim(), Lieu = (lieu ?? "").Trim() }, ct);
-        await JournaliserAsync(ActionsJournal.SeanceTivPlanifiee, $"Séance TIV le {Libelles.Date(date)}", ct);
-        return ResultatOperation.Ok($"Séance TIV planifiée le {Libelles.DateLongue(date)}.", id);
+        var id = await revisions.AjouterSeanceAsync(seance, ct);
+        await JournaliserAsync(ActionsJournal.SeanceTivPlanifiee, $"Séance TIV le {Libelles.Date(seance.DateSeance)}", ct);
+        return ResultatOperation.Ok($"Séance TIV planifiée le {Libelles.DateLongue(seance.DateSeance)}.", id);
+    }
+
+    /// <summary>Modifie une séance à venir : mêmes contrôles qu'à la planification ; ses blocs restent prévus.</summary>
+    public async Task<ResultatOperation> ModifierSeanceAsync(long id, SaisieSeance saisie, CancellationToken ct = default)
+    {
+        if (gestion?.Exiger(ActionProtegee.Revisions) is { Reussi: false } refus)
+        {
+            return refus;
+        }
+
+        if (await revisions.ObtenirSeanceAsync(id, ct) is not { Annulee: false } seance)
+        {
+            return ResultatOperation.Echec("Cette séance TIV n'existe plus.");
+        }
+
+        var avant = seance.InspecteurIds.ToList();
+        if (await VerifierSeanceAsync(saisie, seance, avant, ct) is { } erreur)
+        {
+            return ResultatOperation.Echec(erreur);
+        }
+
+        await revisions.ModifierSeanceAsync(seance, ct);
+        await JournaliserAsync(ActionsJournal.SeanceTivModifiee, $"Séance TIV du {Libelles.Date(seance.DateSeance)} modifiée", ct);
+        return ResultatOperation.Ok($"Séance TIV du {Libelles.DateLongue(seance.DateSeance)} enregistrée.", id);
+    }
+
+    /// <summary>
+    /// Annule une séance : elle n'est plus affichée ; ses blocs quittent « Réparation interne » (de retour dans « À prévoir »
+    /// si leur TIV approche). Rien n'est supprimé.
+    /// </summary>
+    public async Task<ResultatOperation> AnnulerSeanceAsync(long id, CancellationToken ct = default)
+    {
+        if (gestion?.Exiger(ActionProtegee.Revisions) is { Reussi: false } refus)
+        {
+            return refus;
+        }
+
+        if (await revisions.ObtenirSeanceAsync(id, ct) is not { Annulee: false } seance)
+        {
+            return ResultatOperation.Echec("Cette séance TIV n'existe plus.");
+        }
+
+        var blocs = await revisions.ListerPlanifiesAsync(id, ct);
+        await revisions.AnnulerSeanceAsync(id, ct);
+        foreach (var equipementId in blocs)
+        {
+            if (await revisions.ObtenirSuiviEnCoursAsync(equipementId, ct) is { Etape: EtapeRevision.Interne, SeanceTiv: true } suivi)
+            {
+                await revisions.SupprimerSuiviAsync(suivi.Id, ct);
+            }
+        }
+
+        await JournaliserAsync(ActionsJournal.SeanceTivAnnulee, $"Séance TIV du {Libelles.Date(seance.DateSeance)} annulée", ct);
+        return ResultatOperation.Ok(blocs.Count == 0
+            ? "Séance TIV annulée."
+            : $"Séance TIV annulée : {Libelles.Pluriel(blocs.Count, "bloc")} de retour dans « À prévoir ».", id);
+    }
+
+    /// <summary>Moniteurs actifs inspecteurs TIV (choix des inspecteurs d'une séance), par nom.</summary>
+    public async Task<IReadOnlyList<Moniteur>> InspecteursTivAsync(CancellationToken ct = default) =>
+        (await moniteurs.ListerAsync(actifsSeulement: true, ct))
+            .Where(m => m.InspecteurTiv && !m.EstClasse)
+            .OrderBy(m => m.Prenom, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(m => m.Nom, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+
+    /// <summary>
+    /// Contrôle la saisie et la recopie dans <paramref name="seance"/> : date à venir, heure 10 car., lieu 60, note 200,
+    /// inspecteurs = moniteurs inspecteurs TIV actifs (ceux déjà choisis restent acceptés). Message d'erreur, ou null.
+    /// </summary>
+    private async Task<string?> VerifierSeanceAsync(SaisieSeance saisie, SeanceTiv seance, IReadOnlyList<long> dejaChoisis, CancellationToken ct)
+    {
+        if (saisie.Date < horloge.AujourdHui)
+        {
+            return "Choisissez une date à venir.";
+        }
+
+        var heure = (saisie.Heure ?? "").Trim();
+        var lieu = (saisie.Lieu ?? "").Trim();
+        var note = (saisie.Note ?? "").Trim();
+        if (heure.Length > LongueurHeureSeance)
+        {
+            return $"Heure trop longue ({LongueurHeureSeance} caractères au plus).";
+        }
+
+        if (lieu.Length > LongueurLieuSeance)
+        {
+            return $"Lieu trop long ({LongueurLieuSeance} caractères au plus).";
+        }
+
+        if (note.Length > LongueurNoteSeance)
+        {
+            return $"Note trop longue ({LongueurNoteSeance} caractères au plus).";
+        }
+
+        var possibles = (await InspecteursTivAsync(ct)).Select(m => m.Id).ToHashSet();
+        var ids = saisie.InspecteurIds.Distinct().ToList();
+        if (ids.Any(i => !possibles.Contains(i) && !dejaChoisis.Contains(i)))
+        {
+            return "Choisissez des moniteurs inspecteurs TIV.";
+        }
+
+        seance.DateSeance = saisie.Date;
+        seance.Heure = heure;
+        seance.Lieu = lieu;
+        seance.Note = note;
+        seance.InspecteurIds = ids;
+        return null;
     }
 
     /// <summary>Prochaine séance, ses inspecteurs, et les blocs dont la TIV tombe avant (ou peu après) elle.</summary>
@@ -1152,9 +1270,10 @@ public sealed class ServiceRevisions(
             return null;
         }
 
-        var inspecteurs = (await moniteurs.ListerAsync(actifsSeulement: true, ct))
-            .Where(m => m.InspecteurTiv)
-            .Select(m => m.NomComplet)
+        var noms = (await moniteurs.ListerAsync(actifsSeulement: false, ct)).ToDictionary(m => m.Id, m => m.NomComplet);
+        var inspecteurs = seance.InspecteurIds
+            .Select(i => noms.GetValueOrDefault(i))
+            .OfType<string>()
             .ToList();
         var limite = seance.DateSeance.AddDays(JoursPreparationSeance);
         var blocs = (await ListerEcheancesAsync(ct))

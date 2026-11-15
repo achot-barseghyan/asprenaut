@@ -43,6 +43,7 @@ public sealed class EcranRevisions : EcranBase
     public EcranRevisions(ServiceRevisions revisions, ServicePrestataires prestataires, ServiceMoniteurs moniteurs, ServiceReglages reglages,
         INavigation navigation, GardeGestion garde, ServiceInventaire inventaire)
     {
+        Disposed += (_, _) => _bulles.Dispose();
         _inventaire = inventaire;
         _revisions = revisions;
         _prestataires = prestataires;
@@ -651,8 +652,13 @@ public sealed class EcranRevisions : EcranBase
     // ---------------------------------------------------------------- Séance TIV
 
     /// <summary>En tête de « Réparation interne » : la prochaine séance, ou le bouton pour en planifier une.</summary>
-    private Control EnteteSeance(ProchaineSeance? prochaine)
+    private Control? EnteteSeance(ProchaineSeance? prochaine)
     {
+        if (!_reglages.Actuels.AfficherSeanceTiv)
+        {
+            return null; // Masquée dans Paramètres › Configuration du club › Séance TIV.
+        }
+
         if (prochaine is null)
         {
             var planifier = new BoutonArrondi("Planifier une séance TIV", StyleBouton.Secondaire, Icones.Calendrier) { AutoSize = false, AfficherPastille = false, Font = Theme.PoliceTitre(9f) };
@@ -665,29 +671,28 @@ public sealed class EcranRevisions : EcranBase
         var titre = $"Séance TIV · {s.DateSeance.ToString("dddd", Libelles.Culture)}{(string.IsNullOrWhiteSpace(s.Heure) ? "" : $" {s.Heure}")}";
         var detail = string.Join(" · ", new[] { s.Lieu, prochaine.Inspecteurs.Count == 0 ? "aucun inspecteur" : string.Join(", ", prochaine.Inspecteurs) }
             .Where(t => !string.IsNullOrWhiteSpace(t)));
-        return new CarteSeance(s.DateSeance, titre, detail);
+        var carte = new CarteSeance(s.DateSeance, titre, detail) { Cursor = Cursors.Hand };
+        var bulle = string.IsNullOrWhiteSpace(s.Note) ? "Cliquez pour modifier la séance" : $"{s.Note}\nCliquez pour modifier la séance";
+        _bulles.SetToolTip(carte, bulle);
+        carte.Click += (_, _) => Executer(() => ModifierSeanceAsync(s));
+        return carte;
     }
+
+    private readonly ToolTip _bulles = new();
 
     private async Task PlanifierAsync()
     {
-        if (!_garde.Exiger(FindForm(), ActionProtegee.Revisions, "Planifier une séance TIV"))
+        if (_garde.Exiger(FindForm(), ActionProtegee.Revisions, "Planifier une séance TIV")
+            && await FormulaireSeanceTiv.OuvrirAsync(FindForm(), _revisions, null))
         {
-            return;
+            await RechargerAsync();
         }
+    }
 
-        var date = new ChampDate { Date = DateOnly.FromDateTime(DateTime.Today).AddDays(7) };
-        var heure = new ChampSaisie { Valeur = "9:00", TexteIndicatif = "9:00" };
-        var lieu = new ChampSaisie { Valeur = "Local du club" };
-        heure.Champ.AccessibleName = "Heure";
-        lieu.Champ.AccessibleName = "Lieu";
-        using var fenetre = new FenetreFormulaire("Planifier une séance TIV", "Planifier", () =>
-            date.Date is { } d
-                ? _revisions.PlanifierSeanceAsync(d, heure.Valeur, lieu.Valeur)
-                : Task.FromResult(ResultatOperation.Echec("Date invalide : écrivez-la comme 21/11/2026.")));
-        fenetre.Champ("Date", date);
-        fenetre.Champ("Heure", heure);
-        fenetre.Champ("Lieu", lieu);
-        if (fenetre.ShowDialog(FindForm()) == DialogResult.OK)
+    private async Task ModifierSeanceAsync(SeanceTiv seance)
+    {
+        if (_garde.Exiger(FindForm(), ActionProtegee.Revisions, "Modifier la séance TIV")
+            && await FormulaireSeanceTiv.OuvrirAsync(FindForm(), _revisions, seance))
         {
             await RechargerAsync();
         }
@@ -1732,7 +1737,7 @@ public sealed class EcranRevisions : EcranBase
         public CarteSeance(DateOnly date, string titre, string detail)
         {
             (_date, _titre, _detail) = (date, titre, detail);
-            AccessibleRole = AccessibleRole.StaticText;
+            AccessibleRole = AccessibleRole.PushButton;
             AccessibleName = $"{titre}, {Libelles.DateLongue(date)}. {detail}";
         }
 

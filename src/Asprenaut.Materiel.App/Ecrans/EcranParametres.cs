@@ -43,9 +43,11 @@ public sealed class EcranParametres : EcranBase
     private readonly ServiceTypesSortie _typesSortie;
     private readonly ServicePrestataires _prestataires;
     private readonly ServiceInventaire _inventaire;
+    private readonly ServiceRevisions _revisions;
 
-    public EcranParametres(ServiceReglages reglages, IServiceSauvegarde sauvegardes, ISauvegardeComplete complete, INavigation navigation, ParametresApplication parametres, ServiceGestion gestion, GardeGestion garde, ServiceExport export, ServiceCompteur compteur, ServiceTypesSortie typesSortie, ServicePrestataires prestataires, ServiceInventaire inventaire)
+    public EcranParametres(ServiceReglages reglages, IServiceSauvegarde sauvegardes, ISauvegardeComplete complete, INavigation navigation, ParametresApplication parametres, ServiceGestion gestion, GardeGestion garde, ServiceExport export, ServiceCompteur compteur, ServiceTypesSortie typesSortie, ServicePrestataires prestataires, ServiceInventaire inventaire, ServiceRevisions revisions)
     {
+        _revisions = revisions;
         _export = export;
         _compteur = compteur;
         _typesSortie = typesSortie;
@@ -88,7 +90,7 @@ public sealed class EcranParametres : EcranBase
     }
 
     private const string SousTitreParametres = "Fonctionnement de l'application : sécurité, pistolet, règles des sorties, sauvegardes, affichage.";
-    private const string SousTitreConfiguration = "Données propres au club : identité, types de sortie, compteurs, niveaux, prestataires, problèmes signalés.";
+    private const string SousTitreConfiguration = "Données propres au club : identité, types de sortie, compteurs, prestataires, séance TIV, problèmes signalés.";
 
     private readonly Bascule _onglets = new("Paramètres", "Configuration du club");
     private readonly TableLayoutPanel _grilleParametres;
@@ -142,13 +144,14 @@ public sealed class EcranParametres : EcranBase
         _sousTitre.Text = configuration ? SousTitreConfiguration : SousTitreParametres;
         if (configuration && _grilleConfiguration is null)
         {
-            _grilleConfiguration = Grille(CarteClub(), CarteTypesSortie(), CarteCompteur(), CartePrestataires(), CarteTuilesSignalement());
+            _grilleConfiguration = Grille(CarteClub(), CarteTypesSortie(), CarteCompteur(), CartePrestataires(), CarteSeanceTiv(), CarteTuilesSignalement());
             _grilleConfiguration.Visible = false;
             Dessin.MettreALEchelle(_grilleConfiguration, this); // Construite après l'affichage : pixels logiques à convertir.
             _cadre.Controls.Add(_grilleConfiguration);
             await AfficherSeuilsAsync();
             await AfficherTypesAsync();
             await AfficherPrestatairesAsync();
+            await AfficherSeanceAsync();
             await ChargerCategoriesTuilesAsync();
             if (IsDisposed)
             {
@@ -1646,6 +1649,153 @@ public sealed class EcranParametres : EcranBase
         {
             await AfficherPrestatairesAsync();
         }
+    }
+
+    // ---------------------------------------------------------------- Séance TIV
+
+    private readonly TableLayoutPanel _seance = new()
+    {
+        ColumnCount = 1,
+        AutoSize = true,
+        AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        BackColor = Color.Transparent,
+        Margin = Padding.Empty,
+    };
+
+    /// <summary>
+    /// Prochaine séance TIV : l'afficher ou non en tête de « Réparation interne » (Révisions), la planifier, la modifier
+    /// (date, heure, lieu, inspecteurs, note) ou l'annuler (ses blocs reviennent dans « À prévoir »).
+    /// </summary>
+    private CarteSection CarteSeanceTiv()
+    {
+        var carte = new CarteSection("Séance TIV", Icones.Calendrier, Theme.AccentClair);
+        carte.Ajouter(Interrupteur("Afficher dans Révisions", "Carte de la prochaine séance en tête de « Réparation interne »",
+            _reglages.Actuels.AfficherSeanceTiv, v => _reglages.Modifier(x => x.AfficherSeanceTiv = v), filet: false));
+        _seance.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        _seance.Margin = new Padding(0, 12, 0, 0);
+        carte.Ajouter(_seance);
+        return carte;
+    }
+
+    private async Task AfficherSeanceAsync()
+    {
+        var prochaine = await _revisions.ProchaineSeanceAsync();
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        _seance.SuspendLayout();
+        while (_seance.Controls.Count > 0)
+        {
+            var c = _seance.Controls[0];
+            _seance.Controls.RemoveAt(0);
+            c.Dispose();
+        }
+
+        _seance.RowStyles.Clear();
+        var lignes = new List<Control>();
+        if (prochaine is null)
+        {
+            var vide = Ui.Libelle("Aucune séance TIV prévue.", Theme.Police(9.75f), Theme.TexteSecondaire);
+            vide.Margin = new Padding(0, 0, 0, 10);
+            var planifier = new BoutonArrondi("Planifier une séance TIV", StyleBouton.Secondaire, Icones.Plus) { Margin = Padding.Empty };
+            planifier.Click += (_, _) => Executer(() => EditerSeanceAsync(null));
+            lignes.Add(vide);
+            lignes.Add(planifier);
+        }
+        else
+        {
+            var s = prochaine.Seance;
+            var quand = Libelles.DateLongue(s.DateSeance);
+            quand = char.ToUpper(quand[0], Libelles.Culture) + quand[1..] + (string.IsNullOrWhiteSpace(s.Heure) ? "" : $" · {s.Heure}");
+            var titre = Ui.Libelle(quand, Theme.PoliceTitre(10.5f), Theme.Texte);
+            titre.Margin = Padding.Empty;
+            var lieu = Ui.Libelle(string.IsNullOrWhiteSpace(s.Lieu) ? "Lieu non précisé" : s.Lieu, Theme.Police(9.75f), Theme.TexteSecondaire);
+            lieu.Margin = new Padding(0, 2, 0, 0);
+            var inspecteurs = Ui.Libelle(prochaine.Inspecteurs.Count == 0 ? "Aucun inspecteur choisi" : $"Inspecteurs : {string.Join(", ", prochaine.Inspecteurs)}",
+                Theme.Police(9.75f), prochaine.Inspecteurs.Count == 0 ? Theme.Avertissement : Theme.TexteSecondaire);
+            inspecteurs.Margin = new Padding(0, 2, 0, 0);
+            inspecteurs.MaximumSize = new Size(560, 0);
+            var textes = new List<Control> { titre, lieu, inspecteurs };
+            if (!string.IsNullOrWhiteSpace(s.Note))
+            {
+                var note = Ui.Libelle(s.Note, Theme.Police(9.75f), Theme.TexteSecondaire);
+                note.Margin = new Padding(0, 2, 0, 0);
+                note.MaximumSize = new Size(560, 0);
+                textes.Add(note);
+            }
+
+            var blocs = Ui.Libelle(prochaine.BlocsAPreparer.Count == 0 ? "Aucun bloc dont la TIV tombe avant la séance."
+                    : $"{Libelles.Pluriel(prochaine.BlocsAPreparer.Count, "bloc")} à préparer (TIV due au plus tard {ServiceRevisions.JoursPreparationSeance} jours après).",
+                Theme.Police(9f), Theme.TexteSecondaire);
+            blocs.Margin = new Padding(0, 6, 0, 0);
+            textes.Add(blocs);
+            var fiche = new CarteType
+            {
+                ColumnCount = 1,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Margin = new Padding(0, 0, 0, 12),
+                Padding = new Padding(14, 12, 12, 12),
+            };
+            fiche.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            foreach (var t in textes)
+            {
+                fiche.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                fiche.Controls.Add(t, 0, fiche.RowStyles.Count - 1);
+            }
+
+            var modifier = new BoutonArrondi("Modifier la séance", StyleBouton.Secondaire) { Margin = new Padding(0, 0, 8, 0) };
+            modifier.Click += (_, _) => Executer(() => EditerSeanceAsync(s));
+            var annuler = new BoutonArrondi("Annuler la séance", StyleBouton.Secondaire) { Margin = Padding.Empty };
+            annuler.Click += (_, _) => Executer(() => AnnulerSeanceAsync(s));
+            var boutons = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true, BackColor = Color.Transparent, Margin = Padding.Empty };
+            boutons.Controls.Add(modifier);
+            boutons.Controls.Add(annuler);
+            lignes.Add(fiche);
+            lignes.Add(boutons);
+        }
+
+        foreach (var ligne in lignes)
+        {
+            if (IsHandleCreated)
+            {
+                Dessin.MettreALEchelle(ligne, this); // Construites après l'affichage : pixels logiques à convertir.
+            }
+
+            _seance.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            ligne.Dock = ligne is FlowLayoutPanel or BoutonArrondi ? DockStyle.None : DockStyle.Fill;
+            _seance.Controls.Add(ligne, 0, _seance.RowStyles.Count - 1);
+        }
+
+        _seance.ResumeLayout(true);
+    }
+
+    private async Task EditerSeanceAsync(SeanceTiv? seance)
+    {
+        if (_garde.Exiger(FindForm(), ActionProtegee.Revisions, seance is null ? "Planifier une séance TIV" : "Modifier la séance TIV")
+            && await FormulaireSeanceTiv.OuvrirAsync(FindForm(), _revisions, seance))
+        {
+            await AfficherSeanceAsync();
+        }
+    }
+
+    private async Task AnnulerSeanceAsync(SeanceTiv seance)
+    {
+        if (!_garde.Exiger(FindForm(), ActionProtegee.Revisions, "Annuler la séance TIV")
+            || !Dialogues.Confirmer(FindForm(), $"Annuler la séance TIV du {Libelles.DateLongue(seance.DateSeance)} ? Les blocs prévus reviennent dans « À prévoir »."))
+        {
+            return;
+        }
+
+        var resultat = await _revisions.AnnulerSeanceAsync(seance.Id);
+        if (!resultat.Reussi)
+        {
+            Dialogues.Erreur(FindForm(), resultat.Message);
+        }
+
+        await AfficherSeanceAsync();
     }
 
     // ---------------------------------------------------------------- Problèmes signalés (tuiles)

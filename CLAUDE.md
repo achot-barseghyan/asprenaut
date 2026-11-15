@@ -122,7 +122,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   rouge), `NoteEtape` « Étape suivante », « Créer et scanner le matériel », Annuler, « Il manque … » et l'erreur du service.
 - **Paramètres** (`EcranParametres`) : deux onglets (`Bascule`). « Paramètres » (fonctionnement de l'app) : Sécurité, Pistolet,
   Règles des sorties, Données et sauvegardes, Affichage, À propos. « Configuration du club » : Club, Types de sortie, Compteur
-  d'utilisation, Prestataires, Problèmes signalés — construit et rempli seulement à sa première ouverture (`AfficherOngletAsync`,
+  d'utilisation, Prestataires, Séance TIV (règle 39), Problèmes signalés — construit et rempli seulement à sa première ouverture (`AfficherOngletAsync`,
   mis à l'échelle à ce moment-là) : la page s'ouvre deux fois plus vite. « Paramètres › Types de sortie / Club / Prestataires /
   Problèmes signalés » dans ce document = cet onglet.
 - **Inventaire** : colonne « Utilisation » (`ServiceCompteur.ListerUtilisationsAsync` : « 64 / 80 utilisations », barre jaune à 90 %,
@@ -473,6 +473,16 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     masqué sinon ; Paramètres : état sous « Sauvegarde complète » (jaune + conseil, ou vert + prochaine date et dossier). Fichier sur
     le même lecteur que la base (`MemeDisque`, racines comparées ; réseau et autre lecteur = externes) : confirmation avant d'enregistrer.
 
+39. Séance TIV configurable (migration 023, `SeanceTivTests`, `SeanceTivDepotsTests`) : Paramètres › Configuration du club ›
+    Séance TIV : interrupteur « Afficher dans Révisions » (`Reglages.AfficherSeanceTiv`, vrai par défaut, action Paramètres ;
+    coupé = ni carte ni bouton « Planifier » en tête de « Réparation interne »), résumé de la prochaine séance (date, heure, lieu,
+    inspecteurs, note, blocs à préparer), « Planifier / Modifier / Annuler la séance » (action Révisions). Fenêtre partagée
+    `Ecrans/FormulaireSeanceTiv` (aussi au clic sur la carte de la séance dans Révisions) : date à venir, heure 10 car., lieu 60,
+    note 200, inspecteurs cochés parmi les moniteurs inspecteurs TIV actifs (`InspecteursTivAsync` ; un déjà choisi reste accepté).
+    `PlanifierSeanceAsync(SaisieSeance)`, `ModifierSeanceAsync`, `AnnulerSeanceAsync` (annulee = 1, rien n'est supprimé ; ses
+    blocs quittent la séance et reviennent dans « À prévoir »). Inspecteurs affichés = ceux choisis (table seance_inspecteur) ;
+    l'ancien `PlanifierSeanceAsync(date, heure, lieu)` prend tous les inspecteurs actifs. Journal `SeanceTivModifiee` / `SeanceTivAnnulee`.
+
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
 à côté de la base d'essai : les essais ne touchent jamais les réglages réels. Préfixe des étiquettes : `CodeScanne.Nettoyer(brut, prefixe)`.
@@ -539,11 +549,13 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   021 : adherent.classe_id (formation en cours = une classe, table moniteur genre Classe) ; reprise : niveau texte → classe du même nom,
   classe créée pour un niveau sans classe (« Autonome »).
   022 : moniteur.couleur (clé de la couleur de la pastille d'une classe, null = d'après l'id).
+  023 : seance_tiv.note et seance_tiv.annulee (0/1), seance_inspecteur (seance_id ON DELETE CASCADE, moniteur_id) ; reprise :
+  chaque séance reçoit les inspecteurs TIV actifs.
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/023_xxx.sql`, sans jamais modifier un script déjà livré
+- Nouvelle migration : ajouter `Migrations/024_xxx.sql`, sans jamais modifier un script déjà livré
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.

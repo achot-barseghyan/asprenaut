@@ -159,8 +159,17 @@ public interface IRevisionRepository
     /// <summary>Retire l'équipement de toutes les séances (intervention faite, ou retiré à la main).</summary>
     Task RetirerDesSeancesAsync(long equipementId, CancellationToken ct = default);
 
-    /// <summary>Première séance à partir de cette date, ou null.</summary>
+    /// <summary>Première séance non annulée à partir de cette date (avec ses inspecteurs), ou null.</summary>
     Task<SeanceTiv?> ProchaineSeanceAsync(DateOnly aPartirDu, CancellationToken ct = default);
+
+    /// <summary>Séance par son id (annulée comprise, avec ses inspecteurs), ou null.</summary>
+    Task<SeanceTiv?> ObtenirSeanceAsync(long id, CancellationToken ct = default);
+
+    /// <summary>Date, heure, lieu, note et inspecteurs (remplacés) de la séance.</summary>
+    Task ModifierSeanceAsync(SeanceTiv seance, CancellationToken ct = default);
+
+    /// <summary>Séance annulée (annulee = 1) ; ses blocs planifiés en sont retirés.</summary>
+    Task AnnulerSeanceAsync(long id, CancellationToken ct = default);
 
     // --- Étapes du tableau des révisions (table revision, migration 016) ---
 

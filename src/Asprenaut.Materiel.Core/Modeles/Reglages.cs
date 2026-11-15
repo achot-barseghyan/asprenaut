@@ -136,6 +136,9 @@ public sealed class Reglages
     /// <summary>Colonnes du tableau des révisions repliées (bande étroite), retenues d'un lancement à l'autre.</summary>
     public List<EtapeRevision> ColonnesRevisionsRepliees { get; set; } = [];
 
+    /// <summary>Prochaine séance TIV montrée en tête de « Réparation interne » (Révisions) ; coupé = ni carte ni bouton.</summary>
+    public bool AfficherSeanceTiv { get; set; } = true;
+
     // --- Club ---
 
     public string NomClub { get; set; } = "Asprenaut";

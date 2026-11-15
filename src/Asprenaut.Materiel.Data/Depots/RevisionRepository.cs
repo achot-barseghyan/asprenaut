@@ -130,10 +130,65 @@ public sealed class RevisionRepository(FabriqueConnexion fabrique) : IRevisionRe
     public async Task<long> AjouterSeanceAsync(SeanceTiv seance, CancellationToken ct = default)
     {
         await using var cx = await fabrique.OuvrirAsync(ct);
+        await using var tx = await cx.BeginTransactionAsync(ct);
         seance.Id = await cx.ExecuteScalarAsync<long>(new CommandDefinition(
-            "INSERT INTO seance_tiv (date_seance, heure, lieu) VALUES (@DateSeance, @Heure, @Lieu) RETURNING id;",
-            new { DateSeance = FormatIso.Ecrire(seance.DateSeance), seance.Heure, seance.Lieu }, cancellationToken: ct));
+            "INSERT INTO seance_tiv (date_seance, heure, lieu, note) VALUES (@DateSeance, @Heure, @Lieu, @Note) RETURNING id;",
+            new { DateSeance = FormatIso.Ecrire(seance.DateSeance), seance.Heure, seance.Lieu, seance.Note }, tx, cancellationToken: ct));
+        await EcrireInspecteursAsync(cx, tx, seance, ct);
+        await tx.CommitAsync(ct);
         return seance.Id;
+    }
+
+    public async Task ModifierSeanceAsync(SeanceTiv seance, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        await using var tx = await cx.BeginTransactionAsync(ct);
+        await cx.ExecuteAsync(new CommandDefinition(
+            "UPDATE seance_tiv SET date_seance = @DateSeance, heure = @Heure, lieu = @Lieu, note = @Note WHERE id = @Id;",
+            new { seance.Id, DateSeance = FormatIso.Ecrire(seance.DateSeance), seance.Heure, seance.Lieu, seance.Note }, tx, cancellationToken: ct));
+        await cx.ExecuteAsync(new CommandDefinition("DELETE FROM seance_inspecteur WHERE seance_id = @Id;", new { seance.Id }, tx, cancellationToken: ct));
+        await EcrireInspecteursAsync(cx, tx, seance, ct);
+        await tx.CommitAsync(ct);
+    }
+
+    private static async Task EcrireInspecteursAsync(System.Data.Common.DbConnection cx, System.Data.Common.DbTransaction tx, SeanceTiv seance, CancellationToken ct)
+    {
+        foreach (var moniteurId in seance.InspecteurIds.Distinct())
+        {
+            await cx.ExecuteAsync(new CommandDefinition(
+                "INSERT OR IGNORE INTO seance_inspecteur (seance_id, moniteur_id) VALUES (@seanceId, @moniteurId);",
+                new { seanceId = seance.Id, moniteurId }, tx, cancellationToken: ct));
+        }
+    }
+
+    public async Task AnnulerSeanceAsync(long id, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        await using var tx = await cx.BeginTransactionAsync(ct);
+        await cx.ExecuteAsync(new CommandDefinition("UPDATE seance_tiv SET annulee = 1 WHERE id = @id;", new { id }, tx, cancellationToken: ct));
+        await cx.ExecuteAsync(new CommandDefinition("DELETE FROM seance_equipement WHERE seance_id = @id;", new { id }, tx, cancellationToken: ct));
+        await tx.CommitAsync(ct);
+    }
+
+    public async Task<SeanceTiv?> ObtenirSeanceAsync(long id, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        var seance = await cx.QueryFirstOrDefaultAsync<SeanceTiv>(new CommandDefinition(
+            $"SELECT {ColonnesSeance} FROM seance_tiv WHERE id = @id;", new { id }, cancellationToken: ct));
+        return await AvecInspecteursAsync(cx, seance, ct);
+    }
+
+    private const string ColonnesSeance = "id, date_seance, heure, lieu, note, annulee";
+
+    private static async Task<SeanceTiv?> AvecInspecteursAsync(System.Data.Common.DbConnection cx, SeanceTiv? seance, CancellationToken ct)
+    {
+        if (seance is not null)
+        {
+            seance.InspecteurIds = (await cx.QueryAsync<long>(new CommandDefinition(
+                "SELECT moniteur_id FROM seance_inspecteur WHERE seance_id = @Id ORDER BY moniteur_id;", new { seance.Id }, cancellationToken: ct))).AsList();
+        }
+
+        return seance;
     }
 
     public async Task<IReadOnlyList<long>> ListerPlanifiesAsync(long seanceId, CancellationToken ct = default)
@@ -162,9 +217,10 @@ public sealed class RevisionRepository(FabriqueConnexion fabrique) : IRevisionRe
     public async Task<SeanceTiv?> ProchaineSeanceAsync(DateOnly aPartirDu, CancellationToken ct = default)
     {
         await using var cx = await fabrique.OuvrirAsync(ct);
-        return await cx.QueryFirstOrDefaultAsync<SeanceTiv>(new CommandDefinition(
-            "SELECT id, date_seance, heure, lieu FROM seance_tiv WHERE date_seance >= @debut ORDER BY date_seance, id LIMIT 1;",
+        var seance = await cx.QueryFirstOrDefaultAsync<SeanceTiv>(new CommandDefinition(
+            $"SELECT {ColonnesSeance} FROM seance_tiv WHERE date_seance >= @debut AND annulee = 0 ORDER BY date_seance, id LIMIT 1;",
             new { debut = FormatIso.Ecrire(aPartirDu) }, cancellationToken: ct));
+        return await AvecInspecteursAsync(cx, seance, ct);
     }
 
     // ---------------------------------------------------------------- Étapes (table revision, migration 016)
