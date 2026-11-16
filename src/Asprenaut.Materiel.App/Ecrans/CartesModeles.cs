@@ -160,7 +160,7 @@ internal sealed class CarteModele : CarteModeleBase
         Ligne("Type", fiche.Type is { } t ? t.Actif ? t.Nom : $"{t.Nom} (masqué)" : "À choisir", fiche.Type is { Actif: true } ? null : Theme.Erreur);
         Ligne(
             "Responsable",
-            fiche.Responsable is { } r ? $"{(r.EstClasse ? "Classe" : "Moniteur")} · {r.NomComplet}{(r.Actif ? "" : r.EstClasse ? " (inactive)" : " (inactif)")}" : "À choisir",
+            fiche.Responsable is { } r ? $"{(r.EstClasse ? "Classe" : "Enseignant")} · {r.NomComplet}{(r.Actif ? "" : r.EstClasse ? " (inactive)" : " (inactif)")}" : "À choisir",
             fiche.Responsable is { Actif: true } ? null : Theme.Erreur);
         Ligne("Lieu", m.Lieu.Trim().Length > 0 ? m.Lieu.Trim() : "Non précisé", m.Lieu.Trim().Length > 0 ? null : Theme.TexteSecondaire);
         var compteur = Libelles.Pluriel(fiche.Utilisations, "utilisation") + (fiche.UtilisationsModifiees ? " · modifié" : "");

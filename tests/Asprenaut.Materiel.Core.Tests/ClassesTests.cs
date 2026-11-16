@@ -115,7 +115,7 @@ public class ClassesTests
 
         Assert.Equal("Cette classe n'est pas disponible.",
             (await _ctx.Sorties.CreerAsync(new NouvelleSortie(new DateOnly(2026, 11, 8), TypeSortie.Fosse, "Fosse", ancienne))).Message);
-        Assert.Equal("Choisissez le responsable : un moniteur ou une classe.",
+        Assert.Equal("Choisissez le responsable : un enseignant ou une classe.",
             (await _ctx.Sorties.CreerAsync(new NouvelleSortie(new DateOnly(2026, 11, 8), TypeSortie.Fosse, "Fosse", null))).Message);
 
         // La fiche de la classe compte ses sorties de la saison, comme pour un moniteur.

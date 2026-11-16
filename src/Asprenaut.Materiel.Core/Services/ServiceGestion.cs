@@ -230,7 +230,7 @@ public sealed class ServiceGestion
     public static string Libelle(ActionProtegee action) => action switch
     {
         ActionProtegee.Materiel => "Ajouter, modifier, supprimer du matériel",
-        ActionProtegee.Moniteurs => "Moniteurs",
+        ActionProtegee.Moniteurs => "Enseignants",
         ActionProtegee.SupprimerSortie => "Supprimer une sortie",
         ActionProtegee.CloturerAvecManquants => "Clôturer avec des manquants",
         ActionProtegee.Revisions => "Enregistrer une révision",

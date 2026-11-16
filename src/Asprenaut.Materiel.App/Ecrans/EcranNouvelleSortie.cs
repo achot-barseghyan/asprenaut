@@ -33,7 +33,7 @@ public sealed class EcranNouvelleSortie : EcranBase
     private readonly ChoixPuces _lieuxRapides = new() { Actions = true, AccessibleName = "Lieux récents", Margin = new Padding(8, 8, 0, 16) };
     private readonly ChampSaisie _intitule = new() { TexteIndicatif = "Ex. Piscine du jeudi" };
     private readonly Pastille _auto = new("AUTO", Theme.Teinte(Theme.Accent, 0.16f), Theme.AccentClair, police: Theme.PoliceGrasse(7.5f), hauteur: 18) { Margin = new Padding(8, 1, 0, 0) };
-    private readonly Bascule _genre = new("Moniteur", "Classe") { Compact = true, AccessibleName = "Type de responsable" };
+    private readonly Bascule _genre = new("Enseignant", "Classe") { Compact = true, AccessibleName = "Type de responsable" };
     private readonly Label _aideGenre = Ui.Libelle("", Theme.Police(9f), Theme.TexteSecondaire);
     private readonly ChoixPersonnes _personnes = new() { Colonnes = 4, LignesVisibles = 3, Margin = new Padding(0, 14, 0, 16) };
     private readonly SelecteurNombre _utilisations = new("Utilisations comptées pour cette sortie", n => Libelles.Pluriel(n, "utilisation")) { Width = 230 };
@@ -384,7 +384,7 @@ public sealed class EcranNouvelleSortie : EcranBase
         RemplirPersonnes();
         if (_responsables.Count == 0)
         {
-            _message.Text = "Aucun responsable enregistré. Ajoutez un moniteur ou une classe dans « Membres ».";
+            _message.Text = "Aucun responsable enregistré. Ajoutez un enseignant ou une classe dans « Membres ».";
         }
 
         Actualiser();
@@ -404,11 +404,11 @@ public sealed class EcranNouvelleSortie : EcranBase
     {
         var g = GenreChoisi();
         var liste = _responsables.Where(m => m.Genre == g).ToList();
-        _aideGenre.Text = g == GenreResponsable.Classe ? "Le matériel est noté au nom de la classe." : "Le moniteur répond du matériel sorti.";
-        _personnes.AccessibleName = g == GenreResponsable.Classe ? "Classe responsable" : "Moniteur responsable";
+        _aideGenre.Text = g == GenreResponsable.Classe ? "Le matériel est noté au nom de la classe." : "L'enseignant répond du matériel sorti.";
+        _personnes.AccessibleName = g == GenreResponsable.Classe ? "Classe responsable" : "Enseignant responsable";
         _personnes.TexteVide = g == GenreResponsable.Classe
             ? "Aucune classe : ajoutez-en une dans Membres › Classes."
-            : "Aucun moniteur : ajoutez-en un dans Membres › Moniteurs.";
+            : "Aucun enseignant : ajoutez-en un dans Membres › Enseignants.";
         _personnes.Remplir(
             liste.Select((m, i) => new ChoixPersonnes.Element(
                 m.Id, EcranMoniteurs.Avatar.Initiales(m), m.NomComplet, FormulaireSortie.Detail(m), EcranMoniteurs.Avatar.Degrade(m, i), m.EstClasse, m.Actif)),
@@ -499,7 +499,7 @@ public sealed class EcranNouvelleSortie : EcranBase
         {
             responsable is null
                 ? new(Icones.Personne, "", "Responsable à choisir", Manquant: true)
-                : new(Icones.Personne, responsable.EstClasse ? "Classe : " : "Moniteur : ", responsable.NomComplet),
+                : new(Icones.Personne, responsable.EstClasse ? "Classe : " : "Enseignant : ", responsable.NomComplet),
             lieu.Length > 0 ? new(Icones.Lieu, "", lieu) : new(Icones.Lieu, "Lieu non précisé", ""),
             new(Icones.Liste, "", n.ToString(Libelles.Culture), $" {(n > 1 ? "utilisations" : "utilisation")} par équipement"),
         };

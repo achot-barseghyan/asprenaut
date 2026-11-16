@@ -28,8 +28,8 @@ public sealed class EcranMoniteurs : EcranBase
     private readonly GrilleAdaptative _cartes = new() { LargeurMin = 250, HauteurElement = 176, Ecart = 14, Margin = new Padding(0, 0, 22, 0) };
     private readonly Panel _fiche = new() { AutoScroll = true, BackColor = Theme.Surface, Margin = Padding.Empty };
     private readonly Carte _carteFiche = new() { Padding = new Padding(24), CouleurBordure = Theme.BordureForte };
-    private readonly Bascule _onglets = new("Adhérents", "Moniteurs", "Classes");
-    private readonly BoutonArrondi _ajouter = new("Ajouter un moniteur", StyleBouton.Principal, Icones.Plus);
+    private readonly Bascule _onglets = new("Adhérents", "Enseignants", "Classes");
+    private readonly BoutonArrondi _ajouter = new("Ajouter un enseignant", StyleBouton.Principal, Icones.Plus);
     private readonly BoutonArrondi _importer = new("Importer la liste Excel", StyleBouton.Secondaire, Icones.Document) { Visible = false };
     private readonly BoutonArrondi _modele = new("Modèle Excel à remplir", StyleBouton.Secondaire, Icones.Telecharger) { Visible = false };
     private readonly Reglages _reglages;
@@ -196,8 +196,8 @@ public sealed class EcranMoniteurs : EcranBase
         }
 
         _niveau.Visible = Adherents;
-        _filtre.Unite = Adherents ? "adhérent" : "moniteur";
-        var indicatif = Adherents ? "Rechercher un adhérent…" : "Rechercher un moniteur (nom, niveau, téléphone)…";
+        _filtre.Unite = Adherents ? "adhérent" : "enseignant";
+        var indicatif = Adherents ? "Rechercher un adhérent…" : "Rechercher un enseignant (nom, niveau, téléphone)…";
         if (_recherche.Champ.PlaceholderText != indicatif)
         {
             _recherche.Champ.PlaceholderText = indicatif;
@@ -216,7 +216,7 @@ public sealed class EcranMoniteurs : EcranBase
         }
 
         var genre = Genre;
-        _ajouter.Text = Classes ? "Ajouter une classe" : "Ajouter un moniteur";
+        _ajouter.Text = Classes ? "Ajouter une classe" : "Ajouter un enseignant";
         _ajouter.AccessibleName = _ajouter.Text;
         var duGenre = _tous.Where(f => f.Moniteur.Genre == genre).ToList();
         if (Classes)
@@ -300,7 +300,7 @@ public sealed class EcranMoniteurs : EcranBase
         }
         else if (detail is null)
         {
-            Ligne(Ui.Libelle(Classes ? "Aucune classe. Cliquez sur « Ajouter une classe »." : "Aucun moniteur. Cliquez sur « Ajouter un moniteur ».", Theme.Police(11f), Theme.TexteSecondaireClair));
+            Ligne(Ui.Libelle(Classes ? "Aucune classe. Cliquez sur « Ajouter une classe »." : "Aucun enseignant. Cliquez sur « Ajouter un enseignant ».", Theme.Police(11f), Theme.TexteSecondaireClair));
         }
         else
         {
@@ -394,7 +394,7 @@ public sealed class EcranMoniteurs : EcranBase
         // Un moniteur peut redevenir simple adhérent (pas une classe).
         if (!m.EstClasse)
         {
-            ligne(BoutonPassage("Passer en adhérent", "Ce n'est plus un moniteur : il devient un simple adhérent", () => PasserAdherentAsync(m)));
+            ligne(BoutonPassage("Passer en adhérent", "Ce n'est plus un enseignant : il devient un simple adhérent", () => PasserAdherentAsync(m)));
         }
     }
 
@@ -416,9 +416,9 @@ public sealed class EcranMoniteurs : EcranBase
     /// <summary>L'adhérent devient moniteur (confirmation), puis l'onglet Moniteurs s'ouvre sur sa fiche.</summary>
     private async Task PasserMoniteurAsync(Adherent a)
     {
-        if (!_garde.Exiger(FindForm(), ActionProtegee.Moniteurs, "Passer en moniteur")
+        if (!_garde.Exiger(FindForm(), ActionProtegee.Moniteurs, "Passer en enseignant")
             || !Dialogues.Confirmer(FindForm(),
-                $"{a.NomComplet} devient moniteur ?\n\nSa fiche d'adhérent est supprimée s'il n'a jamais pris de matériel en sortie, sinon désactivée (son historique est gardé). Il pourra être responsable des sorties."))
+                $"{a.NomComplet} devient enseignant ?\n\nSa fiche d'adhérent est supprimée s'il n'a jamais pris de matériel en sortie, sinon désactivée (son historique est gardé). Il pourra être responsable des sorties."))
         {
             return;
         }
@@ -441,7 +441,7 @@ public sealed class EcranMoniteurs : EcranBase
     {
         if (!_garde.Exiger(FindForm(), ActionProtegee.Moniteurs, "Passer en adhérent")
             || !Dialogues.Confirmer(FindForm(),
-                $"{m.NomComplet} n'est plus moniteur ?\n\nIl devient un simple adhérent et ne sera plus proposé comme responsable. Ses sorties restent à son nom."))
+                $"{m.NomComplet} n'est plus enseignant ?\n\nIl devient un simple adhérent et ne sera plus proposé comme responsable. Ses sorties restent à son nom."))
         {
             return;
         }
@@ -669,7 +669,7 @@ public sealed class EcranMoniteurs : EcranBase
         actions.Height = Theme.HauteurBouton;
         actions.Margin = new Padding(0, 18, 0, 0);
         ligne(actions);
-        ligne(BoutonPassage("Passer en moniteur", "Cet adhérent devient moniteur : il pourra être responsable des sorties", () => PasserMoniteurAsync(a)));
+        ligne(BoutonPassage("Passer en enseignant", "Cet adhérent devient enseignant : il pourra être responsable des sorties", () => PasserMoniteurAsync(a)));
     }
 
     /// <summary>Désactive (avec confirmation) ou réactive l'adhérent, puis relit la liste.</summary>
@@ -1043,7 +1043,7 @@ public sealed class EcranMoniteurs : EcranBase
         }
         else
         {
-            parties.Add("Moniteur");
+            parties.Add("Enseignant");
             if (!string.IsNullOrWhiteSpace(m.Niveau))
             {
                 parties.Add(m.Niveau);
@@ -1073,7 +1073,7 @@ public sealed class EcranMoniteurs : EcranBase
     /// </summary>
     private async Task ModifierMoniteurAsync(Moniteur? m)
     {
-        var titre = m is null ? "Ajouter un moniteur" : "Modifier le moniteur";
+        var titre = m is null ? "Ajouter un enseignant" : "Modifier l'enseignant";
         if (!_garde.Exiger(FindForm(), ActionProtegee.Moniteurs, titre))
         {
             return;
@@ -1160,7 +1160,7 @@ public sealed class EcranMoniteurs : EcranBase
             "Peut faire les TIV des blocs du club.", tiv, Theme.Avertissement));
         if (m is not null)
         {
-            var carteActif = roles.Ajouter(new CarteAutorisation(new TuileIcone(Icones.Personne, null, Theme.AccentClair), "Moniteur actif", "", actif, Theme.Accent));
+            var carteActif = roles.Ajouter(new CarteAutorisation(new TuileIcone(Icones.Personne, null, Theme.AccentClair), "Enseignant actif", "", actif, Theme.Accent));
             void AfficherActif() => carteActif.Description = actif.Checked
                 ? "Proposé comme responsable des sorties."
                 : "Inactif : plus proposé pour les sorties ; son historique est gardé.";

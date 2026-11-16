@@ -60,13 +60,13 @@ public class ExportEtCompteurDepotsTests : IAsyncLifetime
 
         var fichiers = await new ServiceExport(new ExportRepository(_base.Fabrique), Horloge).ExporterAsync();
 
-        Assert.Equal(["materiel.csv", "moniteurs.csv", "sorties.csv", "materiel_des_sorties.csv", "adherents.csv", "controles.csv", "atelier.csv", "seances_tiv.csv", "journal.csv", "manuels.csv", "signalements.csv", "interventions_prevues.csv", "prestataires.csv", "revisions.csv", "modeles_sortie.csv"],
+        Assert.Equal(["materiel.csv", "enseignants.csv", "sorties.csv", "materiel_des_sorties.csv", "adherents.csv", "controles.csv", "atelier.csv", "seances_tiv.csv", "journal.csv", "manuels.csv", "signalements.csv", "interventions_prevues.csv", "prestataires.csv", "revisions.csv", "modeles_sortie.csv"],
             fichiers.Select(f => f.Nom));
         var materiel = fichiers[0].Contenu.Split(Environment.NewLine);
         Assert.Equal(15, fichiers[0].Lignes);
         Assert.StartsWith("Code;Équipement;Catégorie;Marque;Modèle;Taille;N° série;État;Dernière révision;", materiel[0], StringComparison.Ordinal);
         Assert.Contains(materiel, l => l.StartsWith("BLOC-034;Bloc 6 L alu;Blocs;;;;;Hors service;;", StringComparison.Ordinal));
-        Assert.Contains("Moniteur;Pascal;Durand;;MF1;;06 12 34 56 78;Oui;Oui", fichiers[1].Contenu, StringComparison.Ordinal);
+        Assert.Contains("Enseignant;Pascal;Durand;;MF1;;06 12 34 56 78;Oui;Oui", fichiers[1].Contenu, StringComparison.Ordinal);
         Assert.Contains("Classe;;Niveau 2;N2;;;;Non;Oui", fichiers[1].Contenu, StringComparison.Ordinal);
         Assert.Contains($";06/11/2026;Piscine;Piscine;Pascal Durand;;En cours;1;0;", fichiers[2].Contenu, StringComparison.Ordinal);
         Assert.Contains(";Piscine;S01;Gilet Aqualung;Rendu;", fichiers[3].Contenu, StringComparison.Ordinal);

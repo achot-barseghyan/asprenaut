@@ -44,7 +44,7 @@ public sealed class SortieResume
     public GenreResponsable MoniteurGenre { get; set; }
 
     /// <summary>« Moniteur : Pascal Durand » ou « Classe : Niveau 2 ».</summary>
-    public string LibelleResponsable => $"{(MoniteurGenre == GenreResponsable.Classe ? "Classe" : "Moniteur")} : {MoniteurNom}";
+    public string LibelleResponsable => $"{(MoniteurGenre == GenreResponsable.Classe ? "Classe" : "Enseignant")} : {MoniteurNom}";
     public DateTime? DepartValideLe { get; set; }
     public DateTime? ClotureeLe { get; set; }
     public int NbTotal { get; set; }

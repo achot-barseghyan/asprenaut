@@ -377,7 +377,7 @@ public sealed class ServiceAdherents(
 
         if (classes is null)
         {
-            return ResultatOperation.Echec("Les moniteurs ne sont pas disponibles.");
+            return ResultatOperation.Echec("Les enseignants ne sont pas disponibles.");
         }
 
         if (await adherents.ObtenirAsync(adherentId, ct) is not { } a)
@@ -438,10 +438,10 @@ public sealed class ServiceAdherents(
         }
 
         await JournaliserAsync(ActionsJournal.AdherentDevenuMoniteur,
-            $"{a.NomComplet} : adhérent devenu moniteur{(supprime ? " (fiche d'adhérent supprimée)" : "")}", ct);
+            $"{a.NomComplet} : adhérent devenu enseignant{(supprime ? " (fiche d'adhérent supprimée)" : "")}", ct);
         return ResultatOperation.Ok(supprime
-            ? $"{a.NomComplet} est maintenant moniteur. Sa fiche d'adhérent, sans aucune sortie, est supprimée. Complétez son niveau dans sa fiche."
-            : $"{a.NomComplet} est maintenant moniteur. Complétez son niveau dans sa fiche.", moniteurId);
+            ? $"{a.NomComplet} est maintenant enseignant. Sa fiche d'adhérent, sans aucune sortie, est supprimée. Complétez son niveau dans sa fiche."
+            : $"{a.NomComplet} est maintenant enseignant. Complétez son niveau dans sa fiche.", moniteurId);
     }
 
     /// <summary>
@@ -458,7 +458,7 @@ public sealed class ServiceAdherents(
 
         if (classes is null || await classes.ObtenirAsync(moniteurId, ct) is not { } m)
         {
-            return ResultatOperation.Echec("Ce moniteur n'existe plus.");
+            return ResultatOperation.Echec("Cet enseignant n'existe plus.");
         }
 
         if (m.EstClasse)
@@ -511,7 +511,7 @@ public sealed class ServiceAdherents(
             await classes.MettreAJourAsync(m, ct);
         }
 
-        await JournaliserAsync(ActionsJournal.MoniteurDevenuAdherent, $"{m.NomComplet} : moniteur devenu adhérent", ct);
+        await JournaliserAsync(ActionsJournal.MoniteurDevenuAdherent, $"{m.NomComplet} : enseignant devenu adhérent", ct);
         return ResultatOperation.Ok($"{m.NomComplet} est maintenant un simple adhérent.", adherentId);
     }
 

@@ -284,7 +284,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     couleur de la pastille (migration 022, `Moniteur.Couleur`, clé de `Moniteur.CouleursClasse`, inconnue = null → `CouleurEffective`
     d'après l'id ; `Theme.CouleurClasse` / `DegradeClasse`, fixes dans les deux thèmes ; `ServiceMoniteurs.CouleurProposee` = première
     libre) ; ni téléphone, ni licence, ni niveau, ni TIV (jamais inspecteur). Moniteur : n° de licence facultatif (migration 026, `Moniteur.Licence`,
-    majuscules, 30 car., unique parmi les moniteurs, sur la fiche, dans moniteurs.csv). Le genre ne change pas à la modification.
+    majuscules, 30 car., unique parmi les moniteurs, sur la fiche, dans enseignants.csv). Le genre ne change pas à la modification.
     Fenêtres (maquettes « Ajouter un moniteur » / « Ajouter une classe », `EcranMoniteurs.ModifierMoniteurAsync` / `ModifierClasseAsync`) :
     moniteur en trois sections (Identité, Niveau d'encadrement : puces `ServiceMoniteurs.NiveauxEncadrement` E1… MF2 ou « Autre
     niveau » tapé, `NiveauPropose` ; Rôles au club : carte Inspecteur TIV, + carte « Moniteur actif » en modification), en-tête violet
@@ -634,6 +634,9 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
 ## Conventions
 
 - Noms métier en français (Sortie, Equipement, Moniteur, Rendu…), anglais toléré pour la technique.
+- **À l'écran on dit « Enseignant »**, jamais « moniteur » (boutons, messages, journal, onglet Membres › Enseignants, export
+  enseignants.csv, colonne « Responsable »). Le code, la base (table moniteur) et parametres.json gardent « Moniteur ». Seules
+  exceptions : les qualités des niveaux E3 / E4 (« Moniteur », titre fédéral) et les anciennes lignes du journal.
 - Accès aux données asynchrones (`…Async`, `CancellationToken ct = default`).
 - **Aucune logique métier dans les écrans** : un écran appelle un service Core et affiche le résultat.
   Les écrans passent par les services, jamais directement par les dépôts.

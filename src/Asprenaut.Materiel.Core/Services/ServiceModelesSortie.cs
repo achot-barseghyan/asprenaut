@@ -164,7 +164,7 @@ public sealed class ServiceModelesSortie(
         var responsable = saisie.MoniteurId is { } mid ? await moniteurs.ObtenirAsync(mid, ct) : null;
         if (responsable is null || (!responsable.Actif && responsable.Id != actuel?.MoniteurId))
         {
-            return ResultatOperation.Echec("Choisissez le responsable : un moniteur ou une classe.");
+            return ResultatOperation.Echec("Choisissez le responsable : un enseignant ou une classe.");
         }
 
         var n = saisie.Utilisations ?? type.Utilisations;

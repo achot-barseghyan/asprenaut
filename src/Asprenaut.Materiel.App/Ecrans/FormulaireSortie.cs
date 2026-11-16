@@ -55,7 +55,7 @@ internal static class FormulaireSortie
         compteurNotes.Anchor = AnchorStyles.Right;
         compteurNotes.Margin = new Padding(0, 6, 0, 12);
 
-        var genre = new Bascule("Moniteur", "Classe") { Compact = true, AccessibleName = "Type de responsable", Margin = new Padding(0, 0, 0, 12) };
+        var genre = new Bascule("Enseignant", "Classe") { Compact = true, AccessibleName = "Type de responsable", Margin = new Padding(0, 0, 0, 12) };
         var personnes = new ChoixPersonnes { LignesVisibles = 3, Margin = new Padding(0, 0, 0, 14) };
         var choixParGenre = new Dictionary<GenreResponsable, long?> { [genreInitial] = s.MoniteurId };
 
@@ -131,10 +131,10 @@ internal static class FormulaireSortie
         {
             var g = GenreChoisi();
             var liste = responsables.Where(m => m.Genre == g).ToList();
-            personnes.AccessibleName = g == GenreResponsable.Classe ? "Classe responsable" : "Moniteur responsable";
+            personnes.AccessibleName = g == GenreResponsable.Classe ? "Classe responsable" : "Enseignant responsable";
             personnes.TexteVide = g == GenreResponsable.Classe
                 ? "Aucune classe : ajoutez-en une dans Membres › Classes."
-                : "Aucun moniteur : ajoutez-en un dans Membres › Moniteurs.";
+                : "Aucun enseignant : ajoutez-en un dans Membres › Enseignants.";
             personnes.Remplir(
                 liste.Select((m, i) => new ChoixPersonnes.Element(
                     m.Id,
@@ -166,7 +166,7 @@ internal static class FormulaireSortie
             compteurNotes.Text = $"{notes.Valeur.Length} / {LongueurNotes}";
 
             var r = Responsable();
-            var detail = r is null ? "Responsable à choisir" : $"{(r.EstClasse ? "Classe" : "Moniteur")} : {r.NomComplet}";
+            var detail = r is null ? "Responsable à choisir" : $"{(r.EstClasse ? "Classe" : "Enseignant")} : {r.NomComplet}";
             if (lieu.Valeur.Trim().Length > 0)
             {
                 detail += $" · {lieu.Valeur.Trim()}";
@@ -328,7 +328,7 @@ internal static class FormulaireSortie
 
             if (parties.Count == 0)
             {
-                parties.Add("Moniteur");
+                parties.Add("Enseignant");
             }
         }
 

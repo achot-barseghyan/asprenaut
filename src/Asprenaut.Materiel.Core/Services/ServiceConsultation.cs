@@ -179,7 +179,7 @@ public sealed class ServiceMoniteurs(IMoniteurRepository moniteurs, ISortieRepos
         Moniteur? existant = null;
         if (saisie.Id != 0 && (existant = await moniteurs.ObtenirAsync(saisie.Id, ct)) is null)
         {
-            return ResultatOperation.Echec(saisie.EstClasse ? "Classe introuvable." : "Moniteur introuvable.");
+            return ResultatOperation.Echec(saisie.EstClasse ? "Classe introuvable." : "Enseignant introuvable.");
         }
 
         var genre = existant?.Genre ?? saisie.Genre;
@@ -226,12 +226,12 @@ public sealed class ServiceMoniteurs(IMoniteurRepository moniteurs, ISortieRepos
         if (moniteur.Id == 0)
         {
             var id = await moniteurs.AjouterAsync(moniteur, ct);
-            await JournaliserAsync(ActionsJournal.MoniteurCree, $"Moniteur {moniteur.NomComplet} ajouté", ct);
+            await JournaliserAsync(ActionsJournal.MoniteurCree, $"Enseignant {moniteur.NomComplet} ajouté", ct);
             return ResultatOperation.Ok($"{moniteur.NomComplet} ajouté.", id);
         }
 
         await moniteurs.MettreAJourAsync(moniteur, ct);
-        await JournaliserAsync(ActionsJournal.MoniteurModifie, $"Moniteur {moniteur.NomComplet} modifié", ct);
+        await JournaliserAsync(ActionsJournal.MoniteurModifie, $"Enseignant {moniteur.NomComplet} modifié", ct);
         return ResultatOperation.Ok($"{moniteur.NomComplet} enregistré.", moniteur.Id);
     }
 

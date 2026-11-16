@@ -194,13 +194,13 @@ public sealed class ServiceSortie(
 
         if (demande.MoniteurId is not { } moniteurId)
         {
-            return ResultatOperation.Echec("Choisissez le responsable : un moniteur ou une classe.");
+            return ResultatOperation.Echec("Choisissez le responsable : un enseignant ou une classe.");
         }
 
         var moniteur = await moniteurs.ObtenirAsync(moniteurId, ct);
         if (moniteur is null || !moniteur.Actif)
         {
-            return ResultatOperation.Echec(moniteur?.EstClasse == true ? "Cette classe n'est pas disponible." : "Ce moniteur n'est pas disponible.");
+            return ResultatOperation.Echec(moniteur?.EstClasse == true ? "Cette classe n'est pas disponible." : "Cet enseignant n'est pas disponible.");
         }
 
         var (famille, typeId, utilisationsDuType, nominatif, erreurType) = await TypeAsync(demande, null, ct);
@@ -269,13 +269,13 @@ public sealed class ServiceSortie(
 
         if (demande.MoniteurId is not { } moniteurId)
         {
-            return ResultatOperation.Echec("Choisissez le responsable : un moniteur ou une classe.");
+            return ResultatOperation.Echec("Choisissez le responsable : un enseignant ou une classe.");
         }
 
         var moniteur = await moniteurs.ObtenirAsync(moniteurId, ct);
         if (moniteur is null || (!moniteur.Actif && moniteurId != sortie.MoniteurId))
         {
-            return ResultatOperation.Echec(moniteur?.EstClasse == true ? "Cette classe n'est pas disponible." : "Ce moniteur n'est pas disponible.");
+            return ResultatOperation.Echec(moniteur?.EstClasse == true ? "Cette classe n'est pas disponible." : "Cet enseignant n'est pas disponible.");
         }
 
         var (famille, typeId, utilisationsDuType, nominatif, erreurType) = await TypeAsync(demande, sortie.TypeId, ct);

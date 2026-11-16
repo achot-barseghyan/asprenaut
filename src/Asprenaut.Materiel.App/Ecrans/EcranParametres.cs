@@ -2208,7 +2208,7 @@ public sealed class EcranParametres : EcranBase
             ?? picto.Items[^1];
         var apercu = new PictoTuile((picto.SelectedItem as Choix<string>)?.Valeur) { Size = new Size(52, 52), Margin = new Padding(0, 0, 0, 12) };
         picto.SelectedIndexChanged += (_, _) => apercu.Cle = (picto.SelectedItem as Choix<string>)?.Valeur;
-        var obligatoire = new CaseOption("Précision obligatoire", "Le moniteur doit écrire une précision quand il choisit cette tuile.")
+        var obligatoire = new CaseOption("Précision obligatoire", "L'enseignant doit écrire une précision quand il choisit cette tuile.")
         {
             Checked = actuelle?.PrecisionObligatoire ?? false,
             Dock = DockStyle.Fill,
@@ -2545,7 +2545,7 @@ public sealed class EcranParametres : EcranBase
                 var xt = (int)(boite.Right + Ec(14));
                 var milieu = (int)(c.Top + (c.Height / 2));
                 Dessin.Texte(g, "Précision obligatoire", Theme.PoliceTitre(10f), Rectangle.FromLTRB(xt, milieu - (int)Ec(21), (int)(c.Right - Ec(10)), milieu), Theme.Texte);
-                Dessin.Texte(g, "Le moniteur doit écrire une précision quand il choisit cette tuile.", Theme.Police(9f),
+                Dessin.Texte(g, "L'enseignant doit écrire une précision quand il choisit cette tuile.", Theme.Police(9f),
                     Rectangle.FromLTRB(xt, milieu, (int)(c.Right - Ec(10)), milieu + (int)Ec(20)), Theme.TexteSecondaireClair);
             }
 

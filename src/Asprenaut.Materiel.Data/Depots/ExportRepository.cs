@@ -29,8 +29,8 @@ public sealed class ExportRepository(FabriqueConnexion fabrique) : IExportReposi
              new("Étrier / DIN", GenreColonne.Montage), new("Marque deuxième étage"), new("Deuxième étage"), new("N° deuxième étage"),
              new("D.S", GenreColonne.OuiNon), new("Mano"), new("Octopus"), new("N° octopus"), new("Nitrox", GenreColonne.OuiNon), new("Notes"),
              new("Ajouté le", GenreColonne.Horodatage)]),
-        ("moniteurs.csv",
-            "SELECT m.genre, m.prenom, m.nom, m.abrege, m.niveau, m.licence, m.telephone, m.inspecteur_tiv, m.actif FROM moniteur m ORDER BY m.genre = 'Classe', m.nom, m.prenom",
+        ("enseignants.csv",
+            "SELECT CASE m.genre WHEN 'Classe' THEN 'Classe' ELSE 'Enseignant' END, m.prenom, m.nom, m.abrege, m.niveau, m.licence, m.telephone, m.inspecteur_tiv, m.actif FROM moniteur m ORDER BY m.genre = 'Classe', m.nom, m.prenom",
             [new("Responsable"), new("Prénom"), new("Nom"), new("Abrégé"), new("Niveau"), new("Licence"), new("Téléphone"), new("Inspecteur TIV", GenreColonne.OuiNon), new("Actif", GenreColonne.OuiNon)]),
         ("sorties.csv",
             $"""
@@ -41,7 +41,7 @@ public sealed class ExportRepository(FabriqueConnexion fabrique) : IExportReposi
             FROM sortie s JOIN moniteur m ON m.id = s.moniteur_id LEFT JOIN type_sortie ts ON ts.id = s.type_sortie_id
             ORDER BY s.date_sortie, s.id
             """,
-            [new("N°"), new("Date", GenreColonne.Date), new("Type", GenreColonne.TypeSortie), new("Intitulé"), new("Moniteur"), new("Lieu"),
+            [new("N°"), new("Date", GenreColonne.Date), new("Type", GenreColonne.TypeSortie), new("Intitulé"), new("Responsable"), new("Lieu"),
              new("Statut", GenreColonne.StatutSortie), new("Équipements"), new("Manquants"), new("Départ validé le", GenreColonne.Horodatage),
              new("Clôturée le", GenreColonne.Horodatage), new("Notes")]),
         ("materiel_des_sorties.csv",

@@ -48,7 +48,7 @@ internal static class FormulaireModele
         var aideIntitule = Ui.Libelle("Vide : construit à partir du type, du jour et du responsable.", Theme.Police(9f), Theme.TexteSecondaire);
         aideIntitule.Margin = new Padding(0, 6, 0, 4);
 
-        var genre = new Bascule("Moniteur", "Classe") { Compact = true, AccessibleName = "Type de responsable", Margin = new Padding(0, 0, 0, 12) };
+        var genre = new Bascule("Enseignant", "Classe") { Compact = true, AccessibleName = "Type de responsable", Margin = new Padding(0, 0, 0, 12) };
         var personnes = new ChoixPersonnes { LignesVisibles = 3, Margin = new Padding(0, 0, 0, 4) };
         var choixParGenre = new Dictionary<GenreResponsable, long?> { [genreInitial] = m?.MoniteurId };
 
@@ -112,10 +112,10 @@ internal static class FormulaireModele
         void RemplirPersonnes()
         {
             var g = GenreChoisi();
-            personnes.AccessibleName = g == GenreResponsable.Classe ? "Classe responsable" : "Moniteur responsable";
+            personnes.AccessibleName = g == GenreResponsable.Classe ? "Classe responsable" : "Enseignant responsable";
             personnes.TexteVide = g == GenreResponsable.Classe
                 ? "Aucune classe : ajoutez-en une dans Membres › Classes."
-                : "Aucun moniteur : ajoutez-en un dans Membres › Moniteurs.";
+                : "Aucun enseignant : ajoutez-en un dans Membres › Enseignants.";
             personnes.Remplir(
                 responsables.Where(r => r.Genre == g).Select((r, i) => new ChoixPersonnes.Element(
                     r.Id, EcranMoniteurs.Avatar.Initiales(r), r.NomComplet, FormulaireSortie.Detail(r), EcranMoniteurs.Avatar.Degrade(r, i), r.EstClasse, r.Actif)),

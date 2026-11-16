@@ -1251,7 +1251,7 @@ public sealed class ServiceRevisions(
         var ids = saisie.InspecteurIds.Distinct().ToList();
         if (ids.Any(i => !possibles.Contains(i) && !dejaChoisis.Contains(i)))
         {
-            return "Choisissez des moniteurs inspecteurs TIV.";
+            return "Choisissez des enseignants inspecteurs TIV.";
         }
 
         seance.DateSeance = saisie.Date;

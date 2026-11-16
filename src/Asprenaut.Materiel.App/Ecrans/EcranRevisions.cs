@@ -1972,7 +1972,7 @@ public sealed class EcranRevisions : EcranBase
             };
             if (tiv && _inspecteur.Items.Count == 0)
             {
-                _consequence.Afficher(NiveauResultat.Avertissement, "Aucun inspecteur TIV : cochez « Inspecteur TIV » sur la fiche d'un moniteur.");
+                _consequence.Afficher(NiveauResultat.Avertissement, "Aucun inspecteur TIV : cochez « Inspecteur TIV » sur la fiche d'un enseignant.");
                 return;
             }
 
