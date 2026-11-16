@@ -265,7 +265,8 @@ public sealed class Tuile : Button
         Dessin.EffacerAvecParent(this, g);
         Dessin.Qualite(g);
         var r = new RectangleF(0.5f, 0.5f, Width - 2, Height - 2);
-        using (var chemin = Dessin.Arrondi(r, Dessin.Echelle(this, 18)))
+        var rayon = Disposition == DispositionTuile.Horizontale ? 14 : 18;
+        using (var chemin = Dessin.Arrondi(r, Dessin.Echelle(this, rayon)))
         {
             using var pinceau = new System.Drawing.Drawing2D.LinearGradientBrush(new PointF(0, 0), new PointF(0, Height + 1), haut, bas);
             g.FillPath(pinceau, chemin);
@@ -278,7 +279,7 @@ public sealed class Tuile : Button
             if (Focused && ShowFocusCues)
             {
                 using var focus = new Pen(_selectionne ? Theme.TexteSurAccent : Theme.Accent, Dessin.Echelle(this, 1.5f));
-                using var interieur = Dessin.Arrondi(RectangleF.Inflate(r, -3, -3), Dessin.Echelle(this, 15));
+                using var interieur = Dessin.Arrondi(RectangleF.Inflate(r, -3, -3), Dessin.Echelle(this, rayon - 3));
                 g.DrawPath(focus, interieur);
             }
         }
@@ -294,19 +295,20 @@ public sealed class Tuile : Button
             return;
         }
 
-        var cote = Dessin.Echelle(this, 42);
-        var x = Dessin.Echelle(this, 14);
+        // Tuiles compactes (inventaire) : pictogramme de 32, nombre et libellé plus petits.
+        var cote = Dessin.Echelle(this, 32);
+        var x = Dessin.Echelle(this, 11);
         var boite = new RectangleF(x, (Height - cote) / 2, cote, cote);
-        using (var cheminBoite = Dessin.Arrondi(boite, Dessin.Echelle(this, 12)))
+        using (var cheminBoite = Dessin.Arrondi(boite, Dessin.Echelle(this, 9)))
         using (var fondBoite = new SolidBrush(_selectionne ? Theme.Sur(Theme.Accent, Theme.TexteSurAccent, 0.12f) : Theme.FondAccent))
         {
             g.FillPath(fondBoite, cheminBoite);
         }
 
-        Icones.Dessiner(g, Icone, RectangleF.Inflate(boite, -Dessin.Echelle(this, 10), -Dessin.Echelle(this, 10)), icone);
-        var gauche = (int)(boite.Right + Dessin.Echelle(this, 12));
-        var nombre = Theme.PoliceGrasse(15f);
-        var libelle = Theme.PoliceTitre(9.75f);
+        Icones.Dessiner(g, Icone, RectangleF.Inflate(boite, -Dessin.Echelle(this, 8), -Dessin.Echelle(this, 8)), icone);
+        var gauche = (int)(boite.Right + Dessin.Echelle(this, 10));
+        var nombre = Theme.PoliceGrasse(12f);
+        var libelle = Theme.PoliceTitre(9f);
         var hNombre = TextRenderer.MeasureText(g, "0", nombre, Size.Empty, TextFormatFlags.NoPadding).Height;
         var hLibelle = TextRenderer.MeasureText(g, Text, libelle, Size.Empty, TextFormatFlags.NoPadding).Height;
         var haute = (int)((Height - hNombre - hLibelle) / 2f);

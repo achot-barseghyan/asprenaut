@@ -22,7 +22,7 @@ public sealed class EcranInventaire : EcranBase
     private readonly ServiceCompteur _compteur;
     private IReadOnlyDictionary<long, UtilisationInventaire> _utilisations = new Dictionary<long, UtilisationInventaire>();
     private readonly BarreRecherche _recherche = new("Rechercher un code, un équipement, une marque, une sortie…", "ou scannez");
-    private readonly GrilleAdaptative _categories = new() { LargeurMin = 150, HauteurElement = 76, Ecart = 12, Margin = new Padding(0, 0, 0, 16) };
+    private readonly GrilleAdaptative _categories = new() { LargeurMin = 140, HauteurElement = 54, Ecart = 10, Margin = new Padding(0, 0, 0, 12) };
     private readonly List<Tuile> _tuiles = [];
     private readonly DataGridView _grille = new();
     private readonly System.Windows.Forms.Timer _attenteRecherche = new() { Interval = 300 };
