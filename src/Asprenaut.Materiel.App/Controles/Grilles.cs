@@ -40,7 +40,9 @@ public sealed class GrilleAdaptative : Panel
 
     protected override void OnLayout(LayoutEventArgs levent)
     {
-        base.OnLayout(levent);
+        // La barre de défilement est réglée AVANT base.OnLayout, qui l'affiche ou la retire (AdjustFormScrollbars) : changer
+        // AutoScroll après coup ne la montrait qu'à la mise en page suivante (la demande de mise en page faite pendant celle-ci
+        // est ignorée), d'où une liste d'adhérents parfois impossible à faire défiler.
         var elements = Controls.Cast<Control>().Where(c => c.Visible).ToList();
         var ecart = (int)Dessin.Echelle(this, Ecart);
         var hauteur = (int)Dessin.Echelle(this, HauteurElement);
@@ -58,11 +60,20 @@ public sealed class GrilleAdaptative : Panel
             visible = ClientSize.Height;
         }
 
-        AutoScroll = visible < totale;
-        if (AutoScroll)
+        var defile = visible < totale;
+        if (AutoScroll != defile)
         {
-            largeurDispo = ClientSize.Width - SystemInformation.VerticalScrollBarWidth - (int)Dessin.Echelle(this, 4);
-            AutoScrollMinSize = new Size(0, totale);
+            AutoScroll = defile;
+        }
+
+        if (defile)
+        {
+            // Barre déjà affichée : ClientSize l'exclut déjà.
+            largeurDispo = (VerticalScroll.Visible ? ClientSize.Width : ClientSize.Width - SystemInformation.VerticalScrollBarWidth) - (int)Dessin.Echelle(this, 4);
+            if (AutoScrollMinSize.Height != totale)
+            {
+                AutoScrollMinSize = new Size(0, totale);
+            }
         }
 
         var largeur = Math.Max(1, (largeurDispo - ((colonnes - 1) * ecart)) / colonnes);
@@ -73,6 +84,7 @@ public sealed class GrilleAdaptative : Panel
             elements[i].SetBounds(x, y, largeur, hauteur);
         }
 
+        base.OnLayout(levent);
         AjusterLigne(visible);
     }
 
