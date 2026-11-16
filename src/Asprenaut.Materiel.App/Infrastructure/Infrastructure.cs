@@ -30,6 +30,11 @@ public sealed class ParametresApplication
     [JsonIgnore]
     public string Fichier { get; private set; } = FichierParDefaut;
 
+    /// <summary>Vrai pour une base d'essai (<c>--base</c>) : paramètres lus ailleurs que dans le dossier réel du club.</summary>
+    [JsonIgnore]
+    public bool BaseEssai =>
+        !string.Equals(Path.GetFullPath(Fichier), Path.GetFullPath(FichierParDefaut), StringComparison.OrdinalIgnoreCase);
+
     /// <summary>
     /// Charge les paramètres. Avec <c>--base</c>, le fichier est pris à côté de la base d'essai :
     /// les essais ne modifient jamais les réglages réels du club.

@@ -113,9 +113,14 @@ internal static class Demarrage
         await services.GetRequiredService<GestionnaireMigrations>().AppliquerAsync();
 
 #if DEBUG
-        await Data.Demo.DonneesDemo.ChargerSiVideAsync(
-            services.GetRequiredService<FabriqueConnexion>(),
-            services.GetRequiredService<IHorloge>().AujourdHui);
+        // Seulement dans une base d'essai (--base) : la base réelle du club ne reçoit jamais les données de démo,
+        // même lancée depuis le code (dotnet run) avant qu'on y ait saisi quoi que ce soit.
+        if (services.GetRequiredService<ParametresApplication>().BaseEssai)
+        {
+            await Data.Demo.DonneesDemo.ChargerSiVideAsync(
+                services.GetRequiredService<FabriqueConnexion>(),
+                services.GetRequiredService<IHorloge>().AujourdHui);
+        }
 #endif
 
         // Pictogramme choisi pour chaque catégorie (Lampes, Plombs…), utilisé partout où une catégorie est dessinée.
