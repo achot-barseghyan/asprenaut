@@ -56,6 +56,8 @@ public static class ActionsJournal
     public const string AdherentCree = "AdherentCree";
     public const string AdherentModifie = "AdherentModifie";
     public const string AdherentsImportes = "AdherentsImportes";
+    public const string AdherentDevenuMoniteur = "AdherentDevenuMoniteur";
+    public const string MoniteurDevenuAdherent = "MoniteurDevenuAdherent";
     public const string InventaireImporte = "InventaireImporte";
     public const string UtilisationsReprises = "UtilisationsReprises";
 }

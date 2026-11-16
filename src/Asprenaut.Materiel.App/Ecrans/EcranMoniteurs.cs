@@ -81,7 +81,7 @@ public sealed class EcranMoniteurs : EcranBase
 
         _onglets.AccessibleName = "Membres";
         _onglets.Margin = new Padding(0, 0, 0, 22);
-        _onglets.Changement += (_, _) => Executer(AfficherGenreAsync);
+        _onglets.Changement += ChangementOnglet;
 
         _filtre.Changement += (_, _) =>
         {
@@ -385,7 +385,85 @@ public sealed class EcranMoniteurs : EcranBase
         actions.Height = Theme.HauteurBouton;
         actions.Margin = new Padding(0, 18, 0, 0);
         ligne(actions);
+
+        // Un moniteur peut redevenir simple adhérent (pas une classe).
+        if (!m.EstClasse)
+        {
+            ligne(BoutonPassage("Passer en adhérent", "Ce n'est plus un moniteur : il devient un simple adhérent", () => PasserAdherentAsync(m)));
+        }
     }
+
+    /// <summary>Bouton « Passer en moniteur » / « Passer en adhérent » sous les actions d'une fiche (action Moniteurs).</summary>
+    private BoutonArrondi BoutonPassage(string texte, string description, Func<Task> action)
+    {
+        var bouton = new BoutonArrondi(texte, StyleBouton.Secondaire, Icones.Echange)
+        {
+            AutoSize = false,
+            Height = Theme.HauteurBouton,
+            Margin = new Padding(0, 10, 0, 0), // Au bord de la fiche défilante : la pastille du cadenas rentre d'elle-même.
+            AccessibleDescription = description,
+        };
+        _garde.Lier(bouton, ActionProtegee.Moniteurs);
+        bouton.Click += (_, _) => Executer(action);
+        return bouton;
+    }
+
+    /// <summary>L'adhérent devient moniteur (confirmation), puis l'onglet Moniteurs s'ouvre sur sa fiche.</summary>
+    private async Task PasserMoniteurAsync(Adherent a)
+    {
+        if (!_garde.Exiger(FindForm(), ActionProtegee.Moniteurs, "Passer en moniteur")
+            || !Dialogues.Confirmer(FindForm(),
+                $"{a.NomComplet} devient moniteur ?\n\nSa fiche d'adhérent est désactivée (son historique est gardé). Il pourra être responsable des sorties."))
+        {
+            return;
+        }
+
+        var resultat = await _adherents.PasserMoniteurAsync(a.Id);
+        if (!resultat.Reussi)
+        {
+            Dialogues.Erreur(FindForm(), resultat.Message);
+            return;
+        }
+
+        _selection[GenreResponsable.Moniteur] = resultat.Id;
+        _choixMoniteurs = FiltreMoniteurs.Tous;
+        await OuvrirOngletAsync(OngletMoniteurs);
+        Dialogues.Information(FindForm(), resultat.Message);
+    }
+
+    /// <summary>Le moniteur redevient simple adhérent (confirmation), puis l'onglet Adhérents s'ouvre sur sa fiche.</summary>
+    private async Task PasserAdherentAsync(Moniteur m)
+    {
+        if (!_garde.Exiger(FindForm(), ActionProtegee.Moniteurs, "Passer en adhérent")
+            || !Dialogues.Confirmer(FindForm(),
+                $"{m.NomComplet} n'est plus moniteur ?\n\nIl devient un simple adhérent et ne sera plus proposé comme responsable. Ses sorties restent à son nom."))
+        {
+            return;
+        }
+
+        var resultat = await _adherents.PasserAdherentAsync(m.Id);
+        if (!resultat.Reussi)
+        {
+            Dialogues.Erreur(FindForm(), resultat.Message);
+            return;
+        }
+
+        _adherentChoisi = resultat.Id;
+        _choixAdherents = FiltreAdherents.Tous;
+        await OuvrirOngletAsync(OngletAdherents);
+        Dialogues.Information(FindForm(), resultat.Message);
+    }
+
+    /// <summary>Relit les listes et les nombres des onglets, en ouvrant l'onglet demandé.</summary>
+    private async Task OuvrirOngletAsync(int onglet)
+    {
+        _onglets.Changement -= ChangementOnglet;
+        _onglets.SelectedIndex = onglet; // Sans affichage ici : RechargerAsync affiche l'onglet une seule fois.
+        _onglets.Changement += ChangementOnglet;
+        await RechargerAsync();
+    }
+
+    private void ChangementOnglet(object? sender, EventArgs e) => Executer(AfficherGenreAsync);
 
     // ================================================================ Adhérents
 
@@ -586,6 +664,7 @@ public sealed class EcranMoniteurs : EcranBase
         actions.Height = Theme.HauteurBouton;
         actions.Margin = new Padding(0, 18, 0, 0);
         ligne(actions);
+        ligne(BoutonPassage("Passer en moniteur", "Cet adhérent devient moniteur : il pourra être responsable des sorties", () => PasserMoniteurAsync(a)));
     }
 
     /// <summary>Désactive (avec confirmation) ou réactive l'adhérent, puis relit la liste.</summary>

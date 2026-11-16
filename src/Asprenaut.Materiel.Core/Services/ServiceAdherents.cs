@@ -360,6 +360,134 @@ public sealed class ServiceAdherents(
             : $"{a.NomComplet} est désactivé : il ne peut plus sortir de matériel.", id);
     }
 
+    // ---------------------------------------------------------------- Passer d'adhérent à moniteur, et l'inverse
+
+    /// <summary>
+    /// L'adhérent devient moniteur : un moniteur du même prénom et nom (majuscules et accents ignorés) est réactivé, sinon
+    /// il est créé (prénom, nom, téléphone ; niveau d'encadrement à compléter). L'adhérent est désactivé : son historique
+    /// et le matériel qu'il a encore restent à son nom. Action Moniteurs. L'Id du résultat est celui du moniteur.
+    /// </summary>
+    public async Task<ResultatOperation> PasserMoniteurAsync(long adherentId, CancellationToken ct = default)
+    {
+        if (Autorisation() is { Reussi: false } refus)
+        {
+            return refus;
+        }
+
+        if (classes is null)
+        {
+            return ResultatOperation.Echec("Les moniteurs ne sont pas disponibles.");
+        }
+
+        if (await adherents.ObtenirAsync(adherentId, ct) is not { } a)
+        {
+            return ResultatOperation.Echec("Cet adhérent n'existe plus.");
+        }
+
+        var moniteur = (await classes.ListerAsync(actifsSeulement: false, ct))
+            .Where(m => !m.EstClasse && MemeNom(m.Prenom, m.Nom, a.Prenom, a.Nom))
+            .OrderByDescending(m => m.Actif)
+            .FirstOrDefault();
+        long moniteurId;
+        if (moniteur is null)
+        {
+            moniteurId = await classes.AjouterAsync(new Moniteur
+            {
+                Genre = GenreResponsable.Moniteur,
+                Prenom = a.Prenom,
+                Nom = a.Nom,
+                Telephone = a.Telephone ?? "",
+                Actif = true,
+            }, ct);
+        }
+        else
+        {
+            moniteurId = moniteur.Id;
+            if (!moniteur.Actif || (moniteur.Telephone.Length == 0 && a.Telephone is { Length: > 0 }))
+            {
+                moniteur.Actif = true;
+                if (moniteur.Telephone.Length == 0)
+                {
+                    moniteur.Telephone = a.Telephone ?? "";
+                }
+
+                await classes.MettreAJourAsync(moniteur, ct);
+            }
+        }
+
+        if (a.Actif)
+        {
+            a.Actif = false;
+            await adherents.MettreAJourAsync(a, ct);
+        }
+
+        await JournaliserAsync(ActionsJournal.AdherentDevenuMoniteur, $"{a.NomComplet} : adhérent devenu moniteur", ct);
+        return ResultatOperation.Ok($"{a.NomComplet} est maintenant moniteur. Complétez son niveau dans sa fiche.", moniteurId);
+    }
+
+    /// <summary>
+    /// Le moniteur redevient simple adhérent : un adhérent du même prénom et nom est réactivé, sinon il est créé (prénom, nom,
+    /// téléphone). Le moniteur est désactivé (plus proposé comme responsable ; ses sorties le gardent). Pas pour une classe.
+    /// Action Moniteurs. L'Id du résultat est celui de l'adhérent.
+    /// </summary>
+    public async Task<ResultatOperation> PasserAdherentAsync(long moniteurId, CancellationToken ct = default)
+    {
+        if (Autorisation() is { Reussi: false } refus)
+        {
+            return refus;
+        }
+
+        if (classes is null || await classes.ObtenirAsync(moniteurId, ct) is not { } m)
+        {
+            return ResultatOperation.Echec("Ce moniteur n'existe plus.");
+        }
+
+        if (m.EstClasse)
+        {
+            return ResultatOperation.Echec("Une classe ne peut pas devenir un adhérent.");
+        }
+
+        var tous = await adherents.ListerAsync(actifsSeulement: false, ct);
+        var adherent = tous.Where(x => MemeNom(x.Prenom, x.Nom, m.Prenom, m.Nom)).OrderByDescending(x => x.Actif).FirstOrDefault();
+        long adherentId;
+        if (adherent is null)
+        {
+            var nouveau = new Adherent { Prenom = m.Prenom, Nom = m.Nom, Telephone = m.Telephone };
+            if (Normaliser(nouveau, tous) is { } erreur)
+            {
+                return erreur;
+            }
+
+            adherentId = await adherents.AjouterAsync(nouveau, ct);
+        }
+        else
+        {
+            adherentId = adherent.Id;
+            if (!adherent.Actif || (adherent.Telephone is not { Length: > 0 } && m.Telephone.Length is > 0 and <= Adherent.LongueurMaxTelephone))
+            {
+                adherent.Actif = true;
+                if (adherent.Telephone is not { Length: > 0 } && m.Telephone.Length <= Adherent.LongueurMaxTelephone)
+                {
+                    adherent.Telephone = Vide(m.Telephone);
+                }
+
+                await adherents.MettreAJourAsync(adherent, ct);
+            }
+        }
+
+        if (m.Actif)
+        {
+            m.Actif = false;
+            await classes.MettreAJourAsync(m, ct);
+        }
+
+        await JournaliserAsync(ActionsJournal.MoniteurDevenuAdherent, $"{m.NomComplet} : moniteur devenu adhérent", ct);
+        return ResultatOperation.Ok($"{m.NomComplet} est maintenant un simple adhérent.", adherentId);
+    }
+
+    private static bool MemeNom(string prenom1, string nom1, string prenom2, string nom2) =>
+        Simplifier(prenom1) == Simplifier(prenom2) && Simplifier(nom1) == Simplifier(nom2);
+
     /// <summary>Nettoie la saisie (espaces, licence en majuscules, champs vides → null) et la vérifie.</summary>
     private static ResultatOperation? Normaliser(Adherent a, IReadOnlyList<Adherent> tous)
     {
