@@ -283,7 +283,8 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     `ServiceMoniteurs.AbregeDe` : « Niveau 2 » → « N2 », un mot → 4 lettres « INIT », sinon initiales « PE », accents retirés) ;
     couleur de la pastille (migration 022, `Moniteur.Couleur`, clé de `Moniteur.CouleursClasse`, inconnue = null → `CouleurEffective`
     d'après l'id ; `Theme.CouleurClasse` / `DegradeClasse`, fixes dans les deux thèmes ; `ServiceMoniteurs.CouleurProposee` = première
-    libre) ; ni téléphone, ni niveau, ni TIV (jamais inspecteur). Le genre ne change pas à la modification.
+    libre) ; ni téléphone, ni licence, ni niveau, ni TIV (jamais inspecteur). Moniteur : n° de licence facultatif (migration 026, `Moniteur.Licence`,
+    majuscules, 30 car., unique parmi les moniteurs, sur la fiche, dans moniteurs.csv). Le genre ne change pas à la modification.
     Fenêtres (maquettes « Ajouter un moniteur » / « Ajouter une classe », `EcranMoniteurs.ModifierMoniteurAsync` / `ModifierClasseAsync`) :
     moniteur en trois sections (Identité, Niveau d'encadrement : puces `ServiceMoniteurs.NiveauxEncadrement` E1… MF2 ou « Autre
     niveau » tapé, `NiveauPropose` ; Rôles au club : carte Inspecteur TIV, + carte « Moniteur actif » en modification), en-tête violet
