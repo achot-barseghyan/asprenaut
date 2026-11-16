@@ -518,7 +518,9 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     (`EnTetesImport`). Code connu → `ModifierAsync` avec les seules cases remplies (« Rien n'a changé » = inchangé) ; nouveau →
     `CreerAsync` (nom et catégorie obligatoires, échéances passées acceptées). Catégorie reconnue sans majuscules, accents ni « s »
     final, sinon créée. Dernière révision : comme dans la fiche (contrôle + prochaine calculée). Ligne ignorée et citée (5 au plus)
-    si code manquant ou en double, date / D.S / Nitrox / montage illisible, ou refus du service. Rien n'est supprimé ; état non importé.
+    si code manquant ou en double, date / D.S / Nitrox / montage / état illisible, ou refus du service. Rien n'est supprimé.
+    Colonne « État » (`LireEtat` : En service / Hors service (« HS ») / Réformé, vide = inchangé) : contrôles de `ModifierAsync` (pas dehors, pas en
+    atelier) ; un nouvel équipement est créé en service puis passé à l'état demandé.
     Journal `InventaireImporte`. Modèle : `ColonnesModeleInventaire(categories)`, `NomFichierModeleInventaire`, `ModeEmploiModeleInventaire`.
     Colonne « Utilisations » (migration 025, aussi « Compteur », « Nombre d'utilisations », « Plongées »…) : utilisations depuis la
     dernière révision, lues par `LireUtilisations` (« 42 », « 42,0 », « 64 / 80 utilisations » ; 0 à `UtilisationsRepriseMax` = 10000,

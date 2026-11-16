@@ -153,7 +153,7 @@ public class ImportInventaireTests
     public async Task Le_modele_a_remplir_a_les_colonnes_reconnues_par_l_import()
     {
         var entete = ServiceInventaire.ColonnesModeleInventaire(["Blocs", "Détendeurs"]).Select(c => c.EnTete).ToList();
-        var ligne = new List<string>(entete.Select(_ => "")) { [0] = "A30", [1] = "Détendeur adulte", [2] = "Détendeurs", [10] = "Étrier", [14] = "Non" };
+        var ligne = new List<string>(entete.Select(_ => "")) { [0] = "A30", [1] = "Détendeur adulte", [2] = "Détendeurs", [11] = "Étrier", [15] = "Non" };
 
         var r = await _ctx.Inventaire.ImporterAsync([entete, ligne]);
 
@@ -161,4 +161,38 @@ public class ImportInventaireTests
         Assert.Equal((MontageDetendeur.Etrier, (bool?)false), (Par("A30").Montage, Par("A30").DirectSystem));
         Assert.Equal("Inventaire à remplir - Asprenaut.xlsx", ServiceInventaire.NomFichierModeleInventaire(" Asprenaut "));
     }
+
+    [Fact]
+    public async Task La_colonne_etat_pose_l_etat_de_l_equipement()
+    {
+        var a01 = _ctx.Equipement("A01", categorie: "Détendeurs");
+        var a02 = _ctx.Equipement("A02", categorie: "Détendeurs");
+        await _ctx.SortieEnCoursAsync("Fosse", "A02");
+
+        var r = await _ctx.Inventaire.ImporterAsync([
+            ["Code", "Équipement", "Catégorie", "État"],
+            ["A01", "", "", "HS"],
+            ["A02", "", "", "Réformé"],
+            ["A30", "Détendeur adulte", "Détendeurs", "Réformé"],
+            ["A31", "Détendeur adulte", "Détendeurs", ""],
+            ["A32", "Détendeur adulte", "Détendeurs", "cassé"],
+        ]);
+
+        Assert.True(r.Reussi, r.Message);
+        Assert.Equal("Import terminé : 2 équipements ajoutés, 1 mis à jour, 2 lignes ignorées : "
+            + "ligne 3 (A02 est dehors : attendez son retour avant de le mettre hors service) ; "
+            + "ligne 6 (état « cassé » (En service, Hors service ou Réformé))", r.Message.TrimEnd('.'));
+        Assert.Equal((EtatEquipement.HorsService, EtatEquipement.EnService), (a01.Etat, a02.Etat));
+        Assert.Equal((EtatEquipement.Reforme, EtatEquipement.EnService), (Par("A30").Etat, Par("A31").Etat));
+    }
+
+    [Theory]
+    [InlineData("En service", EtatEquipement.EnService)]
+    [InlineData("hors-service", EtatEquipement.HorsService)]
+    [InlineData("H.S.", EtatEquipement.HorsService)]
+    [InlineData("REFORME", EtatEquipement.Reforme)]
+    [InlineData("", null)]
+    [InlineData("bof", null)]
+    public void LireEtat_reconnait_les_ecritures_courantes(string texte, EtatEquipement? attendu) =>
+        Assert.Equal(attendu, ServiceInventaire.LireEtat(texte));
 }

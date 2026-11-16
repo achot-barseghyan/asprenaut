@@ -15,7 +15,7 @@ public sealed partial class ServiceInventaire
     // ceux de l'export CSV de l'inventaire en premier, pour qu'un export se réimporte tel quel.
     private enum ChampImport
     {
-        Code, Nom, Categorie, Marque, Modele, Taille, NumeroSerie, DerniereRevision, ProchaineRevision, Requalification,
+        Code, Nom, Categorie, Marque, Modele, Taille, NumeroSerie, Etat, DerniereRevision, ProchaineRevision, Requalification,
         Montage, MarqueDeuxiemeEtage, ModeleDeuxiemeEtage, NumeroDeuxiemeEtage, DirectSystem, Manometre, Octopus, NumeroOctopus,
         Nitrox, Notes, Utilisations,
     }
@@ -29,6 +29,7 @@ public sealed partial class ServiceInventaire
         ["modele", "modele premier etage", "premier etage"],
         ["taille"],
         ["n serie", "no serie", "numero de serie", "num serie", "n de serie", "serie", "n serie premier etage"],
+        ["etat", "etat de l'equipement"],
         ["date de la derniere revision", "derniere revision", "date derniere revision", "revise le"],
         ["prochaine revision / tiv", "prochaine revision", "prochaine tiv", "a reviser avant", "tiv", "date tiv"],
         ["prochaine requalification", "requalification", "requalif"],
@@ -62,6 +63,7 @@ public sealed partial class ServiceInventaire
         new("Modèle", "Modèle (premier étage pour un détendeur)", 18, false),
         new("Taille", "Ex. : XL, 12 L", 10, false),
         new("N° série", "Numéro de série (premier étage pour un détendeur)", 18, false),
+        new("État", "En service, Hors service ou Réformé ; vide = en service (nouveau) ou inchangé", 14, false, ["En service", "Hors service", "Réformé"]),
         new("Date de la dernière révision", "jj/mm/aaaa, hors blocs : la prochaine révision est calculée", 18, false),
         new("Prochaine révision / TIV", "jj/mm/aaaa : prochaine TIV pour un bloc", 18, false),
         new("Prochaine requalification", "jj/mm/aaaa, blocs seulement", 18, false),
@@ -92,8 +94,9 @@ public sealed partial class ServiceInventaire
         "4. Un code déjà dans l'inventaire met cet équipement à jour : seules les cases remplies changent.",
         "5. Dates au format jj/mm/aaaa (ex. 15/09/2027).",
         "6. Les colonnes des détendeurs (Étrier / DIN, deuxième étage, D.S, Mano, Octopus) sont ignorées pour les autres catégories.",
-        "7. Utilisations : le nombre d'utilisations depuis la dernière révision (ex. 42). Le compteur de l'équipement repart de ce nombre.",
-        "8. Enregistrez en .xlsx et rapportez le fichier au responsable matériel : Inventaire › Importer Excel.",
+        "7. État : En service, Hors service ou Réformé (vide = en service). Un équipement en sortie ne peut pas être mis hors service ni réformé.",
+        "8. Utilisations : le nombre d'utilisations depuis la dernière révision (ex. 42). Le compteur de l'équipement repart de ce nombre.",
+        "9. Enregistrez en .xlsx et rapportez le fichier au responsable matériel : Inventaire › Importer Excel.",
         "Rien n'est supprimé par l'import : le matériel absent du fichier reste dans l'inventaire.",
     ];
 
@@ -215,6 +218,12 @@ public sealed partial class ServiceInventaire
                 erreur ??= $"montage « {Cellule(ChampImport.Montage)} » (Étrier ou DIN)";
             }
 
+            var etat = LireEtat(Cellule(ChampImport.Etat));
+            if (etat is null && Cellule(ChampImport.Etat).Length > 0)
+            {
+                erreur ??= $"état « {Cellule(ChampImport.Etat)} » (En service, Hors service ou Réformé)";
+            }
+
             var utilisations = LireUtilisations(Cellule(ChampImport.Utilisations));
             if (utilisations is null && Cellule(ChampImport.Utilisations).Length > 0)
             {
@@ -279,6 +288,7 @@ public sealed partial class ServiceInventaire
             e.Montage = montage ?? e.Montage;
             e.DirectSystem = directSystem ?? e.DirectSystem;
             e.Nitrox = nitrox ?? e.Nitrox;
+            e.Etat = etat ?? e.Etat;
 
             if (existant is null)
             {
@@ -292,6 +302,18 @@ public sealed partial class ServiceInventaire
                 if (r.Reussi)
                 {
                     ajoutes++;
+
+                    // La création met toujours en service : l'état du fichier est posé ensuite, comme une modification.
+                    if (etat is { } etatVoulu && etatVoulu != EtatEquipement.EnService
+                        && await equipements.ObtenirParCodeAsync(code, ct) is { } cree)
+                    {
+                        var avecEtat = Copie(cree);
+                        avecEtat.Etat = etatVoulu;
+                        if (await ModifierAsync(avecEtat, null, ct) is { Reussi: false } refusEtat)
+                        {
+                            ignorees.Add((numero, $"ajouté en service, {Raison(code, refusEtat.Message)}"));
+                        }
+                    }
                     if (r.Id is { } idCree && await ReprendreCompteurAsync(idCree, code, utilisations, ct))
                     {
                         repris++;
@@ -299,7 +321,7 @@ public sealed partial class ServiceInventaire
                 }
                 else
                 {
-                    ignorees.Add((numero, $"{code} : {Minuscule(SansPoint(r.Message))}"));
+                    ignorees.Add((numero, Raison(code, r.Message)));
                 }
 
                 continue;
@@ -308,7 +330,7 @@ public sealed partial class ServiceInventaire
             var m = await ModifierAsync(e, derniere, ct);
             if (!m.Reussi)
             {
-                ignorees.Add((numero, $"{code} : {Minuscule(SansPoint(m.Message))}"));
+                ignorees.Add((numero, Raison(code, m.Message)));
                 continue;
             }
 
@@ -372,6 +394,19 @@ public sealed partial class ServiceInventaire
     }
 
     /// <summary>
+    /// État d'une case : « En service » (aussi « actif », « OK »), « Hors service » (« HS », « en panne »), « Réformé »
+    /// (« rebut ») ; null si vide ou illisible. Majuscules, accents, tirets et points ignorés.
+    /// </summary>
+    public static EtatEquipement? LireEtat(string texte) =>
+        ServiceAdherents.Simplifier(texte.Replace('-', ' ').Replace('_', ' ').Replace(".", "", StringComparison.Ordinal)) switch
+        {
+            "en service" or "enservice" or "service" or "actif" or "ok" or "disponible" => EtatEquipement.EnService,
+            "hors service" or "horsservice" or "hs" or "en panne" or "panne" => EtatEquipement.HorsService,
+            "reforme" or "reformee" or "rebut" or "au rebut" => EtatEquipement.Reforme,
+            _ => null,
+        };
+
+    /// <summary>
     /// Reprend le compteur d'un équipement importé (« il a déjà servi 42 fois depuis sa dernière révision ») : le compteur
     /// repart de ce nombre, puis chaque retour scanné s'ajoute. Rien n'est écrit si le compteur vaut déjà ce nombre.
     /// </summary>
@@ -402,6 +437,10 @@ public sealed partial class ServiceInventaire
     private static string CleCategorie(string nom) => ServiceAdherents.Simplifier(nom).TrimEnd('s');
 
     private static string SansPoint(string message) => message.TrimEnd('.', ' ');
+
+    /// <summary>« A02 : nom manquant » ; un message qui commence déjà par le code est gardé tel quel.</summary>
+    private static string Raison(string code, string message) =>
+        message.StartsWith(code + " ", StringComparison.OrdinalIgnoreCase) ? SansPoint(message) : $"{code} : {Minuscule(SansPoint(message))}";
 
     private static string Minuscule(string texte) =>
         texte.Length > 1 && char.IsUpper(texte[0]) && !char.IsUpper(texte[1]) ? char.ToLower(texte[0], Libelles.Culture) + texte[1..] : texte;
