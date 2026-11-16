@@ -85,7 +85,8 @@ public sealed class EcranInventaire : EcranBase
         _grille.CellPainting += PeindreCellule;
 
         // Clic sur la ligne (nom souligné, double-clic, Entrée) : fiche de suivi. La cellule d'actions a trois boutons
-        // carrés (maquette) : fiche de suivi EPI, signaler (libre, comme au retour d'une sortie) puis modifier (code).
+        // carrés (maquette) : fiche de suivi EPI, signaler (libre, comme au retour d'une sortie) puis modifier (code) ;
+        // devant eux, une corbeille (code) pour l'équipement qui n'a jamais servi.
         _grille.CellMouseClick += (_, e) =>
         {
             if (e.Button != MouseButtons.Left || e.RowIndex < 0 || _grille.Rows[e.RowIndex].Tag is not LigneInventaire l)
@@ -95,16 +96,21 @@ public sealed class EcranInventaire : EcranBase
 
             if (Colonne(e.ColumnIndex) == "action")
             {
-                switch (BoutonAction(e.RowIndex, e.ColumnIndex, e.Location))
+                var boutons = BoutonsAction(l);
+                var i = BoutonAction(e.RowIndex, e.ColumnIndex, e.Location);
+                switch (i >= 0 ? boutons[i].Icone : null)
                 {
-                    case 0:
+                    case Icones.Document:
                         Executer(() => OuvrirSuiviAsync(l));
                         break;
-                    case 1:
+                    case Icones.Drapeau:
                         Executer(() => SignalerAsync(l));
                         break;
-                    case 2:
+                    case Icones.Crayon:
                         Executer(() => ModifierEquipementAsync(l));
+                        break;
+                    case Icones.Corbeille:
+                        Executer(() => SupprimerEquipementAsync(l));
                         break;
                 }
 
@@ -384,6 +390,32 @@ public sealed class EcranInventaire : EcranBase
         }
     }
 
+    /// <summary>Corbeille d'un équipement jamais utilisé (action protégée) : confirmation, suppression, liste rechargée.</summary>
+    private async Task SupprimerEquipementAsync(LigneInventaire ligne)
+    {
+        if (!_garde.Exiger(FindForm(), ActionProtegee.Materiel, "Supprimer un équipement")
+            || !Dialogues.Confirmer(FindForm(), $"Supprimer {ligne.Code} · {ligne.Libelle} ?\n\nIl n'a jamais été utilisé. Sa fiche, ses révisions et ses problèmes signalés seront effacés. Cette action est définitive."))
+        {
+            return;
+        }
+
+        var resultat = await _inventaire.SupprimerAsync(ligne.EquipementId);
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        if (!resultat.Reussi)
+        {
+            Dialogues.Erreur(FindForm(), resultat.Message);
+            return;
+        }
+
+        // Les tuiles de catégories affichent des nombres : elles sont relues, puis la liste filtrée.
+        await ChargerAsync(null);
+        await RechargerAsync();
+    }
+
     private IReadOnlyList<LigneInventaire> _lignes = [];
 
     // ---------------------------------------------------------------- Colonnes selon la catégorie
@@ -395,7 +427,8 @@ public sealed class EcranInventaire : EcranBase
 
     private static string Date(DateOnly? d) => d is { } v ? Libelles.Date(v) : "—";
 
-    private static readonly ColonneInventaire Action = new("action", "Actions", 170, _ => "");
+    // Quatre boutons carrés au plus (corbeille d'un équipement jamais utilisé).
+    private static readonly ColonneInventaire Action = new("action", "Actions", 200, _ => "");
 
     private static readonly ColonneInventaire Statut = new("statut", "Statut", 125, l => Libelles.De(l.Statut));
 
@@ -486,6 +519,8 @@ public sealed class EcranInventaire : EcranBase
                 // Titre « ACTIONS » aligné sur les boutons, à droite.
                 colonne.HeaderCell.Style.Alignment = DataGridViewContentAlignment.MiddleRight;
                 colonne.HeaderCell.Style.Padding = new Padding(0, 0, (int)Dessin.Echelle(this, 14), 0);
+                // Quatre boutons de 38 + écarts de 6 + marge droite de 12 (Tableaux.ZonesBoutonsIcones), un peu d'air à gauche.
+                colonne.MinimumWidth = (int)Dessin.Echelle(this, 196);
             }
 
             if (largeursFixes)
@@ -561,14 +596,19 @@ public sealed class EcranInventaire : EcranBase
 
     /// <summary>
     /// Boutons de la colonne Actions : fiche de suivi EPI, drapeau (rempli et coloré si un problème est ouvert : il le modifie),
-    /// crayon (cadenas tant que le mode gestion est fermé).
+    /// crayon (cadenas tant que le mode gestion est fermé). Équipement jamais utilisé : une corbeille rouge devant, pour que
+    /// les trois autres restent alignés à droite.
     /// </summary>
     private Tableaux.BoutonIcone[] BoutonsAction(LigneInventaire l)
     {
         var probleme = _problemes.TryGetValue(l.EquipementId, out var p) ? p : null;
         var verrou = !_garde.Gestion.EstAutorise(ActionProtegee.Materiel);
+        Tableaux.BoutonIcone[] corbeille = l.JamaisUtilise
+            ? [new(Icones.Corbeille, verrou ? "Supprimer, jamais utilisé (code gestionnaire requis)" : "Supprimer (jamais utilisé)", Theme.Erreur, Verrou: verrou)]
+            : [];
         return
         [
+            .. corbeille,
             new(Icones.Document, "Fiche de suivi EPI"),
             new(Icones.Drapeau, probleme is null ? "Signaler un problème" : "Modifier le problème signalé",
                 probleme is null ? null : CouleurProbleme(probleme), Plein: probleme is not null),
@@ -577,7 +617,7 @@ public sealed class EcranInventaire : EcranBase
     }
 
     /// <summary>
-    /// Bulle de la cellule d'actions : les trois boutons dans l'ordre. La bulle de la grille garde le même texte pour toute
+    /// Bulle de la cellule d'actions : les boutons dans l'ordre. La bulle de la grille garde le même texte pour toute
     /// la cellule (elle le lit en y entrant) : une bulle par bouton ne s'affichait pas.
     /// </summary>
     private string BulleActions(LigneInventaire l) => string.Join("  ·  ", BoutonsAction(l).Select(b => b.Bulle));
@@ -602,10 +642,10 @@ public sealed class EcranInventaire : EcranBase
     /// <summary>À surveiller : jaune ; hors service : rouge.</summary>
     private static Color CouleurProbleme(Signalement s) => s.Gravite == GraviteSignalement.HorsService ? Theme.Erreur : Theme.Avertissement;
 
-    /// <summary>Bouton d'actions sous la souris (0 fiche, 1 signaler, 2 modifier), ou -1.</summary>
+    /// <summary>Indice dans <see cref="BoutonsAction"/> du bouton sous la souris, ou -1.</summary>
     private int BoutonAction(int ligne, int colonne, Point position) =>
         ligne >= 0 && _grille.Rows[ligne].Tag is LigneInventaire l
-            ? Tableaux.BoutonIconeSous(_grille.GetCellDisplayRectangle(colonne, ligne, false), _grille.DeviceDpi / 96f, 3,
+            ? Tableaux.BoutonIconeSous(_grille.GetCellDisplayRectangle(colonne, ligne, false), _grille.DeviceDpi / 96f, BoutonsAction(l).Length,
                 _problemes.ContainsKey(l.EquipementId), position)
             : -1;
 

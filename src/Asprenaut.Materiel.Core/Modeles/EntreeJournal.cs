@@ -33,6 +33,7 @@ public static class ActionsJournal
     public const string SortieSupprimee = "SortieSupprimee";
     public const string EquipementCree = "EquipementCree";
     public const string EquipementModifie = "EquipementModifie";
+    public const string EquipementSupprime = "EquipementSupprime";
     public const string ControleEnregistre = "ControleEnregistre";
     public const string EnvoiAtelier = "EnvoiAtelier";
     public const string RetourAtelier = "RetourAtelier";

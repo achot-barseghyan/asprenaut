@@ -100,6 +100,7 @@ public sealed class EquipementRepositoryMemoire(BaseMemoire db) : IEquipementRep
                     Octopus = e.Octopus,
                     NumeroOctopus = e.NumeroOctopus,
                     DerniereRevision = db.Controles.Where(c => c.EquipementId == e.Id && c.Type == TypeControle.Revision && c.Composant.Length == 0).Select(c => (DateOnly?)c.DateControle).Max(),
+                    JamaisUtilise = JamaisUtilise(e.Id),
                 };
             })
             .OrderBy(l => l.Code)
@@ -152,6 +153,28 @@ public sealed class EquipementRepositoryMemoire(BaseMemoire db) : IEquipementRep
         db.Composants.RemoveAll(c => c.EquipementId == detail.EquipementId && c.Role == detail.Role);
         db.Composants.Add(detail);
         return Task.CompletedTask;
+    }
+
+    private bool JamaisUtilise(long id) =>
+        !db.Affectations.Any(a => a.EquipementId == id) && !db.Reprises.Any(r => r.EquipementId == id && r.Utilisations > 0);
+
+    public Task<bool> SupprimerAsync(long id, CancellationToken ct = default)
+    {
+        if (!db.Equipements.Any(e => e.Id == id) || !JamaisUtilise(id))
+        {
+            return Task.FromResult(false);
+        }
+
+        db.Controles.RemoveAll(c => c.EquipementId == id);
+        db.Composants.RemoveAll(c => c.EquipementId == id);
+        db.Reprises.RemoveAll(r => r.EquipementId == id);
+        foreach (var j in db.Journal.Where(j => j.EquipementId == id))
+        {
+            j.EquipementId = null;
+        }
+
+        db.Equipements.RemoveAll(e => e.Id == id);
+        return Task.FromResult(true);
     }
 }
 

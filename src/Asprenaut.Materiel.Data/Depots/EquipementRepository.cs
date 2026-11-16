@@ -93,7 +93,8 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
                    (SELECT MAX(ct.date_controle) FROM controle ct WHERE ct.equipement_id = e.id AND ct.type = 'Revision' AND ct.composant = '') AS derniere_revision,
                    s.id AS sortie_en_cours_id, s.intitule AS sortie_en_cours_intitule,
                    EXISTS (SELECT 1 FROM sortie_equipement m
-                           WHERE m.equipement_id = e.id AND m.statut = 'Manquant') AS est_manquant
+                           WHERE m.equipement_id = e.id AND m.statut = 'Manquant') AS est_manquant,
+                   ({JamaisUtilise}) AS jamais_utilise
             FROM equipement e
             JOIN categorie c ON c.id = e.categorie_id
             LEFT JOIN sortie_equipement se ON se.equipement_id = e.id AND se.statut = 'Dehors'
@@ -108,6 +109,47 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
         await using var cx = await fabrique.OuvrirAsync(ct);
         var lignes = await cx.QueryAsync<LigneInventaire>(new CommandDefinition(sql, new { motif, categorieId }, cancellationToken: ct));
         return lignes.AsList();
+    }
+
+    /// <summary>Jamais scanné dans une sortie, ni compteur repris d'un import (alias « e » de la table equipement).</summary>
+    private const string JamaisUtilise = """
+        NOT EXISTS (SELECT 1 FROM sortie_equipement u WHERE u.equipement_id = e.id)
+        AND NOT EXISTS (SELECT 1 FROM utilisation_reprise r WHERE r.equipement_id = e.id AND r.utilisations > 0)
+        """;
+
+    public async Task<bool> SupprimerAsync(long id, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        await using var tx = await cx.BeginTransactionAsync(ct);
+
+        // La condition est relue dans la transaction : un scan arrivé entre la vérification du service et ici l'empêche.
+        const string verification = $"""
+            SELECT COUNT(*) FROM equipement e
+            WHERE e.id = @id AND {JamaisUtilise}
+              AND NOT EXISTS (SELECT 1 FROM atelier a WHERE a.equipement_id = e.id AND a.revenu_le IS NULL);
+            """;
+        if (await cx.ExecuteScalarAsync<long>(new CommandDefinition(verification, new { id }, tx, cancellationToken: ct)) == 0)
+        {
+            return false;
+        }
+
+        // Ordre des clés étrangères : la révision cite le contrôle et le passage en atelier. Le journal garde ses lignes,
+        // sans lien (un nouvel équipement peut reprendre le même id).
+        const string sql = """
+            DELETE FROM revision WHERE equipement_id = @id;
+            DELETE FROM intervention_prevue WHERE equipement_id = @id;
+            DELETE FROM signalement WHERE equipement_id = @id;
+            DELETE FROM seance_equipement WHERE equipement_id = @id;
+            DELETE FROM composant WHERE equipement_id = @id;
+            DELETE FROM atelier WHERE equipement_id = @id;
+            DELETE FROM controle WHERE equipement_id = @id;
+            DELETE FROM utilisation_reprise WHERE equipement_id = @id;
+            UPDATE journal SET equipement_id = NULL WHERE equipement_id = @id;
+            DELETE FROM equipement WHERE id = @id;
+            """;
+        await cx.ExecuteAsync(new CommandDefinition(sql, new { id }, tx, cancellationToken: ct));
+        await tx.CommitAsync(ct);
+        return true;
     }
 
     public async Task<long> AjouterAsync(Equipement equipement, CancellationToken ct = default)

@@ -136,6 +136,43 @@ public sealed partial class ServiceInventaire(
         return ResultatOperation.Ok($"{code} · {actuel.Libelle} modifié.", actuel.Id);
     }
 
+    /// <summary>
+    /// Supprime un équipement qui n'a jamais servi : jamais scanné dans une sortie, aucun compteur repris d'un import
+    /// (créé par erreur, mauvais code). Pas en atelier. Ses contrôles, composants, signalements et révisions partent avec
+    /// lui ; le journal garde ses lignes. Un équipement qui a servi ne se supprime pas : on le réforme. Action protégée (Matériel).
+    /// </summary>
+    public async Task<ResultatOperation> SupprimerAsync(long id, CancellationToken ct = default)
+    {
+        if (gestion?.Exiger(ActionProtegee.Materiel) is { Reussi: false } refus)
+        {
+            return refus;
+        }
+
+        if (await equipements.ObtenirAsync(id, ct) is not { } equipement)
+        {
+            return ResultatOperation.Echec("Cet équipement n'existe plus.");
+        }
+
+        if (revisions is not null && await revisions.ObtenirPassageEnCoursAsync(id, ct) is not null)
+        {
+            return ResultatOperation.Echec($"{equipement.Code} est en atelier : enregistrez d'abord son retour dans Révisions.");
+        }
+
+        // La requête vérifie qu'il n'a jamais servi (même un scan arrivé entre-temps l'empêche).
+        if (!await equipements.SupprimerAsync(id, ct))
+        {
+            return ResultatOperation.Echec($"{equipement.Code} a déjà été utilisé : il ne peut pas être supprimé. Réformez-le plutôt (Modifier › État).");
+        }
+
+        await journal.AjouterAsync(new EntreeJournal
+        {
+            Horodatage = horloge.MaintenantUtc,
+            Action = ActionsJournal.EquipementSupprime,
+            Details = $"{equipement.Code} · {equipement.Libelle} supprimé (jamais utilisé)",
+        }, ct);
+        return ResultatOperation.Ok($"{equipement.Code} · {equipement.Libelle} supprimé.");
+    }
+
     // ---------------------------------------------------------------- Fiche matériel
 
     /// <summary>Seuls les blocs et les détendeurs peuvent être « nitrox » (case de la fiche ; vidée pour les autres catégories).</summary>

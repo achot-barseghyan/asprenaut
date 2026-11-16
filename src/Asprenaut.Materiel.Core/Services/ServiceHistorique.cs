@@ -45,6 +45,7 @@ public sealed class ServiceHistorique(
         [ActionsJournal.SortieSupprimee] = (TypeEvenement.Sortie, "Sortie supprimée"),
         [ActionsJournal.EquipementCree] = (TypeEvenement.Materiel, "Ajout"),
         [ActionsJournal.EquipementModifie] = (TypeEvenement.Materiel, "Modification"),
+        [ActionsJournal.EquipementSupprime] = (TypeEvenement.Materiel, "Équipement supprimé"),
         [ActionsJournal.ComposantAjoute] = (TypeEvenement.Materiel, "Composant ajouté"),
         [ActionsJournal.ProblemeSignale] = (TypeEvenement.Revision, "Problème signalé"),
         [ActionsJournal.ControleEnregistre] = (TypeEvenement.Revision, "Contrôle"),

@@ -131,7 +131,9 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   sur le nom, le double-clic ou Entrée ouvrent la fiche de suivi. Colonne « Actions » (maquette) : trois boutons carrés dessinés
   (`Tableaux.PeindreBoutonsIcones`, clic par `BoutonIconeSous`) — fiche de suivi EPI, drapeau « Signaler » (rempli et coloré
   si un problème est ouvert : il le modifie), crayon « Modifier » (`FormulaireEquipement.ModifierAsync`, cadenas jaune tant
-  que le mode gestion est fermé, mis à jour sur `ServiceGestion.EtatChange`) ; au-dessus, la pastille du problème ouvert
+  que le mode gestion est fermé, mis à jour sur `ServiceGestion.EtatChange`), et devant eux une corbeille rouge si l'équipement
+  n'a jamais servi (`LigneInventaire.JamaisUtilise`, règle 43 ; boutons repérés par leur pictogramme, colonne de 196 px logiques
+  au moins) ; au-dessus, la pastille du problème ouvert
   (« À surveiller · Débit continu », rouge si hors service) et la ligne légèrement teintée. Bulle de la cellule : les trois
   boutons (une bulle par bouton avec `ToolTip.Show` ne s'affichait pas). Lien « Voir les sorties » sous le compteur
   (`Tableaux.ZoneLienUtilisation` pour le clic, lignes de 70 px) → `AllerA<EcranUtilisations>(idEquipement)` (règle 29).
@@ -227,7 +229,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     `ListerControlesPeriodeAsync`.
 18. Modifier un équipement (`ServiceInventaire.ModifierAsync`, action protégée Materiel) : mêmes contrôles qu'à la création
     sauf les dates passées (acceptées) ; pas hors service ni réformé s'il est dehors ; état inchangeable en atelier (le retour
-    d'atelier le remet en service). Journal `EquipementModifie` avec la liste des champs changés. Pas de suppression : on réforme.
+    d'atelier le remet en service). Journal `EquipementModifie` avec la liste des champs changés. Pas de suppression (on réforme), sauf s'il n'a jamais servi (règle 43).
 19. Compteur d'utilisation (`ServiceCompteur`, Paramètres, action protégée) : chaque retour scanné ajoute les utilisations de
     sa sortie (`Sortie.Utilisations`, 1 à 10) depuis le jour du dernier contrôle (tous types ; `IEquipementRepository.ListerCompteursAsync`
     fait la somme). Seuil (en utilisations ; noms `SeuilsSorties` / `Sorties` gardés pour parametres.json) : propre au code, sinon au
@@ -529,6 +531,13 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     `ListerCompteursAsync` part de ce nombre et n'ajoute que les retours scannés après la reprise ; un contrôle de l'équipement complet
     daté du jour de la reprise ou après la remet à zéro. Page Utilisations : ligne « Compteur repris de l'import » (`LigneUtilisation.CompteurRepris`,
     `EstControle`), le total reste celui des sorties.
+
+43. Supprimer un équipement jamais utilisé (`ServiceInventaire.SupprimerAsync`, `SuppressionEquipementTests`,
+    `SuppressionEquipementDepotsTests`, action protégée Matériel) : corbeille de la colonne Actions de l'inventaire, avec confirmation.
+    Seulement s'il n'a jamais été scanné dans une sortie (aucune ligne sortie_equipement) ni reçu un compteur repris > 0, et s'il
+    n'est pas en atelier ; sinon on le réforme. `IEquipementRepository.SupprimerAsync` re-vérifie dans sa transaction, efface ses
+    révisions, interventions prévues, signalements, séances, composants, passages en atelier, contrôles et reprise, et détache ses
+    lignes du journal (`equipement_id` à NULL : un nouvel équipement peut reprendre l'id). Journal `EquipementSupprime` (sans lien).
 
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit

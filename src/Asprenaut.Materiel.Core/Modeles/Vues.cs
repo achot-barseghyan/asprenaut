@@ -154,6 +154,9 @@ public sealed class LigneInventaire
     /// <summary>Date du dernier contrôle « révision » enregistré (colonne « Date de la dernière révision »).</summary>
     public DateOnly? DerniereRevision { get; set; }
 
+    /// <summary>Jamais scanné dans une sortie ni compteur repris d'un import : il peut être supprimé (corbeille).</summary>
+    public bool JamaisUtilise { get; set; }
+
     public StatutInventaire Statut => Etat switch
     {
         EtatEquipement.Reforme => StatutInventaire.Reforme,

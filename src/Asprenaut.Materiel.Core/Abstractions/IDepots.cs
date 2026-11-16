@@ -52,6 +52,12 @@ public interface IEquipementRepository
 
     /// <summary>Enregistre (ou remplace) le détail d'un composant.</summary>
     Task EnregistrerComposantAsync(DetailComposant detail, CancellationToken ct = default);
+
+    /// <summary>
+    /// Supprime un équipement jamais utilisé (aucune sortie, aucun compteur repris, pas en atelier) avec ses contrôles,
+    /// composants, signalements et révisions ; le journal garde ses lignes, sans lien. Faux sinon (rien n'est supprimé).
+    /// </summary>
+    Task<bool> SupprimerAsync(long id, CancellationToken ct = default);
 }
 
 public interface IMoniteurRepository
