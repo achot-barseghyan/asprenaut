@@ -11,11 +11,15 @@ public enum EtatRetourUtilisation
 
 /// <summary>
 /// Une ligne de la page « Utilisations d'un équipement » : une sortie (passage de l'équipement), ou un contrôle de
-/// l'équipement complet qui remet le compteur à zéro (<see cref="EstControle"/>).
+/// l'équipement complet qui remet le compteur à zéro (<see cref="EstControle"/>), ou la reprise du compteur depuis un
+/// import (<see cref="EstControle"/> et <see cref="CompteurRepris"/>).
 /// </summary>
 public sealed record LigneUtilisation
 {
     public required bool EstControle { get; init; }
+
+    /// <summary>Ligne de reprise du compteur (import de l'inventaire) : le compteur repart de ce nombre au lieu de 0.</summary>
+    public int? CompteurRepris { get; init; }
 
     /// <summary>Date de la sortie, ou du contrôle.</summary>
     public required DateOnly Date { get; init; }

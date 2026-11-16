@@ -142,19 +142,52 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
     {
         // Chaque retour scanné ajoute les utilisations de sa sortie (1 en piscine, 4 en mer...).
         // Contrôle daté sans heure : les retours du jour du contrôle sont comptés comme faits avant lui (fin de journée).
+        // Reprise (import) après ce contrôle : point de départ du compteur, puis les retours scannés après elle.
         const string sql = """
-            SELECT e.id AS equipement_id,
-                   (SELECT COALESCE(SUM(s.utilisations), 0) FROM sortie_equipement se
+            WITH base AS (
+                SELECT e.id,
+                       COALESCE((SELECT MAX(c.date_controle) FROM controle c WHERE c.equipement_id = e.id AND c.composant = '') || 'T23:59:59.999Z', '') AS depuis
+                FROM equipement e
+                WHERE @equipementId IS NULL OR e.id = @equipementId
+            ), depart AS (
+                SELECT b.id, COALESCE(r.utilisations, 0) AS repris, COALESCE(r.reprise_le, b.depuis) AS depuis
+                FROM base b
+                LEFT JOIN utilisation_reprise r ON r.equipement_id = b.id AND r.reprise_le > b.depuis
+            )
+            SELECT d.id AS equipement_id,
+                   d.repris + (SELECT COALESCE(SUM(s.utilisations), 0) FROM sortie_equipement se
                     JOIN sortie s ON s.id = se.sortie_id
-                    WHERE se.equipement_id = e.id AND se.scanne_retour_le IS NOT NULL
-                      AND se.scanne_retour_le > COALESCE((SELECT MAX(c.date_controle) FROM controle c WHERE c.equipement_id = e.id AND c.composant = '') || 'T23:59:59.999Z', '')
+                    WHERE se.equipement_id = d.id AND se.scanne_retour_le IS NOT NULL AND se.scanne_retour_le > d.depuis
                    ) AS utilisations
-            FROM equipement e
-            WHERE @equipementId IS NULL OR e.id = @equipementId;
+            FROM depart d;
             """;
         await using var cx = await fabrique.OuvrirAsync(ct);
         var lignes = await cx.QueryAsync<CompteurEquipement>(new CommandDefinition(sql, new { equipementId }, cancellationToken: ct));
         return lignes.AsList();
+    }
+
+    public async Task<RepriseUtilisations?> ObtenirRepriseAsync(long equipementId, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        var lignes = (await cx.QueryAsync<(long EquipementId, long Utilisations, string RepriseLe)>(new CommandDefinition(
+            "SELECT equipement_id, utilisations, reprise_le FROM utilisation_reprise WHERE equipement_id = @equipementId;",
+            new { equipementId }, cancellationToken: ct))).AsList();
+        return lignes.Count == 0 ? null : new RepriseUtilisations(lignes[0].EquipementId, (int)lignes[0].Utilisations, FormatIso.LireHorodatage(lignes[0].RepriseLe));
+    }
+
+    public async Task EnregistrerRepriseAsync(RepriseUtilisations reprise, CancellationToken ct = default)
+    {
+        const string sql = """
+            INSERT INTO utilisation_reprise (equipement_id, utilisations, reprise_le) VALUES (@EquipementId, @Utilisations, @RepriseLe)
+            ON CONFLICT (equipement_id) DO UPDATE SET utilisations = excluded.utilisations, reprise_le = excluded.reprise_le;
+            """;
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        await cx.ExecuteAsync(new CommandDefinition(sql, new
+        {
+            reprise.EquipementId,
+            reprise.Utilisations,
+            RepriseLe = FormatIso.Ecrire(reprise.RepriseLe),
+        }, cancellationToken: ct));
     }
 
     public async Task<IReadOnlyList<DetailComposant>> ListerComposantsAsync(long equipementId, CancellationToken ct = default)

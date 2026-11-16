@@ -36,9 +36,16 @@ public interface IEquipementRepository
 
     /// <summary>
     /// Compteur d'utilisation : retours scannés de chaque équipement (ou d'un seul) après le jour de son dernier contrôle
-    /// (tous types), ou depuis toujours s'il n'en a pas.
+    /// (tous types), ou depuis toujours s'il n'en a pas. Une reprise (<see cref="RepriseUtilisations"/>) postérieure à ce
+    /// contrôle donne le point de départ : ses utilisations, plus les retours scannés après elle.
     /// </summary>
     Task<IReadOnlyList<CompteurEquipement>> ListerCompteursAsync(long? equipementId, CancellationToken ct = default);
+
+    /// <summary>Compteur repris d'un fichier pour cet équipement (la dernière reprise), ou null.</summary>
+    Task<RepriseUtilisations?> ObtenirRepriseAsync(long equipementId, CancellationToken ct = default);
+
+    /// <summary>Enregistre (ou remplace) la reprise du compteur d'un équipement.</summary>
+    Task EnregistrerRepriseAsync(RepriseUtilisations reprise, CancellationToken ct = default);
 
     /// <summary>Détails des composants ajoutés à un équipement (table composant).</summary>
     Task<IReadOnlyList<DetailComposant>> ListerComposantsAsync(long equipementId, CancellationToken ct = default);

@@ -51,6 +51,43 @@ public class ImportInventaireTests
     }
 
     [Fact]
+    public async Task La_colonne_utilisations_reprend_le_compteur()
+    {
+        var a01 = _ctx.Equipement("A01", categorie: "Détendeurs");
+
+        var r = await _ctx.Inventaire.ImporterAsync([
+            ["Code", "Équipement", "Catégorie", "Nombre d'utilisations"],
+            ["A01", "", "", "64 / 80 utilisations"],
+            ["S40", "Détendeur adulte", "Détendeurs", "12"],
+            ["S41", "Détendeur adulte", "Détendeurs", "0"],
+            ["S42", "Détendeur adulte", "Détendeurs", "beaucoup"],
+        ]);
+
+        Assert.True(r.Reussi, r.Message);
+        Assert.Equal("Import terminé : 2 équipements ajoutés, 1 mis à jour, 2 compteurs d'utilisation repris, 1 ligne ignorée : "
+            + "ligne 5 (utilisations « beaucoup » (un nombre de 0 à 10000))", r.Message.TrimEnd('.'));
+        var compteurs = (await new EquipementRepositoryMemoire(_ctx.Db).ListerCompteursAsync(null)).ToDictionary(c => c.EquipementId, c => c.Utilisations);
+        Assert.Equal((64, 12, 0), (compteurs[a01.Id], compteurs[Par("S40").Id], compteurs[Par("S41").Id]));
+        Assert.Contains(_ctx.Db.Journal, j => j.Action == ActionsJournal.UtilisationsReprises && j.EquipementId == a01.Id);
+
+        // Même nombre : rien n'est réécrit.
+        var deNouveau = await _ctx.Inventaire.ImporterAsync([["Code", "Utilisations"], ["A01", "64"]]);
+        Assert.Equal("Import terminé : 0 équipement ajouté, 0 mis à jour, 1 inchangé.", deNouveau.Message);
+    }
+
+    [Theory]
+    [InlineData("42", 42)]
+    [InlineData(" 42,0 ", 42)]
+    [InlineData("64 / 80 utilisations", 64)]
+    [InlineData("1 utilisation", 1)]
+    [InlineData("", null)]
+    [InlineData("-3", null)]
+    [InlineData("10001", null)]
+    [InlineData("42,5", null)]
+    public void Les_utilisations_se_lisent(string texte, int? attendu) =>
+        Assert.Equal(attendu, ServiceInventaire.LireUtilisations(texte));
+
+    [Fact]
     public async Task La_derniere_revision_fixe_la_prochaine_et_devient_un_controle()
     {
         var r = await _ctx.Inventaire.ImporterAsync([

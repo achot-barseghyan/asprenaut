@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
 using Asprenaut.Materiel.Core.Modeles;
 using Asprenaut.Materiel.Core.Resultats;
 using Asprenaut.Materiel.Core.Saisie;
@@ -15,7 +17,7 @@ public sealed partial class ServiceInventaire
     {
         Code, Nom, Categorie, Marque, Modele, Taille, NumeroSerie, DerniereRevision, ProchaineRevision, Requalification,
         Montage, MarqueDeuxiemeEtage, ModeleDeuxiemeEtage, NumeroDeuxiemeEtage, DirectSystem, Manometre, Octopus, NumeroOctopus,
-        Nitrox, Notes,
+        Nitrox, Notes, Utilisations,
     }
 
     private static readonly string[][] EnTetesImport =
@@ -40,7 +42,12 @@ public sealed partial class ServiceInventaire
         ["n octopus", "numero octopus", "n serie octopus"],
         ["nitrox"],
         ["notes", "note", "remarques", "commentaire", "commentaires", "observations"],
+        ["utilisations", "utilisation", "nombre d'utilisations", "compteur", "compteur d'utilisation", "compteur d'utilisations",
+         "utilisations depuis la derniere revision", "plongees", "nombre de plongees", "plongees depuis la derniere revision"],
     ];
+
+    /// <summary>Compteur repris le plus grand accepté à l'import.</summary>
+    public const int UtilisationsRepriseMax = 10000;
 
     /// <summary>
     /// Colonnes du modèle « Inventaire à remplir » : exactement celles que l'import reconnaît. Catégorie : liste des
@@ -68,6 +75,7 @@ public sealed partial class ServiceInventaire
         new("N° octopus", "Numéro de série de l'octopus", 16, false),
         new("Nitrox", "Blocs et détendeurs seulement", 10, false, ["Oui", "Non"]),
         new("Notes", "Remarques libres", 30, false),
+        new("Utilisations", "Utilisations depuis la dernière révision (nombre) : le compteur repart de ce nombre ; vide = inchangé", 14, false),
     ];
 
     /// <summary>Nom proposé pour le modèle : « Inventaire à remplir - Asprenaut.xlsx ».</summary>
@@ -84,7 +92,8 @@ public sealed partial class ServiceInventaire
         "4. Un code déjà dans l'inventaire met cet équipement à jour : seules les cases remplies changent.",
         "5. Dates au format jj/mm/aaaa (ex. 15/09/2027).",
         "6. Les colonnes des détendeurs (Étrier / DIN, deuxième étage, D.S, Mano, Octopus) sont ignorées pour les autres catégories.",
-        "7. Enregistrez en .xlsx et rapportez le fichier au responsable matériel : Inventaire › Importer Excel.",
+        "7. Utilisations : le nombre d'utilisations depuis la dernière révision (ex. 42). Le compteur de l'équipement repart de ce nombre.",
+        "8. Enregistrez en .xlsx et rapportez le fichier au responsable matériel : Inventaire › Importer Excel.",
         "Rien n'est supprimé par l'import : le matériel absent du fichier reste dans l'inventaire.",
     ];
 
@@ -126,7 +135,7 @@ public sealed partial class ServiceInventaire
         }
 
         var listeCategories = (await categories.ListerAsync(ct)).ToList();
-        int ajoutes = 0, misAJour = 0, inchanges = 0, lignes = 0;
+        int ajoutes = 0, misAJour = 0, inchanges = 0, lignes = 0, repris = 0;
         var categoriesCreees = new List<string>();
         var ignorees = new List<(int Ligne, string Raison)>();
         var codesVus = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -206,6 +215,12 @@ public sealed partial class ServiceInventaire
                 erreur ??= $"montage « {Cellule(ChampImport.Montage)} » (Étrier ou DIN)";
             }
 
+            var utilisations = LireUtilisations(Cellule(ChampImport.Utilisations));
+            if (utilisations is null && Cellule(ChampImport.Utilisations).Length > 0)
+            {
+                erreur ??= $"utilisations « {Cellule(ChampImport.Utilisations)} » (un nombre de 0 à {UtilisationsRepriseMax})";
+            }
+
             if (erreur is not null)
             {
                 ignorees.Add((numero, erreur));
@@ -277,6 +292,10 @@ public sealed partial class ServiceInventaire
                 if (r.Reussi)
                 {
                     ajoutes++;
+                    if (r.Id is { } idCree && await ReprendreCompteurAsync(idCree, code, utilisations, ct))
+                    {
+                        repris++;
+                    }
                 }
                 else
                 {
@@ -290,8 +309,12 @@ public sealed partial class ServiceInventaire
             if (!m.Reussi)
             {
                 ignorees.Add((numero, $"{code} : {Minuscule(SansPoint(m.Message))}"));
+                continue;
             }
-            else if (m.Message == RienNaChange)
+
+            var compteurRepris = await ReprendreCompteurAsync(existant.Id, code, utilisations, ct);
+            repris += compteurRepris ? 1 : 0;
+            if (m.Message == RienNaChange && !compteurRepris)
             {
                 inchanges++;
             }
@@ -310,6 +333,11 @@ public sealed partial class ServiceInventaire
         if (inchanges > 0)
         {
             message += $", {Libelles.Pluriel(inchanges, "inchangé")}";
+        }
+
+        if (repris > 0)
+        {
+            message += $", {Libelles.Pluriel(repris, "compteur d'utilisation repris", "compteurs d'utilisation repris")}";
         }
 
         if (categoriesCreees.Count > 0)
@@ -331,6 +359,44 @@ public sealed partial class ServiceInventaire
             Details = $"Import de l'inventaire : {message}",
         }, ct);
         return ResultatOperation.Ok($"Import terminé : {message}.", ajoutes + misAJour);
+    }
+
+    /// <summary>
+    /// Nombre d'utilisations d'une case : « 42 », « 42,0 » (nombre Excel) ou « 64 / 80 utilisations » (colonne de
+    /// l'inventaire) ; null si vide, illisible ou au-delà de <see cref="UtilisationsRepriseMax"/>.
+    /// </summary>
+    public static int? LireUtilisations(string texte)
+    {
+        var m = Regex.Match(texte.Trim(), @"^(\d{1,6})(?:[.,]0+)?(?:\s*/\s*\d+)?(?:\s*utilisations?)?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return m.Success && int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture) is var n && n <= UtilisationsRepriseMax ? n : null;
+    }
+
+    /// <summary>
+    /// Reprend le compteur d'un équipement importé (« il a déjà servi 42 fois depuis sa dernière révision ») : le compteur
+    /// repart de ce nombre, puis chaque retour scanné s'ajoute. Rien n'est écrit si le compteur vaut déjà ce nombre.
+    /// </summary>
+    private async Task<bool> ReprendreCompteurAsync(long equipementId, string code, int? utilisations, CancellationToken ct)
+    {
+        if (utilisations is not { } valeur)
+        {
+            return false;
+        }
+
+        var avant = (await equipements.ListerCompteursAsync(equipementId, ct)).FirstOrDefault()?.Utilisations ?? 0;
+        if (avant == valeur)
+        {
+            return false;
+        }
+
+        await equipements.EnregistrerRepriseAsync(new RepriseUtilisations(equipementId, valeur, horloge.MaintenantUtc), ct);
+        await journal.AjouterAsync(new EntreeJournal
+        {
+            Horodatage = horloge.MaintenantUtc,
+            Action = ActionsJournal.UtilisationsReprises,
+            EquipementId = equipementId,
+            Details = $"{code} : compteur d'utilisation repris à {Libelles.Pluriel(valeur, "utilisation")} (avant : {avant})",
+        }, ct);
+        return true;
     }
 
     private static string CleCategorie(string nom) => ServiceAdherents.Simplifier(nom).TrimEnd('s');

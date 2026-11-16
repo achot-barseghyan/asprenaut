@@ -520,6 +520,13 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     final, sinon créée. Dernière révision : comme dans la fiche (contrôle + prochaine calculée). Ligne ignorée et citée (5 au plus)
     si code manquant ou en double, date / D.S / Nitrox / montage illisible, ou refus du service. Rien n'est supprimé ; état non importé.
     Journal `InventaireImporte`. Modèle : `ColonnesModeleInventaire(categories)`, `NomFichierModeleInventaire`, `ModeEmploiModeleInventaire`.
+    Colonne « Utilisations » (migration 025, aussi « Compteur », « Nombre d'utilisations », « Plongées »…) : utilisations depuis la
+    dernière révision, lues par `LireUtilisations` (« 42 », « 42,0 », « 64 / 80 utilisations » ; 0 à `UtilisationsRepriseMax` = 10000,
+    sinon ligne ignorée) ; vide = inchangé, même valeur que le compteur = rien d'écrit. Sinon `RepriseUtilisations` (table
+    utilisation_reprise, une ligne par équipement, `EnregistrerRepriseAsync` remplace) datée de l'import + journal `UtilisationsReprises` :
+    `ListerCompteursAsync` part de ce nombre et n'ajoute que les retours scannés après la reprise ; un contrôle de l'équipement complet
+    daté du jour de la reprise ou après la remet à zéro. Page Utilisations : ligne « Compteur repris de l'import » (`LigneUtilisation.CompteurRepris`,
+    `EstControle`), le total reste celui des sorties.
 
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
@@ -591,11 +598,12 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   chaque séance reçoit les inspecteurs TIV actifs.
   024 : modele_sortie (nom unique NOCASE `ux_modele_sortie_nom`, jour 0–6 null = sans jour, type_sortie_id et moniteur_id ON DELETE
   SET NULL, lieu, intitule, utilisations null = celles du type, un_par_categorie, notes, cree_le).
+  025 : utilisation_reprise (equipement_id clé primaire ON DELETE CASCADE, utilisations ≥ 0, reprise_le) : compteur repris de l'import.
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/025_xxx.sql`, sans jamais modifier un script déjà livré
+- Nouvelle migration : ajouter `Migrations/026_xxx.sql`, sans jamais modifier un script déjà livré
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.

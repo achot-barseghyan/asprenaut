@@ -66,6 +66,7 @@ public sealed class ServiceHistorique(
         [ActionsJournal.AdherentModifie] = (TypeEvenement.Autre, "Adhérent modifié"),
         [ActionsJournal.AdherentsImportes] = (TypeEvenement.Autre, "Liste des adhérents importée"),
         [ActionsJournal.InventaireImporte] = (TypeEvenement.Materiel, "Inventaire importé"),
+        [ActionsJournal.UtilisationsReprises] = (TypeEvenement.Materiel, "Compteur d'utilisation repris"),
         ["DonneesDemo"] = (TypeEvenement.Autre, "Données de démonstration"),
     };
 
@@ -321,17 +322,33 @@ public sealed class ServiceHistorique(
         static DateTime FinDe(DateOnly date) => date.ToDateTime(new TimeOnly(23, 59, 59, 999), DateTimeKind.Utc);
         static DateTime Utc(DateTime t) => t.Kind == DateTimeKind.Local ? t.ToUniversalTime() : DateTime.SpecifyKind(t, DateTimeKind.Utc);
 
-        // Frise chronologique : retours (ou départs pas encore rentrés) et contrôles.
+        // Frise chronologique : retours (ou départs pas encore rentrés), contrôles et compteur repris d'un import.
+        var reprise = await equipements.ObtenirRepriseAsync(e.Id, ct);
         var frise = d.Passages.Select(p => (Moment: Utc(p.ScanneRetourLe ?? p.ScanneDepartLe), Passage: (PassageSortie?)p, Controle: (Controle?)null))
             .Concat(controles.Select(c => (Moment: FinDe(c.DateControle), Passage: (PassageSortie?)null, Controle: (Controle?)c)))
+            .Concat(reprise is null ? [] : [(Moment: Utc(reprise.RepriseLe), Passage: (PassageSortie?)null, Controle: (Controle?)null)])
             .OrderBy(x => x.Moment).ThenBy(x => x.Controle?.SaisiLe ?? DateTime.MinValue)
             .ToList();
 
         var lignes = new List<LigneUtilisation>();
         var compteur = 0;
         var total = 0;
-        foreach (var (_, passage, controle) in frise)
+        foreach (var (moment, passage, controle) in frise)
         {
+            if (passage is null && controle is null)
+            {
+                // Le compteur repart du nombre importé (« déjà 42 utilisations ») ; le total reste celui des sorties.
+                compteur = reprise!.Utilisations;
+                lignes.Add(new LigneUtilisation
+                {
+                    EstControle = true,
+                    Date = DateOnly.FromDateTime(moment.ToLocalTime()),
+                    Titre = "Compteur repris de l'import",
+                    CompteurRepris = reprise.Utilisations,
+                });
+                continue;
+            }
+
             if (controle is not null)
             {
                 compteur = 0;
@@ -435,7 +452,9 @@ public sealed class ServiceHistorique(
     public static string ExporterUtilisationsCsv(UtilisationsEquipement u, IEnumerable<LigneUtilisation> lignes) =>
         Csv.Ecrire(
             ["Code", "Date", "Sortie", "Type", "Responsable", "Départ · retour", "Utilisations", "Compteur", "Retour"],
-            lignes.Select(l => l.EstControle
+            lignes.Select(l => l.CompteurRepris is { } repris
+                ? new[] { u.Equipement.Code, Libelles.Date(l.Date), l.Titre, "Reprise", "", "", "", repris.ToString(Libelles.Culture), $"Compteur repris à {repris}" }
+                : l.EstControle
                 ? new[] { u.Equipement.Code, Libelles.Date(l.Date), l.Titre, "Contrôle", "", "", "", "0", "Compteur remis à 0" }
                 : new[]
                 {

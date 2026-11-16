@@ -445,7 +445,7 @@ public sealed class EcranUtilisations : EcranBase
             _jamaisSorti = jamaisSorti;
             AccessibleDescription = lignes.Count == 0 ? Vide
                 : string.Join(". ", lignes.Select(l => l.EstControle
-                    ? $"{Libelles.Date(l.Date)}, {l.Titre}, compteur remis à 0"
+                    ? $"{Libelles.Date(l.Date)}, {l.Titre}, {(l.CompteurRepris is { } repris ? $"compteur repris à {repris}" : "compteur remis à 0")}"
                     : $"{Libelles.Date(l.Date)}, {l.Titre}, {l.TypeNom}, {l.Responsable}, {l.Horaires}, +{l.Utilisations}{(l.Comptee ? "" : " au retour")}, compteur {l.Compteur?.ToString(Libelles.Culture) ?? "pas encore compté"}, {l.LibelleRetour}"));
             Invalidate();
         }
@@ -536,7 +536,8 @@ public sealed class EcranUtilisations : EcranBase
             var t = TextRenderer.MeasureText(g, ligne.Titre, titre); // Avec la marge du dessin (Dessin.Texte), sinon « … ».
             var largeurTitre = Math.Min(t.Width, droite - x);
             Dessin.Texte(g, ligne.Titre, titre, new Rectangle(x, y, largeurTitre, h), Theme.AccentClair);
-            Dessin.Texte(g, "Compteur remis à 0", Theme.Police(9.75f), Rectangle.FromLTRB(x + largeurTitre + (int)E(12), y, droite, y + h), Theme.TexteSecondaireClair);
+            var detail = ligne.CompteurRepris is { } repris ? $"Compteur repris à {repris.ToString(Libelles.Culture)}" : "Compteur remis à 0";
+            Dessin.Texte(g, detail, Theme.Police(9.75f), Rectangle.FromLTRB(x + largeurTitre + (int)E(12), y, droite, y + h), Theme.TexteSecondaireClair);
         }
 
         private void PeindreSortie(Graphics g, LigneUtilisation ligne, int y, int h, Func<int, int> colonne, Func<int, int> fin, TextFormatFlags droite)

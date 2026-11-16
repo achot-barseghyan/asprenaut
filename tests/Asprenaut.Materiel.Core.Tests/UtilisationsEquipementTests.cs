@@ -69,6 +69,29 @@ public class UtilisationsEquipementTests
         Assert.Equal((2, "Révisé le 03/11/2026", 7, "Depuis 11/2026 · 1 contrôle"), (u.SortiesDepuisControle, u.DernierControle, u.Total, u.DetailTotal));
     }
 
+    // Règle 42 : compteur repris d'un import, puis les retours s'ajoutent ; le contrôle suivant remet à zéro.
+    [Fact]
+    public async Task Le_compteur_repris_d_un_import_sert_de_depart_jusqu_au_controle_suivant()
+    {
+        var a07 = _ctx.Equipement("A07", categorie: "Détendeurs");
+        Le(1);
+        await AllerRetourAsync("Piscine", "Avant l'import");
+        Le(2);
+        Assert.True((await _ctx.Inventaire.ImporterAsync([["Code", "Utilisations"], ["A07", "42"]])).Reussi);
+        Le(3);
+        await AllerRetourAsync("Mer", "Week-end Marseille");
+
+        var u = (await _ctx.Historique.ObtenirUtilisationsAsync(a07.Id))!;
+        Assert.Equal(46, u.Compteur);
+        Assert.Equal(["Week-end Marseille", "Compteur repris de l'import", "Avant l'import"], u.Lignes.Select(l => l.Titre));
+        Assert.Equal((true, 42, 46), (u.Lignes[1].EstControle, u.Lignes[1].CompteurRepris!.Value, u.Lignes[0].Compteur!.Value));
+        Assert.Contains("Reprise;;;;42;Compteur repris à 42", ServiceHistorique.ExporterUtilisationsCsv(u, u.Lignes), StringComparison.Ordinal);
+
+        Le(4);
+        Assert.True((await _ctx.Revisions.EnregistrerControleAsync(a07.Id, TypeControle.Revision, ResultatControle.Conforme, _ctx.Horloge.AujourdHui, null)).Reussi);
+        Assert.Equal(0, (await _ctx.Historique.ObtenirUtilisationsAsync(a07.Id))!.Compteur);
+    }
+
     [Fact]
     public async Task Le_filtre_par_type_garde_les_controles()
     {

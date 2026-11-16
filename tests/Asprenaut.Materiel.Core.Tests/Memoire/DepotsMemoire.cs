@@ -16,6 +16,7 @@ public sealed class BaseMemoire
     public List<DetailComposant> Composants { get; } = [];
     public List<TypeDeSortie> TypesSortie { get; } = [];
     public List<Adherent> Adherents { get; } = [];
+    public List<RepriseUtilisations> Reprises { get; } = [];
 
     private long _sequence;
 
@@ -122,14 +123,26 @@ public sealed class EquipementRepositoryMemoire(BaseMemoire db) : IEquipementRep
             {
                 var dernier = db.Controles.Where(c => c.EquipementId == e.Id && c.Composant.Length == 0).Select(c => (DateOnly?)c.DateControle).Max();
                 var apres = dernier is { } d ? d.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc) : DateTime.MinValue;
+                var reprise = db.Reprises.FirstOrDefault(r => r.EquipementId == e.Id && r.RepriseLe >= apres);
                 return new CompteurEquipement
                 {
                     EquipementId = e.Id,
-                    Utilisations = db.Affectations.Where(a => a.EquipementId == e.Id && a.ScanneRetourLe is { } r && r >= apres)
+                    Utilisations = (reprise?.Utilisations ?? 0)
+                        + db.Affectations.Where(a => a.EquipementId == e.Id && a.ScanneRetourLe is { } r && (reprise is null ? r >= apres : r > reprise.RepriseLe))
                         .Sum(a => db.Sorties.First(s => s.Id == a.SortieId).Utilisations),
                 };
             })
             .ToList());
+
+    public Task<RepriseUtilisations?> ObtenirRepriseAsync(long equipementId, CancellationToken ct = default) =>
+        Task.FromResult(db.Reprises.FirstOrDefault(r => r.EquipementId == equipementId));
+
+    public Task EnregistrerRepriseAsync(RepriseUtilisations reprise, CancellationToken ct = default)
+    {
+        db.Reprises.RemoveAll(r => r.EquipementId == reprise.EquipementId);
+        db.Reprises.Add(reprise);
+        return Task.CompletedTask;
+    }
 
     public Task<IReadOnlyList<DetailComposant>> ListerComposantsAsync(long equipementId, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<DetailComposant>>(db.Composants.Where(c => c.EquipementId == equipementId).OrderBy(c => c.Role).ToList());

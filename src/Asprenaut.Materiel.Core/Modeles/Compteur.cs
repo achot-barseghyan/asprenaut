@@ -45,6 +45,12 @@ public sealed class CompteurEquipement
     public int Utilisations { get; set; }
 }
 
+/// <summary>
+/// Compteur repris d'un fichier (import de l'inventaire) : l'équipement avait déjà <see cref="Utilisations"/> utilisations
+/// au moment de la reprise. Il compte jusqu'au prochain contrôle de l'équipement complet daté du jour de la reprise ou après.
+/// </summary>
+public sealed record RepriseUtilisations(long EquipementId, int Utilisations, DateTime RepriseLe);
+
 /// <summary>Usage d'un équipement soumis à un seuil : « 92/100 utilisations ».</summary>
 public sealed record UsageEquipement(int Utilisations, int Seuil, EtatCompteur Etat)
 {

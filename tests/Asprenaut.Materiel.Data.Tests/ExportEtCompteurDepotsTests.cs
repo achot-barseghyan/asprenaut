@@ -107,6 +107,37 @@ public class ExportEtCompteurDepotsTests : IAsyncLifetime
         Assert.Equal(new UsageEquipement(1, 1, EtatCompteur.Atteint), await compteur.UsageAsync(det));
     }
 
+    // Règle 42 : un compteur repris d'un import sert de départ ; seuls les retours suivants s'ajoutent, jusqu'au contrôle.
+    [Fact]
+    public async Task Le_compteur_repart_de_la_reprise_jusqu_au_controle_suivant()
+    {
+        Assert.True(await DonneesDemo.ChargerSiVideAsync(_base.Fabrique, Horloge.AujourdHui));
+        var depot = new EquipementRepository(_base.Fabrique);
+        var det = (await depot.ObtenirParCodeAsync("A01"))!;
+        await AllerRetourAsync("A01"); // Avant la reprise : remplacé par le nombre repris.
+
+        Horloge.MaintenantUtc = Horloge.MaintenantUtc.AddHours(1);
+        await depot.EnregistrerRepriseAsync(new RepriseUtilisations(det.Id, 30, Horloge.MaintenantUtc));
+        await depot.EnregistrerRepriseAsync(new RepriseUtilisations(det.Id, 40, Horloge.MaintenantUtc)); // Remplace la précédente.
+        Assert.Equal(new RepriseUtilisations(det.Id, 40, Horloge.MaintenantUtc), await depot.ObtenirRepriseAsync(det.Id));
+        Assert.Null(await depot.ObtenirRepriseAsync(-1));
+        Assert.Equal(40, (await depot.ListerCompteursAsync(det.Id)).Single().Utilisations);
+
+        Horloge.MaintenantUtc = Horloge.MaintenantUtc.AddDays(1);
+        await AllerRetourAsync("A01");
+        Assert.Equal(41, (await depot.ListerCompteursAsync(null)).Single(c => c.EquipementId == det.Id).Utilisations);
+
+        await using (var cx = await _base.Fabrique.OuvrirAsync())
+        {
+            Assert.Equal("2026-11-06T19:30:00.000Z", await cx.ExecuteScalarAsync<string>("SELECT reprise_le FROM utilisation_reprise;"));
+            await cx.ExecuteAsync(
+                "INSERT INTO controle (equipement_id, type, date_controle, resultat, notes, saisi_le) VALUES (@id, 'Revision', '2026-11-06', 'Conforme', '', '2026-11-07T19:00:00.000Z');",
+                new { id = det.Id });
+        }
+
+        Assert.Equal(1, (await depot.ListerCompteursAsync(det.Id)).Single().Utilisations); // Contrôle du jour de la reprise : elle ne compte plus.
+    }
+
     [Fact]
     public async Task Une_modification_d_equipement_est_enregistree()
     {
