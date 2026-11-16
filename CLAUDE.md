@@ -137,6 +137,10 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   (« À surveiller · Débit continu », rouge si hors service) et la ligne légèrement teintée. Bulle de la cellule : les trois
   boutons (une bulle par bouton avec `ToolTip.Show` ne s'affichait pas). Lien « Voir les sorties » sous le compteur
   (`Tableaux.ZoneLienUtilisation` pour le clic, lignes de 70 px) → `AllerA<EcranUtilisations>(idEquipement)` (règle 29).
+  Filtres (maquette « Inventaire » v2, règle 46) : sous les tuiles, recherche | bouton « Filtres » (`BoutonFiltres`, pastille du nombre
+  coché) | liste « Trier par » ; puces « RACCOURCIS » ; panneau `PanneauFiltres` (un groupe par colonne, `PucesFiltre` à cocher) ;
+  ligne « 37 équipements · 4 révisions dépassées » + filtres en cours (croix) + « Tout effacer » ; clic sur un en-tête = tri (↑ ↓) ;
+  tuiles estompées à 0 ; message au milieu du tableau vide. Filtre gardé pour la session (champ statique de l'écran).
 - **Pictogrammes** : `Apparence/Icones.cs`, chemins SVG 24 × 24 de la maquette lus par `CheminSvg` et tracés en GDI+.
 - **Icône de l'application** : `Ressources/Asprenaut.ico` (16 à 256 px ; tailles ≤ 96 en bitmap, 128 et 256 en PNG), fabriquée
   depuis `Ressources/Asprenaut.png` (1024 px). `ApplicationIcon` dans le .csproj pour le .exe, ressource embarquée lue par
@@ -560,6 +564,17 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     ligne d'un autre tableau si elle est unique, sinon ligne ignorée et citée. Historique seulement : ni échéance, ni état, ni
     révision en cours, ni signalement ne changent. Déjà présente (équipement, composant, date, nature, intervenant) → pas
     recopiée : le classeur se réimporte. Onglets sans tableau ignorés, onglets sans équipement cités. Journal `FichesEpiImportees`.
+
+46. Filtres de l'inventaire (`ServiceInventaire.Filtrer`, `Services/ServiceInventaireFiltres.cs`, `Modeles/FiltresInventaire.cs`,
+    `FiltresInventaireTests`, consultation libre) : la recherche est lue en base (`ListerAsync(recherche, null)`), le reste en mémoire.
+    `FiltreInventaire` : catégorie, valeurs cochées par `FacetteInventaire` (Statut ; Révision = prochaine échéance, `FiltreRevision`
+    dépassée / dans `JoursAvantRevision` jours / à jour / sans date, réformé = sans date ; Utilisation = `FiltreUsure` d'après le
+    compteur ; Marque ; Taille ; vide = « Sans marque / taille », majuscules ignorées). Plusieurs valeurs d'un groupe = l'une ou
+    l'autre, deux groupes = l'un et l'autre. Chaque nombre (tuile, valeur, raccourci) tient compte des autres filtres, pas du sien.
+    Raccourcis (`Raccourcis`) : révision dépassée, à réviser sous N j, hors service, en sortie, usure ≥ 90 % ; un clic remplace les
+    valeurs cochées (catégorie gardée) et choisit son tri, un second les retire (`AppliquerRaccourci`). Tri (`TriInventaire`,
+    `ChoixTris`, `TrierPar` : même colonne = inverse, utilisations du plus grand) : codes en ordre naturel (A2 avant A10), échéance
+    la plus proche, sans date et textes vides à la fin, à égalité le code. « Tout effacer » (`Effacer`) garde le tri.
 
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit

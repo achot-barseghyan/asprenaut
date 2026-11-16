@@ -8,7 +8,11 @@ using Saisie = Asprenaut.Materiel.Core.Saisie;
 
 namespace Asprenaut.Materiel.App.Ecrans;
 
-/// <summary>Inventaire : tuiles de catégories, recherche (ou scan), tableau du matériel.</summary>
+/// <summary>
+/// Inventaire (maquette « Inventaire » v2) : tuiles de catégories, recherche (ou scan), bouton « Filtres » et tri,
+/// raccourcis, panneau de filtres à cocher, filtres en cours, tableau du matériel (clic sur un en-tête = tri).
+/// Les filtres et le tri sont calculés par <see cref="ServiceInventaire.Filtrer"/> sur les lignes de la recherche.
+/// </summary>
 public sealed class EcranInventaire : EcranBase
 {
     private readonly ServiceInventaire _inventaire;
@@ -17,12 +21,28 @@ public sealed class EcranInventaire : EcranBase
     private readonly ServiceReglages _reglages;
     private readonly ServiceCompteur _compteur;
     private IReadOnlyDictionary<long, UtilisationInventaire> _utilisations = new Dictionary<long, UtilisationInventaire>();
-    private readonly BarreRecherche _recherche = new("Rechercher un code, un équipement, une sortie…", "ou scannez");
-    private readonly GrilleAdaptative _categories = new() { LargeurMin = 176, HauteurElement = 76, Ecart = 12, Margin = new Padding(0, 0, 0, 20) };
+    private readonly BarreRecherche _recherche = new("Rechercher un code, un équipement, une marque, une sortie…", "ou scannez");
+    private readonly GrilleAdaptative _categories = new() { LargeurMin = 150, HauteurElement = 76, Ecart = 12, Margin = new Padding(0, 0, 0, 16) };
     private readonly List<Tuile> _tuiles = [];
     private readonly DataGridView _grille = new();
     private readonly System.Windows.Forms.Timer _attenteRecherche = new() { Interval = 300 };
-    private long? _categorie;
+
+    // Filtres (maquette v2). Gardés le temps de la session : on les retrouve en revenant d'une fiche de suivi.
+    private static FiltreInventaire _filtreRetenu = new();
+    private static bool _panneauRetenu;
+    private FiltreInventaire _filtre = _filtreRetenu;
+    private IReadOnlyList<LigneInventaire> _tout = []; // Lignes de la recherche, toutes catégories.
+    private readonly BoutonFiltres _boutonFiltres = new() { Margin = new Padding(10, 0, 10, 0) };
+    private readonly ListeDeroulante _tri = new() { AccessibleName = "Trier par" };
+    private readonly PucesFiltre _raccourcis = new(StylePuces.Raccourci, "RACCOURCIS") { AccessibleDescription = "Raccourcis de filtres", Margin = new Padding(0, 10, 0, 6) };
+    private readonly PanneauFiltres _panneau = new() { Margin = new Padding(0, 6, 0, 8) };
+    private readonly Dictionary<FacetteInventaire, PucesFiltre> _groupes = [];
+    private readonly PucesFiltre _etiquettes = new(StylePuces.Etiquette) { AccessibleDescription = "Filtres en cours", Margin = new Padding(0, 2, 0, 8) };
+    private readonly Panel _vide = new() { BackColor = Color.Transparent, Visible = false };
+    private readonly Label _videTitre = Ui.Libelle("", Theme.PoliceGrasse(12f));
+    private readonly Label _videDetail = Ui.Libelle("", Theme.Police(10.5f), Theme.TexteSecondaire);
+    private readonly BoutonArrondi _videEffacer = new("Tout effacer", StyleBouton.Secondaire, Icones.Effacer);
+    private bool _remplissageTri;
 
     private readonly GardeGestion _garde;
     private readonly ServiceSignalements _signalements;
@@ -154,16 +174,106 @@ public sealed class EcranInventaire : EcranBase
         // Le cadenas du bouton « Modifier » suit le mode gestion (déverrouillage, expiration).
         _garde.Gestion.EtatChange += SurChangementDeMode;
 
+        // Clic sur un en-tête : tri par cette colonne (de nouveau : sens inversé).
+        _grille.ColumnHeaderMouseClick += (_, e) =>
+        {
+            if (Colonne(e.ColumnIndex) is { } nom && TrisColonnes.TryGetValue(nom, out var tri))
+            {
+                Appliquer(_filtre.TrierPar(tri));
+            }
+        };
+        _grille.CellMouseEnter += (_, e) =>
+        {
+            if (e.RowIndex < 0 && Colonne(e.ColumnIndex) is { } nom)
+            {
+                _grille.Cursor = TrisColonnes.ContainsKey(nom) ? Cursors.Hand : Cursors.Default;
+            }
+        };
+
+        // Filtres : bouton qui ouvre le panneau, tri, raccourcis, groupes à cocher, filtres en cours.
+        _boutonFiltres.Ouvert = _panneau.Visible = _panneauRetenu;
+        _boutonFiltres.Click += (_, _) =>
+        {
+            _panneauRetenu = _boutonFiltres.Ouvert = _panneau.Visible = !_panneau.Visible;
+            AfficherVue();
+        };
+        _tri.SelectedIndexChanged += (_, _) =>
+        {
+            if (!_remplissageTri && _tri.SelectedItem is Choix<ChoixTriInventaire?> { Valeur: { } choix })
+            {
+                Appliquer(_filtre with { Tri = choix.Tri, Descendant = choix.Descendant });
+            }
+        };
+        _raccourcis.PuceCliquee += (_, cle) =>
+        {
+            if (_inventaire.Raccourcis.FirstOrDefault(r => r.Cle == cle) is { } raccourci)
+            {
+                Appliquer(ServiceInventaire.AppliquerRaccourci(_filtre, raccourci));
+            }
+        };
+        foreach (var facette in Enum.GetValues<FacetteInventaire>())
+        {
+            var puces = _panneau.AjouterGroupe(ServiceInventaire.TitreFacette(facette));
+            puces.PuceCliquee += (_, valeur) => Appliquer(_filtre.Basculer(facette, valeur));
+            _groupes[facette] = puces;
+        }
+
+        _etiquettes.PuceCliquee += (_, cle) =>
+        {
+            var i = cle.IndexOf('|');
+            if (i > 0 && Enum.TryParse<FacetteInventaire>(cle[..i], out var facette))
+            {
+                Appliquer(_filtre.Basculer(facette, cle[(i + 1)..]));
+            }
+        };
+        _etiquettes.LienClique += (_, _) => ToutEffacer();
+        _videEffacer.Click += (_, _) => ToutEffacer();
+
+        // Aucun équipement ne correspond : message au milieu du tableau.
+        var pileVide = Ui.Pile(_videTitre, _videDetail, _videEffacer);
+        _videEffacer.Margin = new Padding(0, 10, 0, 0);
+        _vide.Controls.Add(pileVide);
+        _vide.Layout += (_, _) =>
+        {
+            var taille = pileVide.PreferredSize;
+            pileVide.SetBounds(Math.Max(0, (_vide.Width - taille.Width) / 2), Math.Max(0, (_vide.Height - taille.Height) / 3), taille.Width, taille.Height);
+        };
+
         var carteGrille = new Carte { Padding = new Padding(8, 6, 8, 8), Rayon = 22 };
         _grille.Dock = DockStyle.Fill;
+        _vide.Dock = DockStyle.Fill;
         carteGrille.Controls.Add(_grille);
+        carteGrille.Controls.Add(_vide);
+
+        _recherche.Margin = Padding.Empty;
+        var barre = Ui.Colonnes(
+            (_recherche, SizeType.Percent, 100),
+            (_boutonFiltres, SizeType.Absolute, 150),
+            (_tri, SizeType.Absolute, 270));
+        _tri.Dock = DockStyle.None;
+        _tri.Anchor = AnchorStyles.Left | AnchorStyles.Right;
 
         Controls.Add(Ui.Colonne(
             (Ui.Entete(Ui.Pile(Ui.Titre(Titre), Ui.SousTitre("Tout le matériel du club, son état et sa prochaine révision.")), ajouter, importer, fiches, modele, exporter), SizeType.AutoSize, 0),
-            (_categories, SizeType.Absolute, 76 + 20),
-            (_recherche, SizeType.Absolute, 54 + 20),
+            (_categories, SizeType.Absolute, 76 + 16),
+            (barre, SizeType.Absolute, 54),
+            (_raccourcis, SizeType.AutoSize, 0),
+            (_panneau, SizeType.AutoSize, 0),
+            (_etiquettes, SizeType.AutoSize, 0),
             (carteGrille, SizeType.Percent, 100)));
     }
+
+    /// <summary>Colonnes du tableau qui se trient d'un clic sur leur en-tête.</summary>
+    private static readonly Dictionary<string, TriInventaire> TrisColonnes = new()
+    {
+        ["equipement"] = TriInventaire.Equipement,
+        ["code"] = TriInventaire.Code,
+        ["marque"] = TriInventaire.Marque,
+        ["taille"] = TriInventaire.Taille,
+        ["statut"] = TriInventaire.Statut,
+        ["utilisation"] = TriInventaire.Utilisation,
+        ["revision"] = TriInventaire.Revision,
+    };
 
     public override string Titre => "Inventaire";
 
@@ -172,7 +282,7 @@ public sealed class EcranInventaire : EcranBase
     protected override async Task ChargerAsync(object? parametre)
     {
         var categories = await _inventaire.ListerCategoriesAsync();
-        var tout = await _inventaire.ListerAsync(null, null);
+        var tout = await _inventaire.ListerAsync(_recherche.Champ.Text, null);
         _utilisations = await _compteur.ListerUtilisationsAsync(tout);
         _problemes = await _signalements.OuvertsAsync();
         if (IsDisposed)
@@ -181,9 +291,9 @@ public sealed class EcranInventaire : EcranBase
         }
 
         // Catégorie supprimée depuis la fiche d'un équipement : revenir à « Tout ».
-        if (_categorie is { } filtre && categories.All(c => c.Id != filtre))
+        if (_filtre.CategorieId is { } filtre && categories.All(c => c.Id != filtre))
         {
-            _categorie = null;
+            _filtre = _filtre with { CategorieId = null };
         }
 
         _categories.SuspendLayout();
@@ -200,14 +310,15 @@ public sealed class EcranInventaire : EcranBase
             _nomsCategories[c.Id] = c.Nom;
         }
 
-        AjouterTuile("Tout", Icones.Tout, null, tout.Count);
+        AjouterTuile("Tout", Icones.Tout, null);
         foreach (var c in categories)
         {
-            AjouterTuile(c.Nom, Icones.PourCategorie(c.Nom), c.Id, tout.Count(l => l.CategorieId == c.Id));
+            AjouterTuile(c.Nom, Icones.PourCategorie(c.Nom), c.Id);
         }
 
         _categories.ResumeLayout(true);
-        Afficher(tout);
+        _tout = tout;
+        AfficherVue();
         _recherche.Champ.Focus();
     }
 
@@ -234,47 +345,178 @@ public sealed class EcranInventaire : EcranBase
             return;
         }
 
-        var code =await FormulaireEquipement.OuvrirAsync(FindForm(), _inventaire, categorieId: _categorie);
+        var code =await FormulaireEquipement.OuvrirAsync(FindForm(), _inventaire, categorieId: _filtre.CategorieId);
         if (code is null || IsDisposed)
         {
             return;
         }
 
+        // Les filtres cochés pourraient le cacher : seules la catégorie et la recherche restent.
+        _filtre = _filtre.AvecChoix(new Dictionary<FacetteInventaire, IReadOnlySet<string>>());
+
         await ChargerAsync(null);
         _recherche.Champ.Text = code; // Recherche sur le nouveau code : l'équipement apparaît seul.
     }
 
-    private void AjouterTuile(string texte, string icone, long? categorieId, int nombre)
+    /// <summary>Tuile d'une catégorie (null = « Tout ») ; son nombre suit les autres filtres (<see cref="AfficherVue"/>).</summary>
+    private void AjouterTuile(string texte, string icone, long? categorieId)
     {
         var tuile = new Tuile(texte, icone, DispositionTuile.Horizontale)
         {
-            Compte = nombre,
-            Selectionne = categorieId == _categorie,
+            Selectionne = categorieId == _filtre.CategorieId,
             Tag = categorieId,
-            AccessibleName = $"{texte} : {nombre}",
+            AccessibleName = texte,
         };
-        tuile.Click += (_, _) =>
-        {
-            _categorie = categorieId;
-            foreach (var t in _tuiles)
-            {
-                t.Selectionne = (long?)t.Tag == _categorie;
-            }
-
-            Executer(RechargerAsync);
-        };
+        tuile.Click += (_, _) => Appliquer(_filtre with { CategorieId = categorieId });
         _tuiles.Add(tuile);
         _categories.Controls.Add(tuile);
     }
 
     private async Task RechargerAsync()
     {
-        var lignes = await _inventaire.ListerAsync(_recherche.Champ.Text, _categorie);
+        var lignes = await _inventaire.ListerAsync(_recherche.Champ.Text, null);
         _utilisations = await _compteur.ListerUtilisationsAsync(lignes);
         _problemes = await _signalements.OuvertsAsync();
         if (!IsDisposed)
         {
-            Afficher(lignes);
+            _tout = lignes;
+            AfficherVue();
+        }
+    }
+
+    /// <summary>Nouveau filtre ou tri : calculé sur les lignes déjà lues, sans relire la base.</summary>
+    private void Appliquer(FiltreInventaire filtre)
+    {
+        _filtre = _filtreRetenu = filtre;
+        AfficherVue();
+    }
+
+    /// <summary>« Tout effacer » : catégorie, valeurs cochées et recherche (le tri reste).</summary>
+    private void ToutEffacer()
+    {
+        _filtre = _filtreRetenu = _filtre.Effacer();
+        if (_recherche.Champ.Text.Length > 0)
+        {
+            _recherche.Champ.Text = ""; // La recherche vidée relit la liste (attente de 300 ms).
+        }
+
+        AfficherVue();
+        _recherche.Champ.Focus();
+    }
+
+    /// <summary>Couleur du point d'une valeur de filtre (statut, révision, utilisation) ; aucune pour marque et taille.</summary>
+    private static Color? CouleurFiltre(FacetteInventaire facette, string valeur) => facette switch
+    {
+        FacetteInventaire.Statut when Enum.TryParse<StatutInventaire>(valeur, out var s) => s switch
+        {
+            StatutInventaire.Disponible => Theme.Retour,
+            StatutInventaire.Dehors => Theme.Depart,
+            StatutInventaire.Manquant => Theme.Erreur,
+            StatutInventaire.HorsService => Theme.Avertissement,
+            _ => Theme.TexteSecondaire,
+        },
+        FacetteInventaire.Revision when Enum.TryParse<FiltreRevision>(valeur, out var r) => r switch
+        {
+            FiltreRevision.Depassee => Theme.Erreur,
+            FiltreRevision.Proche => Theme.Avertissement,
+            FiltreRevision.AJour => Theme.Retour,
+            _ => Theme.TexteSecondaire,
+        },
+        FacetteInventaire.Usure when Enum.TryParse<FiltreUsure>(valeur, out var u) => u switch
+        {
+            FiltreUsure.SeuilAtteint => Theme.Erreur,
+            FiltreUsure.PresDuSeuil => Theme.Avertissement,
+            FiltreUsure.Normale => Theme.Accent,
+            _ => Theme.TexteSecondaire,
+        },
+        _ => null,
+    };
+
+    /// <summary>Point du raccourci : la couleur de la valeur qu'il coche.</summary>
+    private static Color CouleurRaccourci(RaccourciInventaire r) => r.Choix.ContainsKey(FacetteInventaire.Usure)
+        ? Theme.Erreur
+        : r.Choix.SelectMany(c => c.Value.Select(v => CouleurFiltre(c.Key, v))).OfType<Color>().DefaultIfEmpty(Theme.Accent).First();
+
+    /// <summary>Filtre, trie et affiche : tuiles, raccourcis, panneau, filtres en cours, tri, tableau.</summary>
+    private void AfficherVue()
+    {
+        var vue = _inventaire.Filtrer(_tout, _utilisations, _filtre);
+
+        foreach (var tuile in _tuiles)
+        {
+            var id = (long?)tuile.Tag;
+            var nombre = id is { } c ? vue.ParCategorie.GetValueOrDefault(c) : vue.TotalCategories;
+            tuile.Compte = nombre;
+            tuile.Selectionne = id == _filtre.CategorieId;
+            tuile.AccessibleName = $"{tuile.Text} : {Libelles.Pluriel(nombre, "équipement")}";
+        }
+
+        _raccourcis.Afficher(vue.Raccourcis.Select(r =>
+            new PuceFiltre(r.Raccourci.Cle, r.Raccourci.Libelle, r.Nombre, CouleurRaccourci(r.Raccourci), r.Actif, Active: r.Nombre > 0 || r.Actif)));
+
+        _boutonFiltres.Nombre = _filtre.NombreCriteres;
+        if (_panneau.Visible)
+        {
+            foreach (var groupe in vue.Groupes)
+            {
+                _groupes[groupe.Facette].Afficher(groupe.Options.Select(o =>
+                    new PuceFiltre(o.Valeur, o.Libelle, o.Nombre, CouleurFiltre(groupe.Facette, o.Valeur), o.Choisi)));
+            }
+        }
+
+        var n = vue.Lignes.Count;
+        _etiquettes.Intitule = Libelles.Pluriel(n, "équipement")
+            + (vue.RevisionsDepassees > 0 ? $" · {Libelles.Pluriel(vue.RevisionsDepassees, "révision dépassée", "révisions dépassées")}" : "");
+        var effacable = vue.Etiquettes.Count > 0 || _filtre.CategorieId is not null || _recherche.Champ.Text.Trim().Length > 0;
+        _etiquettes.Lien = effacable ? "Tout effacer" : null;
+        _etiquettes.Afficher(vue.Etiquettes.Select(e => new PuceFiltre($"{e.Facette}|{e.Valeur}", e.Texte)));
+
+        // Liste « Trier par » : « Tri par colonne » en tête si le tri choisi (en-tête) n'y est pas.
+        _remplissageTri = true;
+        _tri.BeginUpdate();
+        _tri.Items.Clear();
+        var choix = ServiceInventaire.ChoixTris.FirstOrDefault(c => c.Tri == _filtre.Tri && c.Descendant == _filtre.Descendant);
+        if (choix is null)
+        {
+            _tri.Items.Add(new Choix<ChoixTriInventaire?>(null, "Tri par colonne"));
+        }
+
+        foreach (var c in ServiceInventaire.ChoixTris)
+        {
+            _tri.Items.Add(new Choix<ChoixTriInventaire?>(c, c.Libelle));
+        }
+
+        _tri.SelectedIndex = choix is null ? 0 : _tri.Items.Cast<Choix<ChoixTriInventaire?>>().ToList().FindIndex(c => c.Valeur == choix);
+        _tri.EndUpdate();
+        _remplissageTri = false;
+
+        Afficher(vue.Lignes);
+
+        // En-têtes : la colonne triée porte une flèche.
+        foreach (var c in _colonnes)
+        {
+            if (_grille.Columns[c.Nom] is { } colonne)
+            {
+                var fleche = TrisColonnes.TryGetValue(c.Nom, out var tri) && tri == _filtre.Tri ? (_filtre.Descendant ? " ↓" : " ↑") : "";
+                colonne.HeaderText = c.Titre.ToUpper(Libelles.Culture) + fleche;
+            }
+        }
+
+        // Aucune ligne : message au milieu du tableau.
+        var rien = n == 0;
+        if (rien)
+        {
+            var filtre = vue.Etiquettes.Count > 0 || _filtre.CategorieId is not null || _recherche.Champ.Text.Trim().Length > 0;
+            _videTitre.Text = filtre ? "Aucun équipement ne correspond." : "Aucun équipement pour l'instant.";
+            _videDetail.Text = filtre ? "Retirez un filtre ou changez la recherche." : "Ajoutez le matériel du club ou importez-le depuis Excel.";
+            _videEffacer.Visible = filtre;
+            _vide.PerformLayout();
+        }
+
+        _vide.Visible = rien;
+        if (rien)
+        {
+            _vide.BringToFront();
         }
     }
 
@@ -503,7 +745,7 @@ public sealed class EcranInventaire : EcranBase
         Statut,
         Utilisation,
         new("sortie", "Sortie en cours", 130, l => Ou(l.SortieEnCoursIntitule)),
-        new("revision", "Prochaine révision", 155, l => Date(ProchaineEcheance(l))),
+        new("revision", "Prochaine révision", 155, l => Date(ServiceInventaire.ProchaineEcheance(l))),
         Action,
     ];
 
@@ -628,7 +870,7 @@ public sealed class EcranInventaire : EcranBase
     private void Afficher(IReadOnlyList<LigneInventaire> lignes)
     {
         _lignes = lignes;
-        var categorie = _categorie is { } id && _nomsCategories.TryGetValue(id, out var nom) ? nom : null;
+        var categorie = _filtre.CategorieId is { } id && _nomsCategories.TryGetValue(id, out var nom) ? nom : null;
         DefinirColonnes(ServiceInventaire.EstDetendeur(categorie) ? ColonnesDetendeurs
             : ServiceInventaire.EstGilet(categorie) ? ColonnesGilets
             : ColonnesGenerales);
@@ -769,10 +1011,6 @@ public sealed class EcranInventaire : EcranBase
             .Contains(cellule.Left + position.X, cellule.Top + position.Y);
     }
 
-    /// <summary>Révision (ou TIV) ou requalification : la plus proche.</summary>
-    private static DateOnly? ProchaineEcheance(LigneInventaire l) =>
-        new[] { l.DateProchaineRevision, l.DateRequalification }.Where(d => d is not null).Min();
-
     private void ColorerCellule(object? sender, DataGridViewCellFormattingEventArgs e)
     {
         if (e.RowIndex < 0 || _grille.Rows[e.RowIndex].Tag is not LigneInventaire l || e.CellStyle is null)
@@ -849,7 +1087,7 @@ public sealed class EcranInventaire : EcranBase
             };
             Tableaux.PeindrePastille(e, Libelles.De(l.Statut), couleur, texte);
         }
-        else if (colonne == "revision" && l.Etat != EtatEquipement.Reforme && ProchaineEcheance(l) is { } date)
+        else if (colonne == "revision" && l.Etat != EtatEquipement.Reforme && ServiceInventaire.ProchaineEcheance(l) is { } date)
         {
             // Badge : jaune si la révision approche (réglage « Prévenir avant une révision »), rouge si dépassée.
             switch (_inventaire.EtatDeRevision(date))

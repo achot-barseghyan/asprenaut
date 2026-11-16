@@ -142,6 +142,12 @@ public static class Icones
     /// <summary>Liste (lien « Voir les sorties » de l'inventaire).</summary>
     public const string Liste = "M4 6h16M4 12h16M4 18h10";
 
+    /// <summary>Entonnoir (bouton « Filtres » de l'inventaire).</summary>
+    public const string Filtre = "M4 5h16l-6 8v5l-4 2v-7z";
+
+    /// <summary>Flèches haut / bas (liste « Trier par »).</summary>
+    public const string Tri = "M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4";
+
     // --- Problèmes signalés (maquette « Retour du matériel ») ---
     public const string Drapeau = "M5 21V4M5 4h11l-2 4 2 4H5";
     private const string Goutte = "M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z";

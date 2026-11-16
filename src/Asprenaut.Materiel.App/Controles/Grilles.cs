@@ -257,7 +257,9 @@ public sealed class Tuile : Button
                 fond = Theme.Sur(fond, Theme.AccentClair, 0.06f);
             }
 
-            (haut, bas, texte, icone, bordure) = (fond, fond, Theme.TexteDoux, Theme.AccentClair, Theme.Bordure);
+            // Aucun équipement avec les filtres en cours : tuile estompée (maquette « Inventaire » v2).
+            var vide = _compte == 0;
+            (haut, bas, texte, icone, bordure) = (fond, fond, vide ? Theme.TexteSecondaire : Theme.TexteDoux, vide ? Theme.TexteSecondaire : Theme.AccentClair, Theme.Bordure);
         }
 
         Dessin.EffacerAvecParent(this, g);
@@ -308,7 +310,7 @@ public sealed class Tuile : Button
         var hNombre = TextRenderer.MeasureText(g, "0", nombre, Size.Empty, TextFormatFlags.NoPadding).Height;
         var hLibelle = TextRenderer.MeasureText(g, Text, libelle, Size.Empty, TextFormatFlags.NoPadding).Height;
         var haute = (int)((Height - hNombre - hLibelle) / 2f);
-        var couleurNombre = _selectionne ? Theme.TexteSurAccent : Theme.Texte;
+        var couleurNombre = _selectionne ? Theme.TexteSurAccent : _compte == 0 ? Theme.TexteSecondaire : Theme.Texte;
         Dessin.Texte(g, _compte?.ToString(Core.Modeles.Libelles.Culture) ?? "", nombre, new Rectangle(gauche, haute, Width - gauche - 6, hNombre), couleurNombre);
         Dessin.Texte(g, Text, libelle, new Rectangle(gauche, haute + hNombre, Width - gauche - 6, hLibelle), texte);
     }
