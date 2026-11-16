@@ -37,9 +37,9 @@ public class SchemaTests : IAsyncLifetime
     }
 
     [Fact]
-    public void Scripts_001_a_026_sont_embarques()
+    public void Scripts_001_a_027_sont_embarques()
     {
-        Assert.Equal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26],GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
+        Assert.Equal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27], GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
     }
 
     // 021 : le niveau texte de l'adhérent devient sa classe (formation en cours) ; une classe manquante est créée.
@@ -72,6 +72,30 @@ public class SchemaTests : IAsyncLifetime
         // Le nom affiché suit la classe : la renommer change la formation de ses adhérents.
         await cx2.ExecuteAsync("UPDATE moniteur SET nom = 'Niveau 2 (2026)' WHERE id = @Id;", new { Id = adherents["Julie"].ClasseId });
         Assert.Equal("Niveau 2 (2026)", (await depot.ObtenirAsync(adherents["Julie"].Id))!.Niveau);
+    }
+
+    // 027 : « NON », « sans », « - »… dans les composants d'un détendeur importé sont vidés ; les vraies marques restent.
+    [Fact]
+    public async Task La_migration_027_vide_les_composants_notes_non()
+    {
+        var fabrique = new Connexion.FabriqueConnexion(Path.Combine(_base.Dossier, "avant-027.db"));
+        var migrations = new GestionnaireMigrations(fabrique);
+        Assert.Equal(26, await migrations.AppliquerAsync(jusqua: 26));
+        await using (var cx = await fabrique.OuvrirAsync())
+        {
+            await cx.ExecuteAsync("""
+                INSERT INTO equipement (code, libelle, categorie_id, cree_le, manometre, octopus, numero_octopus, modele_deuxieme_etage) VALUES
+                    ('A01', 'Détendeur', 3, '2026-01-01T00:00:00.000Z', 'SCUBAPRO', 'NON', ' - ', 'R 380'),
+                    ('A103', 'Détendeur', 3, '2026-01-01T00:00:00.000Z', ' non ', 'R 095', '1641', 'Sans');
+                """);
+        }
+
+        await migrations.AppliquerAsync();
+
+        await using var verif = await fabrique.OuvrirAsync();
+        var lignes = (await verif.QueryAsync<(string, string, string, string)>(
+            "SELECT manometre, octopus, numero_octopus, modele_deuxieme_etage FROM equipement ORDER BY code;")).ToList();
+        Assert.Equal([("SCUBAPRO", "", "", "R 380"), ("", "R 095", "1641", "")], lignes);
     }
 
     // 010 : les anciens codes DET-/GIL- deviennent ceux des médailles (A07, S12), sorties et journal compris.

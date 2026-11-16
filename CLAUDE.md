@@ -257,7 +257,8 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
 22. Fiche matériel (registres « Stab » et « Détendeurs » du club, migration 005) : marque, modèle, n° de série pour tous (premier
     étage pour un détendeur) ; détendeur seulement : montage `MontageDetendeur` (Étrier / DIN), deuxième étage (marque, modèle, n°),
     D.S (oui / non / non renseigné), mano (marque), octopus (modèle, vide = sans) et son n°. Ces champs sont vidés pour les
-    autres catégories (`ServiceInventaire.Fiche`). « Date de la dernière révision » saisie dans la fiche (hors blocs) : pas dans le
+    autres catégories (`ServiceInventaire.Fiche`). Composant noté « NON », « sans », « aucun », « - »… (registres : « Mano : NON ») = absent,
+    enregistré vide (`ServiceInventaire.SignifieAbsent`, aussi dans `ComposantsDe` ; migration 027 a vidé les anciennes valeurs). « Date de la dernière révision » saisie dans la fiche (hors blocs) : pas dans le
     futur, pas avant une révision déjà enregistrée ; elle devient un contrôle « révision conforme » (note « Saisie dans l'inventaire »)
     et fixe « à réviser avant » (+ délai de la catégorie, même déjà passé) ; gilets : la date tapée est gardée.
     Calcul commun `ServiceInventaire.ProchaineRevisionCalculee` (et `DelaiRevision`) : le formulaire remplit « Prochaine révision » /
@@ -620,11 +621,12 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   SET NULL, lieu, intitule, utilisations null = celles du type, un_par_categorie, notes, cree_le).
   025 : utilisation_reprise (equipement_id clé primaire ON DELETE CASCADE, utilisations ≥ 0, reprise_le) : compteur repris de l'import.
   026 : moniteur.licence (texte, vide = non renseignée, toujours vide pour une classe).
+  027 : composants des détendeurs notés « NON », « sans », « - »… vidés (manometre, octopus, numero_octopus, deuxième étage).
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/027_xxx.sql`, sans jamais modifier un script déjà livré
+- Nouvelle migration : ajouter `Migrations/028_xxx.sql`, sans jamais modifier un script déjà livré
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.

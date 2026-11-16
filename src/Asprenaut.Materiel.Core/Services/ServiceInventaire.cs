@@ -217,8 +217,25 @@ public sealed partial class ServiceInventaire(
 
         return composants;
 
-        static bool Renseigne(params string[] valeurs) => valeurs.Any(v => !string.IsNullOrWhiteSpace(v));
+        static bool Renseigne(params string[] valeurs) => valeurs.Any(v => !SignifieAbsent(v));
     }
+
+    /// <summary>
+    /// Case d'un composant qui veut dire « il n'y en a pas » : vide, « NON », « sans », « aucun », « - »… (registres du club :
+    /// « Mano : NON », « Octopus : NON »). Ces valeurs sont enregistrées comme vides.
+    /// </summary>
+    public static bool SignifieAbsent(string? valeur)
+    {
+        var v = (valeur ?? "").Trim().TrimEnd('.').Trim();
+        return v.Length == 0
+            || v.Trim('-', '–', '—', '/', '_', ' ').Length == 0
+            || MotsAbsent.Contains(v);
+    }
+
+    private static readonly HashSet<string> MotsAbsent = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "non", "no", "sans", "aucun", "aucune", "néant", "neant", "n/a", "na", "pas de", "rien",
+    };
 
     /// <summary>Composants qu'on peut ajouter à un détendeur (le premier étage est l'équipement lui-même).</summary>
     public static readonly IReadOnlyList<string> ComposantsAjoutables = ["Deuxième étage", "Octopus", "Manomètre"];
@@ -430,6 +447,8 @@ public sealed partial class ServiceInventaire(
     private static Equipement Fiche(Equipement e, string categorie)
     {
         static string T(string? s) => (s ?? "").Trim();
+        // Composant d'un détendeur : « NON », « sans », « - »… = pas de composant.
+        static string C(string? s) => SignifieAbsent(s) ? "" : T(s);
         var detendeur = EstDetendeur(categorie);
         return new Equipement
         {
@@ -437,13 +456,13 @@ public sealed partial class ServiceInventaire(
             Modele = T(e.Modele),
             NumeroSerie = T(e.NumeroSerie),
             Montage = detendeur && e.Montage is { } m && Enum.IsDefined(m) ? m : null,
-            MarqueDeuxiemeEtage = detendeur ? T(e.MarqueDeuxiemeEtage) : "",
-            ModeleDeuxiemeEtage = detendeur ? T(e.ModeleDeuxiemeEtage) : "",
-            NumeroDeuxiemeEtage = detendeur ? T(e.NumeroDeuxiemeEtage) : "",
+            MarqueDeuxiemeEtage = detendeur ? C(e.MarqueDeuxiemeEtage) : "",
+            ModeleDeuxiemeEtage = detendeur ? C(e.ModeleDeuxiemeEtage) : "",
+            NumeroDeuxiemeEtage = detendeur ? C(e.NumeroDeuxiemeEtage) : "",
             DirectSystem = detendeur ? e.DirectSystem : null,
-            Manometre = detendeur ? T(e.Manometre) : "",
-            Octopus = detendeur ? T(e.Octopus) : "",
-            NumeroOctopus = detendeur ? T(e.NumeroOctopus) : "",
+            Manometre = detendeur ? C(e.Manometre) : "",
+            Octopus = detendeur ? C(e.Octopus) : "",
+            NumeroOctopus = detendeur ? C(e.NumeroOctopus) : "",
             Nitrox = PeutEtreNitrox(categorie) && e.Nitrox,
         };
     }

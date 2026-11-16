@@ -49,6 +49,26 @@ public class FicheMaterielTests
         Assert.Equal(new DateOnly(2021, 3, 17), (await _ctx.Inventaire.ListerAsync("A05", null)).Single().DerniereRevision);
     }
 
+    // Règle 22 : « NON », « sans », « - »… dans une case de composant = pas de composant (registres « Mano : NON »).
+    [Fact]
+    public async Task Non_dans_le_mano_ou_l_octopus_veut_dire_sans_composant()
+    {
+        var det = Detendeur();
+        det.Manometre = "NON";
+        det.Octopus = " non ";
+        det.NumeroOctopus = "-";
+        det.MarqueDeuxiemeEtage = "Sans";
+
+        var r = await _ctx.Inventaire.CreerAsync(det);
+
+        Assert.True(r.Reussi, r.Message);
+        var e = _ctx.Db.Equipements.Single(x => x.Id == r.Id);
+        Assert.Equal(("", "", "", ""), (e.Manometre, e.Octopus, e.NumeroOctopus, e.MarqueDeuxiemeEtage));
+        Assert.Equal(["Premier étage", "Deuxième étage"], ServiceInventaire.ComposantsDe(e, "Détendeurs"));
+        Assert.True(ServiceInventaire.SignifieAbsent("aucun"));
+        Assert.False(ServiceInventaire.SignifieAbsent("Nonsuch"));
+    }
+
     [Fact]
     public async Task Une_revision_conforme_de_detendeur_vaut_deux_ans_et_un_gilet_n_a_pas_de_date_obligatoire()
     {
