@@ -161,7 +161,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
    requalification réservée aux blocs, toujours EnService. Code proposé : `ProposerCodeAsync` dans la forme déjà utilisée
    (BLOC-034 → BLOC-035, A24 → A25). Étiquettes QR du club, sans tiret : A = détendeur adulte, E = détendeur enfant,
    S = gilet stab (A24, E03, S12) ; catégorie vide → A01 / S01 ; `DevinerCategorieAsync` reconnaît A/E → Détendeurs,
-   S → Gilets (DET, GIL encore acceptés) ; `NomPropose` pré-remplit le nom (« Détendeur enfant »). Données de démo : A01, S01, E01.
+   S → Gilets (DET, GIL encore acceptés) ; `NomPropose` pré-remplit le nom (« Détendeur enfant E03 »). Données de démo : A01, S01, E01.
 5. Retour d'un équipement absent de la sortie → avertir sans rien modifier ; s'il est dehors ailleurs →
    `ActionProposee.RentrerDansAutreSortie` (l'écran rescanne alors dans `AutreSortieId`).
 6. Retrait possible seulement en préparation (`StatutSortie.EnPreparation`).
@@ -527,6 +527,8 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     `CreerAsync` (nom et catégorie obligatoires, échéances passées acceptées). Catégorie reconnue sans majuscules, accents ni « s »
     final, sinon créée. Dernière révision : comme dans la fiche (contrôle + prochaine calculée). Ligne ignorée et citée (5 au plus)
     si code manquant ou en double, date / D.S / Nitrox / montage / état illisible, ou refus du service. Rien n'est supprimé.
+    Nom générique des registres (`NomLisible`, migration 028 pour l'existant) : « DÉTENDEUR » → « Détendeur adulte A24 » / « Détendeur enfant E03 »,
+    « STAB » → « Gilet stabilisateur S12 », un mot en majuscules → « Masque M1 » ; un nom précis est gardé.
     Colonne « État » (`LireEtat` : En service / Hors service (« HS ») / Réformé, vide = inchangé) : contrôles de `ModifierAsync` (pas dehors, pas en
     atelier) ; un nouvel équipement est créé en service puis passé à l'état demandé.
     Journal `InventaireImporte`. Modèle : `ColonnesModeleInventaire(categories)`, `NomFichierModeleInventaire`, `ModeEmploiModeleInventaire`.
@@ -649,11 +651,12 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   025 : utilisation_reprise (equipement_id clé primaire ON DELETE CASCADE, utilisations ≥ 0, reprise_le) : compteur repris de l'import.
   026 : moniteur.licence (texte, vide = non renseignée, toujours vide pour une classe).
   027 : composants des détendeurs notés « NON », « sans », « - »… vidés (manometre, octopus, numero_octopus, deuxième étage).
+  028 : noms génériques (« DÉTENDEUR », « STAB », « MASQUE »…) → « Détendeur adulte A24 », « Gilet stabilisateur S12 », « Masque M1 ».
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/028_xxx.sql`, sans jamais modifier un script déjà livré
+- Nouvelle migration : ajouter `Migrations/029_xxx.sql`, sans jamais modifier un script déjà livré
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.

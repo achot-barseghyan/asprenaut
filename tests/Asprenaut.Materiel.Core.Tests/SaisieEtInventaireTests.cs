@@ -184,9 +184,9 @@ public class InventaireTests
         _ctx.Equipement("E03", categorie: "Détendeurs");
         Assert.Equal("A25", await _ctx.Inventaire.ProposerCodeAsync(detendeurs)); // Même forme : pas de tiret, 2 chiffres.
 
-        Assert.Equal("Détendeur adulte", ServiceInventaire.NomPropose("A24"));
-        Assert.Equal("Détendeur enfant", ServiceInventaire.NomPropose("E03"));
-        Assert.Equal("Gilet stabilisateur", ServiceInventaire.NomPropose("S12"));
+        Assert.Equal("Détendeur adulte A24", ServiceInventaire.NomPropose("A24"));
+        Assert.Equal("Détendeur enfant E03", ServiceInventaire.NomPropose("E03"));
+        Assert.Equal("Gilet stabilisateur S12", ServiceInventaire.NomPropose("S12"));
         Assert.Equal("", ServiceInventaire.NomPropose("BLOC-031"));
     }
 

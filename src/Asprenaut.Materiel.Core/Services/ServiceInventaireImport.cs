@@ -270,7 +270,7 @@ public sealed partial class ServiceInventaire
                 }
             }
 
-            Texte(ChampImport.Nom, t => e.Libelle = t);
+            Texte(ChampImport.Nom, t => e.Libelle = NomLisible(t, code)); // « DÉTENDEUR » → « Détendeur adulte A24 ».
             Texte(ChampImport.Marque, t => e.Marque = t);
             Texte(ChampImport.Modele, t => e.Modele = t);
             Texte(ChampImport.Taille, t => e.Taille = t);

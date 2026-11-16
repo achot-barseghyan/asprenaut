@@ -766,16 +766,38 @@ public sealed partial class ServiceInventaire(
     }
 
     /// <summary>
-    /// Nom proposé pour un code scanné inconnu, d'après les étiquettes du club : A24 → « Détendeur adulte »,
-    /// E03 → « Détendeur enfant », S12 → « Gilet stabilisateur » ; sinon vide.
+    /// Nom proposé pour un code scanné inconnu, d'après les étiquettes du club : A24 → « Détendeur adulte A24 »,
+    /// E03 → « Détendeur enfant E03 », S12 → « Gilet stabilisateur S12 » ; sinon vide.
     /// </summary>
-    public static string NomPropose(string code) => DecouperCode(code)?.Prefixe switch
+    public static string NomPropose(string code) => NomDeMedaille(code) is { Length: > 0 } nom ? $"{nom} {code}" : "";
+
+    private static string NomDeMedaille(string code) => DecouperCode(code)?.Prefixe switch
     {
         "A" => "Détendeur adulte",
         "E" => "Détendeur enfant",
         "S" => "Gilet stabilisateur",
         _ => "",
     };
+
+    /// <summary>
+    /// Nom générique des registres importés rendu lisible, suivi du code : « DÉTENDEUR » (A24) → « Détendeur adulte A24 »,
+    /// « STAB » (S12) → « Gilet stabilisateur S12 », « MASQUE » (M1) → « Masque M1 ». Un nom précis est gardé tel quel.
+    /// </summary>
+    public static string NomLisible(string nom, string code)
+    {
+        nom = nom.Trim();
+        var mot = ServiceAdherents.Simplifier(nom).TrimEnd('s');
+        var lisible = mot switch
+        {
+            "detendeur" => NomDeMedaille(code) is { Length: > 0 } m && m.StartsWith("Détendeur", StringComparison.Ordinal) ? m : "Détendeur",
+            "stab" or "gilet" or "gilet stab" => "Gilet stabilisateur",
+            // Un seul mot tout en majuscules (« MASQUE », « TUBA ») : seulement la première lettre.
+            _ when nom.Length > 1 && nom.All(char.IsLetter) && nom == nom.ToUpperInvariant()
+                => char.ToUpperInvariant(nom[0]) + nom[1..].ToLowerInvariant(),
+            _ => null,
+        };
+        return lisible is null || code.Length == 0 ? nom : $"{lisible} {code}";
+    }
 
     /// <summary>
     /// Préfixe par défaut d'une catégorie : « Détendeurs » → A (adulte), « Gilets » → S (stab), comme les étiquettes

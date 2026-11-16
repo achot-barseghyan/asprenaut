@@ -34,7 +34,7 @@ public static class FormulaireEquipement
         champs.Code.Valeur = code ?? champs.Code.Valeur;
         if (code is not null && champs.Nom.Valeur.Trim().Length == 0)
         {
-            champs.Nom.Valeur = ServiceInventaire.NomPropose(Core.Saisie.CodeScanne.Nettoyer(code, null)); // E03 → Détendeur enfant.
+            champs.Nom.Valeur = ServiceInventaire.NomPropose(Core.Saisie.CodeScanne.Nettoyer(code, null)); // E03 → Détendeur enfant E03.
         }
 
         string? cree = null;

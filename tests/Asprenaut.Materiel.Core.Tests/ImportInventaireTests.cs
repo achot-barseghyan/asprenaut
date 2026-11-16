@@ -31,6 +31,29 @@ public class ImportInventaireTests
     }
 
     [Fact]
+    public async Task Un_nom_generique_du_registre_devient_lisible_avec_le_code()
+    {
+        var r = await _ctx.Inventaire.ImporterAsync([
+            ["Code", "Équipement", "Catégorie"],
+            ["A07", "DÉTENDEUR", "Détendeurs"],
+            ["E03", "DÉTENDEUR", "Détendeurs"],
+            ["S12", "STAB", "Gilets"],
+            ["M1", "MASQUE", "Masques"],
+            ["A08", "Détendeur Legend", "Détendeurs"],
+        ]);
+
+        Assert.True(r.Reussi, r.Message);
+        Assert.Equal(
+            ["Détendeur adulte A07", "Détendeur enfant E03", "Gilet stabilisateur S12", "Masque M1", "Détendeur Legend"],
+            new[] { "A07", "E03", "S12", "M1", "A08" }.Select(c => Par(c).Libelle));
+
+        // Le même classeur réimporté ne change plus rien.
+        var deNouveau = await _ctx.Inventaire.ImporterAsync([["Code", "Équipement"], ["A07", "DÉTENDEUR"]]);
+        Assert.Equal("Import terminé : 0 équipement ajouté, 0 mis à jour, 1 inchangé.", deNouveau.Message);
+        Assert.Equal("MK25", ServiceInventaire.NomLisible("MK25", "A01"));
+    }
+
+    [Fact]
     public async Task Un_code_connu_est_mis_a_jour_seulement_avec_les_cases_remplies()
     {
         var a01 = _ctx.Equipement("A01", categorie: "Détendeurs");
