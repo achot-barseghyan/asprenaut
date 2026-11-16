@@ -104,8 +104,8 @@
     <li><span class="n">3</span><span class="t">Renseigner la fiche du club</span><span class="d">nom, logo, responsable</span></li>
     <li><span class="n">4</span><span class="t">Protéger avec un code gestionnaire</span><span class="d">mode consultation / gestion</span></li>
     <li><span class="n">5</span><span class="t">Régler le pistolet scanner</span><span class="d">étiquettes QR, test</span></li>
-    <li><span class="n">6</span><span class="t">Saisir le matériel</span><span class="d">catégories, codes, fiches</span></li>
-    <li><span class="n">7</span><span class="t">Membres : moniteurs, classes, adhérents</span><span class="d">import Excel</span></li>
+    <li><span class="n">6</span><span class="t">Saisir le matériel</span><span class="d">catégories, codes, import Excel</span></li>
+    <li><span class="n">7</span><span class="t">Membres : enseignants, classes, adhérents</span><span class="d">import Excel, changement de rôle</span></li>
     <li><span class="n">8</span><span class="t">Types de sortie et règles</span><span class="d">utilisations, sorties nominatives</span></li>
     <li><span class="n">9</span><span class="t">Révisions, prestataires et TIV</span><span class="d">délais, compteur d'utilisation</span></li>
     <li><span class="n">10</span><span class="t">Sauvegardes et changement de PC</span><span class="d">à faire chaque semaine</span></li>
@@ -116,7 +116,7 @@
     <li><span class="n">12</span><span class="t">Sorties nominatives</span><span class="d">un nom à chaque scan</span></li>
     <li><span class="n">13</span><span class="t">Matériel manquant et problèmes signalés</span><span class="d"></span></li>
     <li><span class="n">14</span><span class="t">Suivre les révisions</span><span class="d">les 5 colonnes</span></li>
-    <li><span class="n">15</span><span class="t">Inventaire, fiche de suivi, manuels</span><span class="d"></span></li>
+    <li><span class="n">15</span><span class="t">Inventaire, fiche de suivi, manuels</span><span class="d">filtres et tri</span></li>
     <li><span class="n">16</span><span class="t">Historique et bilan de saison</span><span class="d">pour l'AG</span></li>
   </ol>
   <div class="groupe">Annexes</div>
@@ -140,7 +140,7 @@
     <tr><td><b>Sorties</b></td><td>Page d'accueil. Sorties en cours, sorties clôturées, modèles de sortie. On y crée une nouvelle sortie.</td></tr>
     <tr><td><b>Inventaire</b></td><td>Tout le matériel du club, son état, sa prochaine révision, son nombre d'utilisations.</td></tr>
     <tr><td><b>Manuels</b></td><td>Les notices PDF des fabricants, consultables et imprimables.</td></tr>
-    <tr><td><b>Membres</b></td><td>Adhérents, moniteurs et classes (Niveau 1, Niveau 2…).</td></tr>
+    <tr><td><b>Membres</b></td><td>Adhérents, enseignants et classes (Niveau 1, Niveau 2…).</td></tr>
     <tr><td><b>Historique</b></td><td>Le journal de tout ce qui s'est passé, et la vie de chaque équipement.</td></tr>
     <tr><td><b>Bilan de saison</b></td><td>Chiffres de la saison pour l'assemblée générale, exportables en PDF.</td></tr>
     <tr><td><b>Révisions</b></td><td>Révisions, TIV, requalifications, réparations et envois chez les prestataires.</td></tr>
@@ -154,11 +154,11 @@
     <tr><th style="width:32mm">Mot</th><th>Signification</th></tr>
     <tr><td><b>Code</b></td><td>L'identifiant d'un équipement, écrit sur son étiquette : <code>A24</code>, <code>S12</code>, <code>BLOC-031</code>…</td></tr>
     <tr><td><b>Sortie</b></td><td>Une séance (piscine, fosse, mer, lac, baptême…) pour laquelle du matériel part et revient.</td></tr>
-    <tr><td><b>Responsable</b></td><td>Le moniteur, ou la classe, qui encadre la sortie.</td></tr>
+    <tr><td><b>Responsable</b></td><td>L'enseignant, ou la classe, qui encadre la sortie. (Dans l'application, on dit toujours « enseignant ».)</td></tr>
     <tr><td><b>Dehors</b></td><td>Équipement parti en sortie et pas encore rendu.</td></tr>
     <tr><td><b>Manquant</b></td><td>Équipement encore dehors quand la sortie a été clôturée.</td></tr>
     <tr><td><b>Hors service</b></td><td>Équipement qui ne doit pas partir (problème, réparation, chez le prestataire).</td></tr>
-    <tr><td><b>Réformé</b></td><td>Équipement retiré définitivement. On ne supprime jamais un équipement : on le réforme, son historique reste.</td></tr>
+    <tr><td><b>Réformé</b></td><td>Équipement retiré définitivement. Un équipement qui a déjà servi ne se supprime pas : on le réforme, son historique reste.</td></tr>
     <tr><td><b>Mode gestion</b></td><td>Mode ouvert par le code gestionnaire, qui permet les actions sensibles (voir chapitre 4).</td></tr>
   </table>
 
@@ -273,7 +273,7 @@
     <div class="carte">
       <h3>Code demandé</h3>
       <ul>
-        <li>Ajouter ou modifier du matériel, des membres</li>
+        <li>Ajouter, modifier, importer du matériel ou des membres</li>
         <li>Révisions, atelier, séances TIV</li>
         <li>Supprimer une sortie</li>
         <li>Changer les utilisations d'une sortie</li>
@@ -366,9 +366,53 @@
       et « Gilets » : les délais de révision et les tuiles de problèmes sont réglés d'après ces noms.</p>
   </div>
 
-  <h3>Modifier, réformer</h3>
-  <p>Le crayon de la colonne <b>Actions</b> modifie la fiche. Un équipement ne se supprime pas : passez son état à
-    <b>Réformé</b>. Il disparaît des sorties et des révisions mais reste dans l'historique.</p>
+  <p>Pour un détendeur, un composant noté « NON », « sans », « aucun » ou « - » (par exemple « Mano : NON » recopié
+    d'un registre) est compris comme <b>absent</b> : la case reste vide.</p>
+
+  <h3>Importer l'inventaire depuis Excel</h3>
+  <p><span class="chemin">Inventaire › Importer Excel</span> (code demandé). Pratique pour reprendre un registre existant
+    ou saisir beaucoup de matériel d'un coup.</p>
+  <ol class="etapes">
+    <li><span class="ui">Modèle Excel</span> enregistre un classeur vide avec les bonnes colonnes, des listes déroulantes et
+      un mode d'emploi. Un export CSV de l'inventaire peut aussi être réimporté tel quel.</li>
+    <li>Remplissez une ligne par équipement. <b>Code</b> est obligatoire ; pour un nouvel équipement, <b>nom</b> et
+      <b>catégorie</b> aussi. Les autres colonnes (marque, modèle, n° de série, taille, dates, nitrox…) sont facultatives.</li>
+    <li><span class="ui">Importer Excel</span> et choisissez le fichier (.xlsx ou .csv). Un message résume ce qui a été
+      ajouté, modifié, ou ignoré (avec les lignes en cause).</li>
+  </ol>
+  <table>
+    <tr><th style="width:44mm">Colonne</th><th>Ce que fait l'import</th></tr>
+    <tr><td><b>Code déjà connu</b></td><td>L'équipement est mis à jour avec les seules cases remplies : une case vide ne change rien. Rien n'est jamais supprimé.</td></tr>
+    <tr><td><b>Catégorie</b></td><td>Reconnue même sans majuscules, accents ou « s » final (« bloc » = « Blocs ») ; une catégorie inconnue est créée.</td></tr>
+    <tr><td><b>Nom</b></td><td>Un nom générique en majuscules est rendu lisible : « DÉTENDEUR » devient « Détendeur adulte A24 »
+      (ou « enfant » pour E03), « STAB » devient « Gilet stabilisateur S12 », « MASQUE » devient « Masque M1 ». Un nom précis est gardé.</td></tr>
+    <tr><td><b>Dernière révision</b></td><td>Comme dans la fiche : la prochaine révision est calculée.</td></tr>
+    <tr><td><b>Utilisations</b></td><td>Le nombre d'utilisations depuis la dernière révision (« 42 », ou « 64 / 80 utilisations »).
+      Le compteur repart de ce nombre, puis chaque retour scanné s'y ajoute.</td></tr>
+    <tr><td><b>État</b></td><td>En service, Hors service (« HS ») ou Réformé. Vide = inchangé.</td></tr>
+  </table>
+  <p>Une ligne illisible (date incompréhensible, code en double…) est ignorée et citée dans le message ; corrigez-la puis
+    réimportez le fichier : les lignes déjà importées ne sont pas dupliquées.</p>
+
+  <h3>Importer les fiches de suivi EPI</h3>
+  <p><span class="chemin">Inventaire › Fiches EPI</span> (code demandé). Si le club tenait ses fiches de suivi dans un classeur
+    Excel avec <b>un onglet par équipement</b> (nommé d'après son code : « A24 », « S12 »…), l'application reprend tout
+    l'historique des interventions.</p>
+  <ul>
+    <li>Chaque onglet est relié à l'équipement du même code (« A2 » est compris comme A02 s'il n'y a pas de doute).</li>
+    <li>Les tableaux « Nom de l'intervenant | Nature de l'intervention | date » sont lus ligne par ligne ; pour un détendeur,
+      le titre écrit au-dessus du tableau indique le composant (premier étage, deuxième étage, octopus).</li>
+    <li>C'est de l'historique seulement : les échéances et l'état des équipements ne changent pas.</li>
+    <li>Les onglets sans équipement correspondant et les lignes sans date lisible sont cités dans le message. Le classeur
+      peut être réimporté sans créer de doublons.</li>
+  </ul>
+
+  <h3>Modifier, réformer, supprimer</h3>
+  <p>Le crayon de la colonne <b>Actions</b> modifie la fiche. Un équipement qui a déjà servi ne se supprime pas : passez son
+    état à <b>Réformé</b>. Il disparaît des sorties et des révisions mais reste dans l'historique.</p>
+  <p>Un équipement <b>jamais utilisé</b> (jamais scanné dans une sortie, par exemple créé par erreur ou en double) peut être
+    supprimé : une corbeille rouge apparaît alors en dernier dans sa colonne Actions (code demandé, confirmation).
+    La suppression est définitive.</p>
 
   <h3>Manuels des fabricants</h3>
   <p><span class="chemin">Manuels › Ajouter</span> : choisissez le PDF, indiquez la marque, la catégorie et, si vous voulez,
@@ -379,17 +423,29 @@
 
 <!-- ============ 7 ============ -->
 <section class="chapitre">
-  <h2><span class="num">7</span>Membres : moniteurs, classes, adhérents</h2>
+  <h2><span class="num">7</span>Membres : enseignants, classes, adhérents</h2>
   <p><span class="chemin">Membres</span> — trois onglets. Ajouter ou modifier demande le code.</p>
   <table>
     <tr><th style="width:30mm">Onglet</th><th>Rôle</th></tr>
     <tr><td><b>Adhérents</b></td><td>Les plongeurs du club. Ils ne sont jamais responsables d'une sortie, mais reçoivent le matériel dans les sorties nominatives (chapitre 12).</td></tr>
-    <tr><td><b>Moniteurs</b></td><td>Les encadrants, responsables des sorties. Niveau d'encadrement (E1… MF2), téléphone,
-      case <b>Inspecteur TIV</b> (seuls les inspecteurs peuvent enregistrer une TIV).</td></tr>
+    <tr><td><b>Enseignants</b></td><td>Les encadrants, responsables des sorties. Niveau d'encadrement (E1… MF2), téléphone,
+      <b>n° de licence</b> (facultatif, unique), case <b>Inspecteur TIV</b> (seuls les inspecteurs peuvent enregistrer une TIV).
+      La recherche trouve aussi un enseignant par sa licence.</td></tr>
     <tr><td><b>Classes</b></td><td>Un groupe en formation (Niveau 1, Niveau 2…) peut être responsable d'une sortie comme un
-      moniteur. Abréviation de 4 lettres au plus et couleur de pastille.</td></tr>
+      enseignant. Abréviation de 4 lettres au plus et couleur de pastille.</td></tr>
   </table>
   <p>On ne supprime pas un membre : on le <b>désactive</b>. Il n'est plus proposé mais reste dans l'historique.</p>
+
+  <h3>Un adhérent devient enseignant (ou l'inverse)</h3>
+  <p>Sur la fiche d'un adhérent, <span class="ui">Passer en enseignant</span> ; sur celle d'un enseignant,
+    <span class="ui">Passer en adhérent</span> (code demandé, confirmation). L'application ouvre la nouvelle fiche, de
+    l'autre côté :</p>
+  <ul>
+    <li>prénom, nom, téléphone et licence sont repris ; complétez le niveau d'encadrement d'un nouvel enseignant ;</li>
+    <li>si une ancienne fiche du même nom existait déjà de l'autre côté, elle est simplement réactivée ;</li>
+    <li>l'ancienne fiche est désactivée : son historique, ses sorties et le matériel qu'il a encore restent visibles.
+      Un adhérent qui n'a jamais pris de matériel en sortie est retiré, puisqu'il n'a pas d'historique.</li>
+  </ul>
 
   <h3>Importer les adhérents depuis Excel</h3>
   <ol class="etapes">
@@ -539,7 +595,7 @@
   <ol>
     <li><b>Type</b> : cliquez sur une tuile (Piscine, Mer…).</li>
     <li><b>Quand et où</b> : date et lieu ; les raccourcis proposent aujourd'hui, demain, le week-end et les derniers lieux.</li>
-    <li><b>Responsable</b> : un moniteur ou une classe.</li>
+    <li><b>Responsable</b> : un enseignant ou une classe.</li>
     <li><b>Règles et notes</b> si besoin.</li>
   </ol>
   <p>L'aperçu de droite résume la sortie. Cliquez sur <span class="ui">Créer et scanner le matériel</span>.</p>
@@ -649,11 +705,23 @@
 <section class="chapitre">
   <h2><span class="num">15</span>Inventaire, fiche de suivi, manuels</h2>
   <h3>Inventaire</h3>
-  <p>Filtrez par catégorie (puces en haut) et cherchez par code, nom, marque, modèle ou numéro de série. La colonne
-    <b>Utilisation</b> montre le compteur (« 64 / 80 utilisations », jaune à 90 %, rouge au seuil) ; le lien
+  <p>Les tuiles du haut choisissent une catégorie. Dessous, la barre de recherche trouve un équipement par code, nom,
+    marque, modèle ou numéro de série.</p>
+  <ul>
+    <li><b>Raccourcis</b> : un clic montre directement « Révision dépassée », « À réviser sous 30 j », « Hors service »,
+      « En sortie » ou « Usure ≥ 90 % », déjà trié ; un second clic les retire.</li>
+    <li><span class="ui">Filtres</span> ouvre le panneau des filtres : statut, révision, utilisation, marque, taille.
+      Cochez plusieurs valeurs d'un même groupe pour voir l'une ou l'autre ; deux groupes se cumulent. Chaque valeur
+      indique combien d'équipements elle donnerait.</li>
+    <li><span class="ui">Trier par</span> : code, révision la plus urgente, les plus ou moins utilisés, statut, marque,
+      équipement. Un clic sur un en-tête de colonne trie aussi (un deuxième clic inverse).</li>
+    <li>Au-dessus du tableau, le nombre d'équipements affichés et les filtres en cours : la croix d'un filtre le retire,
+      <span class="ui">Tout effacer</span> les retire tous. Les filtres restent en place tant que l'application est ouverte.</li>
+  </ul>
+  <p>La colonne <b>Utilisation</b> montre le compteur (« 64 / 80 utilisations », jaune à 90 %, rouge au seuil) ; le lien
     <span class="ui">Voir les sorties</span> détaille chaque sortie de l'équipement.</p>
-  <p>Colonne <b>Actions</b> : fiche de suivi EPI, signaler un problème, modifier. <span class="ui">Exporter CSV</span>
-    exporte les lignes affichées.</p>
+  <p>Colonne <b>Actions</b> : fiche de suivi EPI, signaler un problème, modifier, et la corbeille pour un équipement jamais
+    utilisé (chapitre 6). <span class="ui">Exporter CSV</span> exporte les lignes affichées.</p>
 
   <h3>Fiche de suivi EPI</h3>
   <p>Clic sur le nom d'un équipement (ou double-clic, ou Entrée). La fiche réunit ses composants (premier étage, deuxième
