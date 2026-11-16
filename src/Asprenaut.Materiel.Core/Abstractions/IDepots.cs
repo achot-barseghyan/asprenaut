@@ -259,6 +259,12 @@ public interface IAdherentRepository
     /// journal sont détachées (adherent_id à NULL). Retourne faux, sans rien toucher, s'il a déjà pris du matériel.
     /// </summary>
     Task<bool> SupprimerSiJamaisSortiAsync(long adherentId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Relie l'adhérent à sa fiche d'enseignant (adherent.moniteur_id, migration 029 ; une fiche d'enseignant n'est reliée qu'à
+    /// un adhérent : index ux_adherent_moniteur). Seule écriture de ce lien : <see cref="MettreAJourAsync"/> ne le touche pas.
+    /// </summary>
+    Task RelierEnseignantAsync(long adherentId, long moniteurId, CancellationToken ct = default);
 }
 
 public interface ISignalementRepository

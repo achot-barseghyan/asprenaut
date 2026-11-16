@@ -6,17 +6,32 @@ namespace Asprenaut.Materiel.Core.Tests.Memoire;
 /// <summary>Adhérents en mémoire ; comme l'index ux_adherent_licence, refuse deux fois la même licence.</summary>
 public sealed class AdherentRepositoryMemoire(BaseMemoire db) : IAdherentRepository
 {
+    // Le lien vers la fiche d'enseignant n'est écrit que par RelierEnseignantAsync (comme en SQL) ; les champs de
+    // l'enseignant sont relus de la fiche reliée, comme la jointure.
+    private readonly Dictionary<long, long> _liens = [];
+
+    private Adherent Completer(Adherent a)
+    {
+        a.MoniteurId = _liens.TryGetValue(a.Id, out var m) ? m : null;
+        var fiche = a.MoniteurId is { } id ? db.Moniteurs.FirstOrDefault(x => x.Id == id) : null;
+        a.Enseignant = fiche?.Actif ?? false;
+        a.NiveauEncadrement = fiche?.Niveau;
+        a.InspecteurTiv = fiche?.InspecteurTiv ?? false;
+        return a;
+    }
+
     public Task<IReadOnlyList<Adherent>> ListerAsync(bool actifsSeulement, CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<Adherent>>(db.Adherents.Where(a => !actifsSeulement || a.Actif).OrderBy(a => a.Nom).ThenBy(a => a.Prenom).ToList());
+        Task.FromResult<IReadOnlyList<Adherent>>(db.Adherents.Where(a => !actifsSeulement || a.Actif).OrderBy(a => a.Nom).ThenBy(a => a.Prenom).Select(Completer).ToList());
 
     public Task<Adherent?> ObtenirAsync(long id, CancellationToken ct = default) =>
-        Task.FromResult(db.Adherents.FirstOrDefault(a => a.Id == id));
+        Task.FromResult(db.Adherents.FirstOrDefault(a => a.Id == id) is { } a ? Completer(a) : null);
 
     public Task<long> AjouterAsync(Adherent adherent, CancellationToken ct = default)
     {
         VerifierLicence(adherent);
         adherent.Id = db.ProchainId();
         db.Adherents.Add(adherent);
+        Completer(adherent);
         return Task.FromResult(adherent.Id);
     }
 
@@ -25,6 +40,18 @@ public sealed class AdherentRepositoryMemoire(BaseMemoire db) : IAdherentReposit
         VerifierLicence(adherent);
         var i = db.Adherents.FindIndex(a => a.Id == adherent.Id);
         db.Adherents[i] = adherent;
+        Completer(adherent);
+        return Task.CompletedTask;
+    }
+
+    public Task RelierEnseignantAsync(long adherentId, long moniteurId, CancellationToken ct = default)
+    {
+        if (_liens.Any(l => l.Value == moniteurId && l.Key != adherentId))
+        {
+            throw new InvalidOperationException($"Enseignant {moniteurId} déjà relié (index unique).");
+        }
+
+        _liens[adherentId] = moniteurId;
         return Task.CompletedTask;
     }
 

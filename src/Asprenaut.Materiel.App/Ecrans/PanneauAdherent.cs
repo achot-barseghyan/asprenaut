@@ -394,7 +394,7 @@ public sealed class PanneauAdherent : Carte
             .OrderBy(t => t.Motif is not null)
             .ToList();
         _liste.Afficher(trouves.Select(t => new LigneAdherent(t.Adherent.Id, t.Adherent.Initiales, t.Adherent.NomComplet,
-                t.Motif ?? string.Join(" · ", new[] { t.Adherent.Niveau, _nitrox ? "nitrox" : null }.Where(s => !string.IsNullOrEmpty(s))),
+                t.Motif ?? string.Join(" · ", new[] { t.Adherent.Enseignant ? "Enseignant" : null, t.Adherent.Niveau, _nitrox ? "nitrox" : null }.Where(s => !string.IsNullOrEmpty(s))),
                 t.Motif is not null)).ToList(),
             _tous.Count == 0 ? "Aucun adhérent : ajoutez-les dans Membres › Adhérents." : "Aucun adhérent ne correspond.");
     }

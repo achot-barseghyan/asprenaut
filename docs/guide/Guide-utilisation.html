@@ -119,7 +119,7 @@
     <li><span class="n">4</span><span class="t">Protéger avec un code gestionnaire</span><span class="d">mode consultation / gestion</span></li>
     <li><span class="n">5</span><span class="t">Régler le pistolet scanner</span><span class="d">étiquettes QR, test</span></li>
     <li><span class="n">6</span><span class="t">Saisir le matériel</span><span class="d">catégories, codes, import Excel</span></li>
-    <li><span class="n">7</span><span class="t">Membres : enseignants, classes, adhérents</span><span class="d">import Excel, changement de rôle</span></li>
+    <li><span class="n">7</span><span class="t">Membres : adhérents, enseignants, classes</span><span class="d">import Excel, rôle d'enseignant</span></li>
     <li><span class="n">8</span><span class="t">Types de sortie et règles</span><span class="d">utilisations, sorties nominatives</span></li>
     <li><span class="n">9</span><span class="t">Révisions, prestataires et TIV</span><span class="d">délais, compteur d'utilisation</span></li>
     <li><span class="n">10</span><span class="t">Sauvegardes et changement de PC</span><span class="d">à faire chaque semaine</span></li>
@@ -154,7 +154,7 @@
     <tr><td><b>Sorties</b></td><td>Page d'accueil. Sorties en cours, sorties clôturées, modèles de sortie. On y crée une nouvelle sortie.</td></tr>
     <tr><td><b>Inventaire</b></td><td>Tout le matériel du club, son état, sa prochaine révision, son nombre d'utilisations.</td></tr>
     <tr><td><b>Manuels</b></td><td>Les notices PDF des fabricants, consultables et imprimables.</td></tr>
-    <tr><td><b>Membres</b></td><td>Adhérents, enseignants et classes (Niveau 1, Niveau 2…).</td></tr>
+    <tr><td><b>Membres</b></td><td>Adhérents (dont les enseignants) et classes (Niveau 1, Niveau 2…).</td></tr>
     <tr><td><b>Historique</b></td><td>Le journal de tout ce qui s'est passé, et la vie de chaque équipement.</td></tr>
     <tr><td><b>Bilan de saison</b></td><td>Chiffres de la saison pour l'assemblée générale, exportables en PDF.</td></tr>
     <tr><td><b>Révisions</b></td><td>Révisions, TIV, requalifications, réparations et envois chez les prestataires.</td></tr>
@@ -530,59 +530,54 @@
 
 <!-- ============ 7 ============ -->
 <section class="chapitre">
-  <h2><span class="num">7</span>Membres : enseignants, classes, adhérents</h2>
-  <p><span class="chemin">Membres</span> — trois onglets. Ajouter ou modifier demande le code.</p>
+  <h2><span class="num">7</span>Membres : adhérents, enseignants, classes</h2>
+  <p><span class="chemin">Membres</span> — deux onglets. Ajouter ou modifier demande le code.</p>
   <table>
     <tr><th style="width:30mm">Onglet</th><th>Rôle</th></tr>
-    <tr><td><b>Adhérents</b></td><td>Les plongeurs du club. Ils ne sont jamais responsables d'une sortie, mais reçoivent le matériel dans les sorties nominatives (chapitre 12).</td></tr>
-    <tr><td><b>Enseignants</b></td><td>Les encadrants, responsables des sorties. Niveau d'encadrement (E1… MF2), téléphone,
-      <b>n° de licence</b> (facultatif, unique), case <b>Inspecteur TIV</b> (seuls les inspecteurs peuvent enregistrer une TIV).
-      La recherche trouve aussi un enseignant par sa licence.</td></tr>
+    <tr><td><b>Adhérents</b></td><td>Toutes les personnes du club, <b>enseignants compris</b>. Chacun reçoit le matériel dans les
+      sorties nominatives (chapitre 12), avec son CACI et sa certification nitrox. Un adhérent peut aussi être
+      <b>enseignant</b> : il est alors responsable des sorties (pastille violette avec son niveau, filtre « Enseignants »).</td></tr>
     <tr><td><b>Classes</b></td><td>Un groupe en formation (Niveau 1, Niveau 2…) peut être responsable d'une sortie comme un
       enseignant. Abréviation de 4 lettres au plus et couleur de pastille.</td></tr>
   </table>
   <p>On ne supprime pas un membre : on le <b>désactive</b>. Il n'est plus proposé mais reste dans l'historique.</p>
 
   <figure class="ecran" data-image="captures/14b-adherent-fiche.png" data-taille="1782x1337" data-cadre="360,40,1400,1270" data-hauteur="130"
-    data-reperes="380,204,510,65 ; 869,90,288,62 ; 1172,90,278,62 ; 1465,90,267,62 ; 380,383,856,45 ; 1192,468,539,140 ; 1221,954,481,62 ; 1221,1028,481,62">
+    data-reperes="380,204,510,65 ; 869,90,288,62 ; 1172,90,278,62 ; 1465,90,267,62 ; 380,383,856,45 ; 1192,468,539,140 ; 1221,954,481,62">
     <figcaption>
       <div class="titre-fig">Membres › Adhérents, avec la fiche d'un adhérent à droite</div>
       <ol class="legende">
-        <li>Les onglets <b>Adhérents</b>, <b>Enseignants</b>, <b>Classes</b>.</li>
+        <li>Les onglets <b>Adhérents</b> et <b>Classes</b>.</li>
         <li><span class="ui">Modèle Excel à remplir</span>.</li>
         <li><span class="ui">Importer la liste Excel</span>.</li>
         <li><span class="ui">Ajouter un adhérent</span> à la main.</li>
-        <li>Les <b>filtres</b> : matériel dehors, non rendu, nitrox, CACI à renouveler, désactivés.</li>
-        <li>La <b>fiche</b> de l'adhérent cliqué : formation, licence, matériel.</li>
-        <li><span class="ui">Modifier</span> et <span class="ui">Désactiver</span>.</li>
-        <li><span class="ui">Passer en enseignant</span>.</li>
+        <li>Les <b>filtres</b> : enseignants, inspecteurs TIV, matériel dehors, non rendu, nitrox, CACI à renouveler, désactivés.</li>
+        <li>La <b>fiche</b> de l'adhérent cliqué : formation, licence, matériel ; pour un enseignant, aussi le matériel sous sa
+          responsabilité et ses dernières sorties.</li>
+        <li><span class="ui">Modifier</span> et <span class="ui">Désactiver</span> ; un enseignant a aussi
+          <span class="ui">Créer une sortie</span>.</li>
       </ol>
     </figcaption>
   </figure>
 
-  <h3>Un adhérent devient enseignant (ou l'inverse)</h3>
-  <p>Sur la fiche d'un adhérent, <span class="ui">Passer en enseignant</span> ; sur celle d'un enseignant,
-    <span class="ui">Passer en adhérent</span> (code demandé, confirmation). L'application ouvre la nouvelle fiche, de
-    l'autre côté :</p>
+  <h3>Un adhérent devient enseignant (ou ne l'est plus)</h3>
+  <p>Sur la fiche de l'adhérent, <span class="ui">Modifier</span> (code demandé), section <b>3 Enseignant</b> : activez
+    l'interrupteur <b>Enseignant</b>, puis choisissez son niveau d'encadrement (E1… MF2, ou « Autre niveau ») et, s'il y a lieu,
+    <b>Inspecteur TIV</b> (seuls les inspecteurs peuvent enregistrer une TIV). Il est aussitôt proposé comme responsable des sorties.</p>
   <ul>
-    <li>prénom, nom, téléphone et licence sont repris ; complétez le niveau d'encadrement d'un nouvel enseignant ;</li>
-    <li>si une ancienne fiche du même nom existait déjà de l'autre côté, elle est simplement réactivée ;</li>
-    <li>l'ancienne fiche est désactivée : son historique, ses sorties et le matériel qu'il a encore restent visibles.
-      Un adhérent qui n'a jamais pris de matériel en sortie est retiré, puisqu'il n'a pas d'historique.</li>
+    <li>C'est <b>la même personne</b> : son CACI, son nitrox et le matériel qu'il prend sont ceux de sa fiche d'adhérent ;
+      il prend du matériel au départ comme n'importe quel adhérent.</li>
+    <li>Coupez l'interrupteur quand il n'encadre plus : il n'est plus proposé comme responsable, ses sorties restent à son nom.</li>
+    <li>Désactiver l'adhérent le retire aussi des responsables.</li>
   </ul>
 
-  <figure class="ecran" data-image="captures/15-membres-enseignants.png" data-taille="1782x1337" data-cadre="360,40,1400,700" data-hauteur="80"
-    data-reperes="556,183,184,55 ; 1447,77,285,62 ; 586,351,167,55 ; 1192,455,540,285">
-    <figcaption>
-      <div class="titre-fig">Membres › Enseignants</div>
-      <ol class="legende">
-        <li>L'onglet <b>Enseignants</b>.</li>
-        <li><span class="ui">Ajouter un enseignant</span>.</li>
-        <li>Le filtre <b>Inspecteurs TIV</b>.</li>
-        <li>La <b>fiche</b> de l'enseignant ; <span class="ui">Passer en adhérent</span> est tout en bas (faites défiler).</li>
-      </ol>
-    </figcaption>
-  </figure>
+  <h3>« Enseignants à relier »</h3>
+  <p>Au démarrage, l'application retrouve la fiche d'adhérent de chaque enseignant : même prénom et même nom (sans tenir compte
+    des majuscules ni des accents). S'il n'en a pas, elle la crée. Les fiches en double faites à la main sont ainsi réunies :
+    rien n'est effacé, le matériel déjà sorti reste au nom de la personne.</p>
+  <p>Quand elle hésite (deux adhérents du même nom, ou un nom presque pareil, comme « Vermenot » et « Vermenaut »), elle ne
+    devine pas : un bouton <span class="ui">2 enseignants à relier</span> apparaît en haut de Membres. Cliquez-le, puis pour
+    chaque enseignant choisissez sa fiche d'adhérent, ou <span class="ui">Créer sa fiche d'adhérent</span> si aucune n'est la sienne.</p>
 
   <h3>Importer les adhérents depuis Excel</h3>
   <ol class="etapes">

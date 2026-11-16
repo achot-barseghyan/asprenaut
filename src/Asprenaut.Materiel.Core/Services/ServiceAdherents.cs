@@ -240,6 +240,8 @@ public sealed class ServiceAdherents(
             .ToList();
         var filtrees = fiches.Where(f => filtre switch
         {
+            FiltreAdherents.Enseignants => f.Adherent.Enseignant,
+            FiltreAdherents.InspecteursTiv => f.Adherent.Enseignant && f.Adherent.InspecteurTiv,
             FiltreAdherents.MaterielDehors => f.NbDehors > 0,
             FiltreAdherents.NonRendu => f.NbNonRendus > 0,
             FiltreAdherents.Nitrox => f.Adherent.Nitrox,
@@ -248,7 +250,8 @@ public sealed class ServiceAdherents(
             _ => true,
         }).ToList();
         return new ListeAdherents(filtrees, fiches.Count, fiches.Count(f => f.NbDehors > 0), fiches.Count(f => f.NbNonRendus > 0),
-            fiches.Count(f => f.Adherent.Nitrox), fiches.Count(f => !f.Adherent.Actif), fiches.Count(f => f.CaciExpire || f.CaciBientot));
+            fiches.Count(f => f.Adherent.Nitrox), fiches.Count(f => !f.Adherent.Actif), fiches.Count(f => f.CaciExpire || f.CaciBientot),
+            fiches.Count(f => f.Adherent.Enseignant), fiches.Count(f => f.Adherent.Enseignant && f.Adherent.InspecteurTiv));
     }
 
     /// <summary>Fiche : matériel qu'il a en ce moment, matériel non rendu (manquant à la clôture), dernières sorties nominatives.</summary>
@@ -282,11 +285,17 @@ public sealed class ServiceAdherents(
 
     private ResultatOperation Autorisation() => gestion?.Exiger(ActionProtegee.Moniteurs) ?? ResultatOperation.Ok("");
 
+    /// <summary>Longueur maximale du niveau d'encadrement (E1… MF2, ou un autre niveau tapé).</summary>
+    public const int LongueurMaxNiveauEncadrement = 30;
+
     /// <summary>
     /// Ajoute (Id = 0) ou modifie un adhérent. Nom et prénom obligatoires ; licence unique si elle est renseignée.
     /// Le rendre inactif le retire de la liste du départ, sans toucher à son historique.
+    /// <paramref name="role"/> : rôle d'enseignant (null = inchangé). Actif, il crée ou réactive sa fiche d'enseignant (responsable
+    /// des sorties) ; coupé, elle est désactivée (ses sorties la gardent). Sa fiche d'enseignant reprend toujours prénom, nom,
+    /// téléphone et licence de l'adhérent ; un adhérent désactivé n'est plus enseignant.
     /// </summary>
-    public async Task<ResultatOperation> EnregistrerAsync(Adherent saisie, CancellationToken ct = default)
+    public async Task<ResultatOperation> EnregistrerAsync(Adherent saisie, RoleEnseignant? role = null, CancellationToken ct = default)
     {
         if (Autorisation() is { Reussi: false } refus)
         {
@@ -294,6 +303,8 @@ public sealed class ServiceAdherents(
         }
 
         var tous = await adherents.ListerAsync(actifsSeulement: false, ct);
+        var ancien = saisie.Id == 0 ? null : tous.FirstOrDefault(a => a.Id == saisie.Id);
+        var fiche = ancien?.MoniteurId is { } idFiche && classes is not null ? await classes.ObtenirAsync(idFiche, ct) : null;
 
         // Formation en cours : une classe du club.
         if (await RelierFormationAsync(saisie, tous.FirstOrDefault(a => a.Id == saisie.Id && saisie.Id != 0), ct) is { } refusFormation)
@@ -308,21 +319,119 @@ public sealed class ServiceAdherents(
             return erreur;
         }
 
-        if (saisie.Id == 0)
-        {
-            var id = await adherents.AjouterAsync(saisie, ct);
-            await JournaliserAsync(ActionsJournal.AdherentCree, $"Adhérent ajouté : {saisie.NomComplet}{ChangementCaci(avant, saisie)}", ct);
-            return ResultatOperation.Ok($"{saisie.NomComplet} ajouté.", id);
-        }
-
-        if (tous.All(a => a.Id != saisie.Id))
+        if (saisie.Id != 0 && ancien is null)
         {
             return ResultatOperation.Echec("Cet adhérent n'existe plus.");
         }
 
+        // Rôle d'enseignant : tout est vérifié avant d'écrire.
+        if (await VerifierRoleAsync(saisie, role, fiche, ct) is { } refusRole)
+        {
+            return refusRole;
+        }
+
+        if (saisie.Id == 0)
+        {
+            var id = await adherents.AjouterAsync(saisie, ct);
+            var roleAjoute = await AppliquerRoleAsync(saisie, role, null, ct);
+            await JournaliserAsync(ActionsJournal.AdherentCree, $"Adhérent ajouté : {saisie.NomComplet}{ChangementCaci(avant, saisie)}{roleAjoute}", ct);
+            return ResultatOperation.Ok($"{saisie.NomComplet} ajouté.", id);
+        }
+
         await adherents.MettreAJourAsync(saisie, ct);
-        await JournaliserAsync(ActionsJournal.AdherentModifie, $"Adhérent modifié : {saisie.NomComplet}{(saisie.Actif ? "" : " (inactif)")}{ChangementCaci(avant, saisie)}", ct);
+        var changementRole = await AppliquerRoleAsync(saisie, role, fiche, ct);
+        await JournaliserAsync(ActionsJournal.AdherentModifie, $"Adhérent modifié : {saisie.NomComplet}{(saisie.Actif ? "" : " (inactif)")}{ChangementCaci(avant, saisie)}{changementRole}", ct);
         return ResultatOperation.Ok($"{saisie.NomComplet} enregistré.", saisie.Id);
+    }
+
+    /// <summary>Refus du rôle d'enseignant saisi, ou null : adhérent désactivé, niveau trop long, licence d'un autre enseignant.</summary>
+    private async Task<ResultatOperation?> VerifierRoleAsync(Adherent saisie, RoleEnseignant? role, Moniteur? fiche, CancellationToken ct)
+    {
+        if (role is not { Actif: true } && fiche is null)
+        {
+            return null; // Rien à écrire côté enseignant.
+        }
+
+        if (classes is null)
+        {
+            return role is { Actif: true } ? ResultatOperation.Echec("Les enseignants ne sont pas disponibles.") : null;
+        }
+
+        if (role is { Actif: true } && !saisie.Actif)
+        {
+            return ResultatOperation.Echec("Un adhérent désactivé ne peut pas être enseignant : laissez « Adhérent actif » coché.");
+        }
+
+        if (role is { Actif: true } && role.Niveau?.Trim().Length > LongueurMaxNiveauEncadrement)
+        {
+            return ResultatOperation.Echec($"Niveau d'encadrement trop long ({LongueurMaxNiveauEncadrement} caractères au plus).");
+        }
+
+        // La licence de l'adhérent devient celle de sa fiche d'enseignant : unique parmi les enseignants.
+        return saisie.Licence is { } licence
+            && (await classes.ListerAsync(actifsSeulement: false, ct)).FirstOrDefault(m => !m.EstClasse && m.Id != fiche?.Id
+                && string.Equals(m.Licence, licence, StringComparison.OrdinalIgnoreCase)) is { } autre
+            ? ResultatOperation.Echec($"La licence {licence} est déjà celle de l'enseignant {autre.NomComplet}.")
+            : null;
+    }
+
+    /// <summary>
+    /// Écrit le rôle d'enseignant de l'adhérent (déjà enregistré) : crée et relie sa fiche d'enseignant, ou met à jour celle qui
+    /// est reliée (identité reprise de l'adhérent ; désactivée si l'adhérent l'est). Retourne la fin du texte du journal.
+    /// </summary>
+    private async Task<string> AppliquerRoleAsync(Adherent a, RoleEnseignant? role, Moniteur? fiche, CancellationToken ct)
+    {
+        if (classes is null)
+        {
+            return "";
+        }
+
+        if (fiche is null)
+        {
+            if (role is not { Actif: true })
+            {
+                return "";
+            }
+
+            var nouvelle = new Moniteur
+            {
+                Genre = GenreResponsable.Moniteur,
+                Prenom = a.Prenom,
+                Nom = a.Nom,
+                Telephone = a.Telephone ?? "",
+                Licence = a.Licence ?? "",
+                Niveau = Vide(role.Niveau),
+                InspecteurTiv = role.InspecteurTiv,
+                Actif = true,
+            };
+            var id = await classes.AjouterAsync(nouvelle, ct);
+            await adherents.RelierEnseignantAsync(a.Id, id, ct);
+            a.MoniteurId = id;
+            return " · devient enseignant";
+        }
+
+        var etaitEnseignant = fiche.Actif;
+        fiche.Prenom = a.Prenom;
+        fiche.Nom = a.Nom;
+        fiche.Telephone = a.Telephone ?? "";
+        fiche.Licence = a.Licence ?? "";
+        if (role is not null)
+        {
+            fiche.Actif = role.Actif;
+            if (role.Actif)
+            {
+                fiche.Niveau = Vide(role.Niveau);
+                fiche.InspecteurTiv = role.InspecteurTiv;
+            }
+        }
+
+        if (!a.Actif)
+        {
+            fiche.Actif = false;
+        }
+
+        await classes.MettreAJourAsync(fiche, ct);
+        return etaitEnseignant == fiche.Actif ? "" : fiche.Actif ? " · enseignant de nouveau" : " · n'est plus enseignant";
     }
 
     /// <summary>Fin du texte du journal quand le CACI change : « · CACI jusqu'au 15/03/2027 », « · CACI retiré », sinon vide.</summary>
@@ -354,165 +463,298 @@ public sealed class ServiceAdherents(
 
         a.Actif = actif;
         await adherents.MettreAJourAsync(a, ct);
-        await JournaliserAsync(ActionsJournal.AdherentModifie, $"Adhérent {(actif ? "réactivé" : "désactivé")} : {a.NomComplet}", ct);
+
+        // Désactivé : il n'est plus enseignant non plus (plus proposé comme responsable). Réactivé : rôle à remettre dans sa fiche.
+        var fiche = !actif && a.MoniteurId is { } idFiche && classes is not null ? await classes.ObtenirAsync(idFiche, ct) : null;
+        var etaitEnseignant = fiche is { Actif: true };
+        if (etaitEnseignant)
+        {
+            fiche!.Actif = false;
+            await classes!.MettreAJourAsync(fiche, ct);
+        }
+
+        await JournaliserAsync(ActionsJournal.AdherentModifie, $"Adhérent {(actif ? "réactivé" : "désactivé")} : {a.NomComplet}{(etaitEnseignant ? " · n'est plus enseignant" : "")}", ct);
         return ResultatOperation.Ok(actif
             ? $"{a.NomComplet} est réactivé : il peut de nouveau sortir du matériel."
-            : $"{a.NomComplet} est désactivé : il ne peut plus sortir de matériel.", id);
+            : $"{a.NomComplet} est désactivé : il ne peut plus sortir de matériel{(etaitEnseignant ? " ni être responsable d'une sortie" : "")}.", id);
     }
 
-    // ---------------------------------------------------------------- Passer d'adhérent à moniteur, et l'inverse
+    // ---------------------------------------------------------------- Enseignants : un adhérent qui est aussi enseignant
 
     /// <summary>
-    /// L'adhérent devient moniteur : un moniteur du même prénom et nom (majuscules et accents ignorés) est réactivé, sinon
-    /// il est créé (prénom, nom, téléphone ; niveau d'encadrement à compléter). L'adhérent qui n'a jamais pris de matériel
-    /// dans une sortie est supprimé ; sinon il est désactivé : son historique et le matériel qu'il a encore restent à son nom.
-    /// Action Moniteurs. L'Id du résultat est celui du moniteur.
+    /// Rapproche chaque fiche d'enseignant sans adhérent de la fiche d'adhérent de la même personne (au démarrage, sans code) :
+    /// un seul adhérent libre du même prénom et nom (majuscules et accents ignorés ; plusieurs : départagés par la licence) →
+    /// relié ; aucun adhérent de ce nom ni de nom proche (faute de frappe, prénom et nom inversés, même licence) → fiche d'adhérent
+    /// créée (prénom, nom, téléphone, licence). Les autres cas sont laissés à trancher (<see cref="BilanLiaison.ARelier"/>) : rien
+    /// n'est deviné. Rien n'est supprimé ; le matériel déjà pris reste au nom de son adhérent. Sans effet une fois tout relié.
     /// </summary>
-    public async Task<ResultatOperation> PasserMoniteurAsync(long adherentId, CancellationToken ct = default)
+    public async Task<BilanLiaison> RelierEnseignantsAsync(CancellationToken ct = default)
     {
-        if (Autorisation() is { Reussi: false } refus)
-        {
-            return refus;
-        }
-
         if (classes is null)
         {
-            return ResultatOperation.Echec("Les enseignants ne sont pas disponibles.");
+            return new BilanLiaison(0, 0, []);
         }
 
-        if (await adherents.ObtenirAsync(adherentId, ct) is not { } a)
+        var tous = (await adherents.ListerAsync(actifsSeulement: false, ct)).ToList();
+        int relies = 0, crees = 0;
+        var aRelier = new List<EnseignantARelier>();
+        foreach (var m in await EnseignantsSansAdherentAsync(tous, ct))
         {
-            return ResultatOperation.Echec("Cet adhérent n'existe plus.");
-        }
-
-        var moniteur = (await classes.ListerAsync(actifsSeulement: false, ct))
-            .Where(m => !m.EstClasse && MemeNom(m.Prenom, m.Nom, a.Prenom, a.Nom))
-            .OrderByDescending(m => m.Actif)
-            .FirstOrDefault();
-        // Licence reprise si aucun autre moniteur ne l'a déjà.
-        var tousMoniteurs = await classes.ListerAsync(actifsSeulement: false, ct);
-        var licence = a.Licence is { Length: > 0 } l
-            && !tousMoniteurs.Any(x => !x.EstClasse && x.Id != moniteur?.Id && string.Equals(x.Licence, l, StringComparison.OrdinalIgnoreCase))
-            ? l : "";
-        long moniteurId;
-        if (moniteur is null)
-        {
-            moniteurId = await classes.AjouterAsync(new Moniteur
+            var (lien, candidats) = Rapprocher(m, tous);
+            if (lien is not null)
             {
-                Genre = GenreResponsable.Moniteur,
-                Prenom = a.Prenom,
-                Nom = a.Nom,
-                Telephone = a.Telephone ?? "",
-                Licence = licence,
-                Actif = true,
-            }, ct);
-        }
-        else
-        {
-            moniteurId = moniteur.Id;
-            var telephoneRepris = moniteur.Telephone.Length == 0 && a.Telephone is { Length: > 0 };
-            var licenceReprise = moniteur.Licence.Length == 0 && licence.Length > 0;
-            if (!moniteur.Actif || telephoneRepris || licenceReprise)
+                await RelierAsync(lien, m, tous, ct);
+                relies++;
+            }
+            else if (candidats.Count == 0 && await CreerAdherentAsync(m, tous, ct))
             {
-                moniteur.Actif = true;
-                if (telephoneRepris)
-                {
-                    moniteur.Telephone = a.Telephone ?? "";
-                }
-
-                if (licenceReprise)
-                {
-                    moniteur.Licence = licence;
-                }
-
-                await classes.MettreAJourAsync(moniteur, ct);
+                crees++;
+            }
+            else
+            {
+                aRelier.Add(new EnseignantARelier(m, candidats));
             }
         }
 
-        // Jamais pris de matériel dans une sortie : la fiche d'adhérent n'a rien à garder, elle est supprimée.
-        var supprime = await adherents.SupprimerSiJamaisSortiAsync(a.Id, ct);
-        if (!supprime && a.Actif)
+        if (relies + crees > 0)
         {
-            a.Actif = false;
-            await adherents.MettreAJourAsync(a, ct);
+            await JournaliserAsync(ActionsJournal.EnseignantsRelies,
+                $"Enseignants reliés à leur fiche d'adhérent : {Libelles.Pluriel(relies, "relié", "reliés")}, {Libelles.Pluriel(crees, "fiche créée", "fiches créées")}" +
+                (aRelier.Count > 0 ? $", {aRelier.Count} à relier à la main" : ""), ct);
         }
 
-        await JournaliserAsync(ActionsJournal.AdherentDevenuMoniteur,
-            $"{a.NomComplet} : adhérent devenu enseignant{(supprime ? " (fiche d'adhérent supprimée)" : "")}", ct);
-        return ResultatOperation.Ok(supprime
-            ? $"{a.NomComplet} est maintenant enseignant. Sa fiche d'adhérent, sans aucune sortie, est supprimée. Complétez son niveau dans sa fiche."
-            : $"{a.NomComplet} est maintenant enseignant. Complétez son niveau dans sa fiche.", moniteurId);
+        return new BilanLiaison(relies, crees, aRelier);
+    }
+
+    /// <summary>Enseignants que le rapprochement automatique n'a pas pu relier (Membres : « N enseignants à relier »), sans rien écrire.</summary>
+    public async Task<IReadOnlyList<EnseignantARelier>> ListerEnseignantsARelierAsync(CancellationToken ct = default)
+    {
+        if (classes is null)
+        {
+            return [];
+        }
+
+        var tous = (await adherents.ListerAsync(actifsSeulement: false, ct)).ToList();
+        return (await EnseignantsSansAdherentAsync(tous, ct))
+            .Select(m => (Enseignant: m, Rapprochement: Rapprocher(m, tous)))
+            .Where(x => x.Rapprochement.Lien is null)
+            .Select(x => new EnseignantARelier(x.Enseignant, x.Rapprochement.Candidats))
+            .ToList();
     }
 
     /// <summary>
-    /// Le moniteur redevient simple adhérent : un adhérent du même prénom et nom est réactivé, sinon il est créé (prénom, nom,
-    /// téléphone). Le moniteur est désactivé (plus proposé comme responsable ; ses sorties le gardent). Pas pour une classe.
+    /// Relie à la main un enseignant à la fiche d'adhérent choisie, ou lui crée sa fiche (<paramref name="adherentId"/> null).
     /// Action Moniteurs. L'Id du résultat est celui de l'adhérent.
     /// </summary>
-    public async Task<ResultatOperation> PasserAdherentAsync(long moniteurId, CancellationToken ct = default)
+    public async Task<ResultatOperation> RelierEnseignantAsync(long moniteurId, long? adherentId, CancellationToken ct = default)
     {
         if (Autorisation() is { Reussi: false } refus)
         {
             return refus;
         }
 
-        if (classes is null || await classes.ObtenirAsync(moniteurId, ct) is not { } m)
+        if (classes is null || await classes.ObtenirAsync(moniteurId, ct) is not { EstClasse: false } m)
         {
             return ResultatOperation.Echec("Cet enseignant n'existe plus.");
         }
 
-        if (m.EstClasse)
+        var tous = (await adherents.ListerAsync(actifsSeulement: false, ct)).ToList();
+        if (tous.Any(a => a.MoniteurId == m.Id))
         {
-            return ResultatOperation.Echec("Une classe ne peut pas devenir un adhérent.");
+            return ResultatOperation.Echec($"{m.NomComplet} est déjà relié à sa fiche d'adhérent.");
         }
 
-        var tous = await adherents.ListerAsync(actifsSeulement: false, ct);
-        var adherent = tous.Where(x => MemeNom(x.Prenom, x.Nom, m.Prenom, m.Nom)).OrderByDescending(x => x.Actif).FirstOrDefault();
-        // Licence reprise si aucun autre adhérent ne l'a déjà (la licence d'un adhérent est unique).
-        var licence = m.Licence is { Length: > 0 and <= Adherent.LongueurMaxLicence } l
-            && !tous.Any(x => x.Id != adherent?.Id && string.Equals(x.Licence, l, StringComparison.OrdinalIgnoreCase))
-            ? l : null;
-        long adherentId;
-        if (adherent is null)
+        Adherent adherent;
+        if (adherentId is { } id)
         {
-            var nouveau = new Adherent { Prenom = m.Prenom, Nom = m.Nom, Telephone = m.Telephone, Licence = licence };
-            if (Normaliser(nouveau, tous) is { } erreur)
+            if (tous.FirstOrDefault(a => a.Id == id) is not { } choisi)
             {
-                return erreur;
+                return ResultatOperation.Echec("Cet adhérent n'existe plus.");
             }
 
-            adherentId = await adherents.AjouterAsync(nouveau, ct);
+            if (choisi.MoniteurId is not null)
+            {
+                return ResultatOperation.Echec($"{choisi.NomComplet} est déjà relié à un autre enseignant.");
+            }
+
+            await RelierAsync(choisi, m, tous, ct);
+            adherent = choisi;
         }
         else
         {
-            adherentId = adherent.Id;
-            var telephoneRepris = adherent.Telephone is not { Length: > 0 } && m.Telephone.Length is > 0 and <= Adherent.LongueurMaxTelephone;
-            var licenceReprise = adherent.Licence is not { Length: > 0 } && licence is not null;
-            if (!adherent.Actif || telephoneRepris || licenceReprise)
+            if (!await CreerAdherentAsync(m, tous, ct))
             {
-                adherent.Actif = true;
-                if (telephoneRepris)
-                {
-                    adherent.Telephone = Vide(m.Telephone);
-                }
-
-                if (licenceReprise)
-                {
-                    adherent.Licence = licence;
-                }
-
-                await adherents.MettreAJourAsync(adherent, ct);
+                return ResultatOperation.Echec($"La fiche d'adhérent de {m.NomComplet} n'a pas pu être créée : vérifiez son nom.");
             }
+
+            adherent = tous[^1];
         }
 
-        if (m.Actif)
+        await JournaliserAsync(ActionsJournal.EnseignantsRelies, $"{m.NomComplet} relié à la fiche d'adhérent {adherent.NomComplet}", ct);
+        return ResultatOperation.Ok(adherentId is null
+            ? $"{m.NomComplet} a maintenant sa fiche d'adhérent."
+            : $"{m.NomComplet} est relié à la fiche d'adhérent {adherent.NomComplet}.", adherent.Id);
+    }
+
+    /// <summary>Enseignants (pas les classes) qu'aucun adhérent n'a pour fiche d'enseignant.</summary>
+    private async Task<IReadOnlyList<Moniteur>> EnseignantsSansAdherentAsync(IReadOnlyList<Adherent> tous, CancellationToken ct)
+    {
+        var relies = tous.Where(a => a.MoniteurId is not null).Select(a => a.MoniteurId!.Value).ToHashSet();
+        return (await classes!.ListerAsync(actifsSeulement: false, ct)).Where(m => !m.EstClasse && !relies.Contains(m.Id)).ToList();
+    }
+
+    /// <summary>
+    /// Adhérent à relier sans hésitation (<c>Lien</c>), sinon les adhérents à proposer (<c>Candidats</c> : même nom en plusieurs
+    /// exemplaires, ou noms proches) ; aucun des deux : pas de fiche d'adhérent pour cet enseignant.
+    /// </summary>
+    public static (Adherent? Lien, IReadOnlyList<Adherent> Candidats) Rapprocher(Moniteur m, IEnumerable<Adherent> adherentsDuClub)
+    {
+        var libres = adherentsDuClub.Where(a => a.MoniteurId is null).ToList();
+        var memeNom = libres.Where(a => MemeNom(a.Prenom, a.Nom, m.Prenom, m.Nom)).ToList();
+        if (memeNom.Count > 1 && m.Licence.Length > 0
+            && memeNom.Where(a => string.Equals(a.Licence, m.Licence, StringComparison.OrdinalIgnoreCase)).ToList() is [var parLicence])
         {
-            m.Actif = false;
-            await classes.MettreAJourAsync(m, ct);
+            return (parLicence, []);
         }
 
-        await JournaliserAsync(ActionsJournal.MoniteurDevenuAdherent, $"{m.NomComplet} : enseignant devenu adhérent", ct);
-        return ResultatOperation.Ok($"{m.NomComplet} est maintenant un simple adhérent.", adherentId);
+        if (memeNom.Count == 1)
+        {
+            return (memeNom[0], []);
+        }
+
+        if (memeNom.Count > 1)
+        {
+            return (null, memeNom);
+        }
+
+        return (null, libres.Where(a => NomProche(a, m)).ToList());
+    }
+
+    /// <summary>
+    /// Nom qui ressemble sans être identique : même licence, prénom et nom inversés, ou l'un identique et l'autre à une ou deux
+    /// lettres près (« Vermenot » / « Vermenaut »). Ces fiches ne sont jamais reliées seules.
+    /// </summary>
+    private static bool NomProche(Adherent a, Moniteur m)
+    {
+        if (m.Licence.Length > 0 && string.Equals(a.Licence, m.Licence, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        string pa = Simplifier(a.Prenom), na = Simplifier(a.Nom), pm = Simplifier(m.Prenom), nm = Simplifier(m.Nom);
+        return (pa == nm && na == pm)
+            || (pa == pm && Distance(na, nm) <= 2)
+            || (na == nm && Distance(pa, pm) <= 2);
+    }
+
+    /// <summary>Nombre de lettres à changer, ajouter ou retirer pour passer d'un mot à l'autre (distance de Levenshtein).</summary>
+    private static int Distance(string a, string b)
+    {
+        var precedente = Enumerable.Range(0, b.Length + 1).ToArray();
+        for (var i = 1; i <= a.Length; i++)
+        {
+            var courante = new int[b.Length + 1];
+            courante[0] = i;
+            for (var j = 1; j <= b.Length; j++)
+            {
+                courante[j] = Math.Min(Math.Min(courante[j - 1], precedente[j]) + 1, precedente[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1));
+            }
+
+            precedente = courante;
+        }
+
+        return precedente[b.Length];
+    }
+
+    /// <summary>
+    /// Relie l'adhérent à la fiche d'enseignant. Il reprend le téléphone et la licence de l'enseignant s'il n'en a pas (licence
+    /// libre parmi les adhérents) ; un enseignant actif dont la fiche d'adhérent avait été désactivée (ancien « Passer en
+    /// enseignant ») la retrouve active : il peut sortir du matériel.
+    /// </summary>
+    private async Task RelierAsync(Adherent a, Moniteur m, List<Adherent> tous, CancellationToken ct)
+    {
+        await adherents.RelierEnseignantAsync(a.Id, m.Id, ct);
+        a.MoniteurId = m.Id;
+        var change = false;
+        if (a.Telephone is not { Length: > 0 } && m.Telephone.Trim() is { Length: > 0 and <= Adherent.LongueurMaxTelephone } telephone)
+        {
+            a.Telephone = telephone;
+            change = true;
+        }
+
+        if (a.Licence is not { Length: > 0 } && LicenceLibre(m, tous) is { } licence)
+        {
+            a.Licence = licence;
+            change = true;
+        }
+
+        if (m.Actif && !a.Actif)
+        {
+            a.Actif = true;
+            change = true;
+        }
+
+        if (change)
+        {
+            await adherents.MettreAJourAsync(a, ct);
+        }
+    }
+
+    /// <summary>Crée la fiche d'adhérent de l'enseignant (active comme lui) et la relie ; faux si son nom ne convient pas.</summary>
+    private async Task<bool> CreerAdherentAsync(Moniteur m, List<Adherent> tous, CancellationToken ct)
+    {
+        var nouveau = new Adherent { Prenom = m.Prenom, Nom = m.Nom, Telephone = m.Telephone, Licence = LicenceLibre(m, tous), Actif = m.Actif };
+        if (nouveau.Telephone?.Trim().Length > Adherent.LongueurMaxTelephone)
+        {
+            nouveau.Telephone = null;
+        }
+
+        if (Normaliser(nouveau, tous) is not null)
+        {
+            return false;
+        }
+
+        await adherents.AjouterAsync(nouveau, ct);
+        await adherents.RelierEnseignantAsync(nouveau.Id, m.Id, ct);
+        nouveau.MoniteurId = m.Id;
+        tous.Add(nouveau);
+        return true;
+    }
+
+    /// <summary>Licence de l'enseignant si aucun adhérent ne l'a déjà (la licence d'un adhérent est unique), sinon null.</summary>
+    private static string? LicenceLibre(Moniteur m, IReadOnlyList<Adherent> tous) =>
+        m.Licence.Trim().ToUpper(Libelles.Culture) is { Length: > 0 and <= Adherent.LongueurMaxLicence } l
+        && !tous.Any(x => string.Equals(x.Licence, l, StringComparison.OrdinalIgnoreCase)) ? l : null;
+
+    /// <summary>
+    /// Import : la fiche d'enseignant reliée reprend prénom, nom et téléphone de l'adhérent, et sa licence si aucun autre
+    /// enseignant ne l'a. Le rôle (actif, niveau, TIV) n'est pas changé.
+    /// </summary>
+    private async Task SynchroniserEnseignantAsync(Adherent a, CancellationToken ct)
+    {
+        if (a.MoniteurId is not { } id || classes is null || await classes.ObtenirAsync(id, ct) is not { } fiche)
+        {
+            return;
+        }
+
+        var licence = a.Licence ?? "";
+        var licencePrise = licence.Length > 0 && (await classes.ListerAsync(actifsSeulement: false, ct))
+            .Any(m => !m.EstClasse && m.Id != fiche.Id && string.Equals(m.Licence, licence, StringComparison.OrdinalIgnoreCase));
+        var telephone = a.Telephone ?? "";
+        if (fiche.Prenom == a.Prenom && fiche.Nom == a.Nom && fiche.Telephone == telephone && (licencePrise || fiche.Licence == licence))
+        {
+            return;
+        }
+
+        fiche.Prenom = a.Prenom;
+        fiche.Nom = a.Nom;
+        fiche.Telephone = telephone;
+        if (!licencePrise)
+        {
+            fiche.Licence = licence;
+        }
+
+        await classes.MettreAJourAsync(fiche, ct);
     }
 
     private static bool MemeNom(string prenom1, string nom1, string prenom2, string nom2) =>
@@ -756,6 +998,7 @@ public sealed class ServiceAdherents(
 
             existant.Actif = true;
             await adherents.MettreAJourAsync(existant, ct);
+            await SynchroniserEnseignantAsync(existant, ct);
             misAJour++;
         }
 

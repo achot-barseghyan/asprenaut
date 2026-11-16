@@ -295,8 +295,8 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     niveau » tapé, `NiveauPropose` ; Rôles au club : carte Inspecteur TIV, + carte « Moniteur actif » en modification), en-tête violet
     (`Theme.Encadrement`) avec initiales et étiquettes ; classe : nom | abréviation (« AUTO » tant qu'elle suit le nom, compteur 0/4),
     exemples (`ExemplesClasses`, à l'ajout, sans les noms pris), couleur, aperçu (`ApercuClasse`), carte « Classe active » en modification. Journal `ClasseCreee` / `ClasseModifiee`. Afficher `SortieResume.LibelleResponsable`
-    (« Moniteur : … » / « Classe : … »). App : onglets `Bascule` dans `EcranMoniteurs` (ordre : Adhérents, ouvert à l'arrivée, puis Moniteurs et Classes ; `OngletAdherents` / `OngletMoniteurs` / `OngletClasses`), `Bascule` Moniteur | Classe
-    puis `ChoixPersonnes` dans Nouvelle sortie et Modifier la sortie. Filtres de l'écran Membres (`FiltresMembresTests`) : onglet Moniteurs, recherche (prénom, nom, niveau, téléphone, licence, accents ignorés) et puces Tous / Actifs / Inspecteurs TIV / Matériel dehors / Inactifs (`ServiceMoniteurs.Filtrer` → `ListeMoniteurs`, nombres après la recherche) ; onglet Adhérents, recherche, liste « formation en cours » (toutes, les classes actives, « Sans formation » = `ServiceAdherents.SansNiveau`) et puces Tous / Matériel dehors / Non rendu / Nitrox / Désactivés ; pas de filtre pour les classes ; chaque onglet a sa recherche. Données de démo : chargées si aucun moniteur (genre Moniteur).
+    (« Moniteur : … » / « Classe : … »). App : onglets `Bascule` dans `EcranMoniteurs` (Adhérents, ouvert à l'arrivée, puis Classes ; `OngletAdherents` / `OngletClasses` ; plus d'onglet Enseignants : un enseignant est un adhérent, règle 44 ; les fenêtres moniteur décrites plus haut sont devenues la section « Enseignant » de la fiche adhérent), `Bascule` Moniteur | Classe
+    puis `ChoixPersonnes` dans Nouvelle sortie et Modifier la sortie. Filtres de l'écran Membres (`FiltresMembresTests`) : onglet Adhérents, recherche, liste « formation en cours » (toutes, les classes actives, « Sans formation » = `ServiceAdherents.SansNiveau`) et puces Tous / Enseignants / Inspecteurs TIV / Matériel dehors / Non rendu / Nitrox / CACI à renouveler / Désactivés ; pas de filtre pour les classes (`ServiceMoniteurs.Filtrer` reste, sans écran). Données de démo : chargées si aucun moniteur (genre Moniteur).
 25. Manuels (`ServiceManuels`, migration 009, écran `EcranManuels`, maquette « Manuels ») : consultation libre ; ajouter, modifier,
     retirer = action protégée Matériel. Le PDF est copié dans `Manuels\` à côté de la base (`IStockageManuels`, nom déjà pris →
     « (2) ») ; l'écran lit son nombre de pages (`LecteurPdf.CompterPagesAsync`). Marque et titre obligatoires ; sommaire tapé une
@@ -388,7 +388,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     pour déborder de la carte, jamais focusable ; Échap la referme ; un code tapé par le pistolet dans la recherche est refusé), puis le focus revient au champ de scan ; liste
     « À attribuer » / nom de l'adhérent, vue « Par adhérent ». « Annuler ce scan » retire l'équipement en attente (aussi après la
     validation). Retour : nom de l'adhérent sur le matériel dehors. Clôture : `ManquantDeclare` garde `AdherentId` (« pris par … »
-    dans l'historique). Adhérents (onglet de `EcranMoniteurs`, menu « Membres ») : jamais responsables de sortie, jamais supprimés
+    dans l'historique). Adhérents (onglet de `EcranMoniteurs`, menu « Membres ») : responsables de sortie seulement s'ils sont enseignants (règle 44), jamais supprimés
     (inactif : plus proposé au départ, gardé dans l'historique) ; nom et prénom obligatoires, licence unique ; filtres Tous / Matériel
     dehors / Non rendu ; fiche (matériel en ce moment, non rendu, dernières sorties nominatives, Modifier) ; ajouter et importer
     demandent le code (action Moniteurs). Import (`ImporterAsync`, `LireTableau`) : en-tête « Nom » + « Prénom » (Niveau, Licence,
@@ -547,13 +547,26 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     révisions, interventions prévues, signalements, séances, composants, passages en atelier, contrôles et reprise, et détache ses
     lignes du journal (`equipement_id` à NULL : un nouvel équipement peut reprendre l'id). Journal `EquipementSupprime` (sans lien).
 
-44. Passer d'adhérent à moniteur et l'inverse (`ServiceAdherents.PasserMoniteurAsync` / `PasserAdherentAsync`, `PassageMembresTests`,
-    action protégée Moniteurs) : boutons « Passer en moniteur » (fiche adhérent) et « Passer en adhérent » (fiche moniteur, pas les
-    classes) de Membres, avec confirmation ; l'onglet d'arrivée s'ouvre sur la fiche. La fiche de l'autre côté du même prénom et nom
-    (majuscules et accents ignorés) est réactivée, sinon créée (prénom, nom, téléphone, licence si personne d'autre de ce côté ne l'a ; niveau d'encadrement à compléter) ; l'ancienne
-    est désactivée (historique, sorties et matériel dehors gardés), sauf un adhérent qui n'a jamais pris de matériel en sortie
-    (aucune ligne sortie_equipement) : il est supprimé (`IAdherentRepository.SupprimerSiJamaisSortiAsync`, re-vérifié en SQL,
-    journal détaché). Un moniteur n'est jamais supprimé. Journal `AdherentDevenuMoniteur` / `MoniteurDevenuAdherent`.
+44. Un enseignant est un adhérent (migration 029, `EnseignantsAdherentsTests`) : toute personne du club a une fiche d'adhérent
+    (CACI, nitrox, matériel pris en sortie nominative) ; un adhérent peut aussi être enseignant, relié à sa fiche de responsable
+    de sortie (`Adherent.MoniteurId` → adherent.moniteur_id, une fiche d'enseignant par adhérent `ux_adherent_moniteur` ; écrit
+    seulement par `IAdherentRepository.RelierEnseignantAsync`, jamais par `MettreAJourAsync`). `Enseignant` (fiche reliée active),
+    `NiveauEncadrement`, `InspecteurTiv` sont lus par jointure. La table moniteur reste celle des responsables (sorties, séances TIV,
+    modèles). Rôle saisi dans la fiche de l'adhérent : `EnregistrerAsync(saisie, RoleEnseignant? role)` (null = inchangé) ; actif →
+    fiche d'enseignant créée et reliée, ou réactivée (niveau, TIV) ; coupé → désactivée (lien, niveau et TIV gardés, sorties à son
+    nom) ; refusé pour un adhérent désactivé, un niveau de plus de 30 car., la licence d'un autre enseignant. La fiche reliée reprend
+    toujours prénom, nom, téléphone et licence de l'adhérent (aussi à l'import Excel, `SynchroniserEnseignantAsync`). Désactiver
+    l'adhérent (`ChangerActifAsync`) désactive aussi l'enseignant ; le réactiver ne remet pas le rôle. Au départ, un enseignant
+    prend du matériel comme tout adhérent (mêmes contrôles : CACI seulement s'il est coché, nitrox, un par catégorie).
+    Rapprochement des fiches existantes (`RelierEnseignantsAsync`, au démarrage dans `Demarrage.PreparerBaseAsync`, sans code,
+    sans effet une fois tout relié) : un seul adhérent libre du même prénom et nom (majuscules et accents ignorés ; homonymes
+    départagés par la licence) → relié (téléphone et licence repris s'il n'en avait pas ; fiche d'adhérent désactivée par l'ancien
+    « Passer en enseignant » réactivée si l'enseignant est actif) ; aucun adhérent de ce nom ni de nom proche (`Rapprocher` : même
+    licence, prénom et nom inversés, l'un identique et l'autre à 2 lettres près) → fiche d'adhérent créée ; sinon rien n'est deviné :
+    `ListerEnseignantsARelierAsync` → bouton « N enseignants à relier » de Membres (lié Moniteurs), fenêtre par enseignant
+    (`ListeChoix` des candidats + « Créer sa fiche d'adhérent ») → `RelierEnseignantAsync(moniteurId, adherentId?)` (action Moniteurs).
+    Rien n'est supprimé ni fusionné. Journal `EnseignantsRelies`. Les anciens « Passer en enseignant / en adhérent » sont retirés
+    (actions `AdherentDevenuMoniteur` / `MoniteurDevenuAdherent` gardées pour l'historique ; `SupprimerSiJamaisSortiAsync` reste au dépôt).
 
 45. Import des fiches de suivi EPI (`ServiceRevisions.ImporterFichesEpiAsync`, `Services/ServiceRevisionsImport.cs`, `ImportFichesEpiTests`,
     action protégée Révisions) : bouton « Fiches EPI » de l'Inventaire, classeur .xlsx / .xlsm du club (« INVENTAIRE.xlsm ») lu onglet
@@ -652,11 +665,13 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   026 : moniteur.licence (texte, vide = non renseignée, toujours vide pour une classe).
   027 : composants des détendeurs notés « NON », « sans », « - »… vidés (manometre, octopus, numero_octopus, deuxième étage).
   028 : noms génériques (« DÉTENDEUR », « STAB », « MASQUE »…) → « Détendeur adulte A24 », « Gilet stabilisateur S12 », « Masque M1 ».
+  029 : adherent.moniteur_id (fiche d'enseignant reliée, ON DELETE SET NULL, unique `ux_adherent_moniteur`) ; rapprochement des
+  fiches existantes fait par l'application au démarrage (règle 44).
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/029_xxx.sql`, sans jamais modifier un script déjà livré
+- Nouvelle migration : ajouter `Migrations/030_xxx.sql`, sans jamais modifier un script déjà livré
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.
@@ -666,7 +681,7 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
 ## Conventions
 
 - Noms métier en français (Sortie, Equipement, Moniteur, Rendu…), anglais toléré pour la technique.
-- **À l'écran on dit « Enseignant »**, jamais « moniteur » (boutons, messages, journal, onglet Membres › Enseignants, export
+- **À l'écran on dit « Enseignant »**, jamais « moniteur » (boutons, messages, journal, section « Enseignant » de la fiche adhérent, export
   enseignants.csv, colonne « Responsable »). Le code, la base (table moniteur) et parametres.json gardent « Moniteur ». Seules
   exceptions : les qualités des niveaux E3 / E4 (« Moniteur », titre fédéral) et les anciennes lignes du journal.
 - Accès aux données asynchrones (`…Async`, `CancellationToken ct = default`).

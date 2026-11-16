@@ -54,7 +54,7 @@ public static class FormulaireSeanceTiv
         fenetre.Ajouter(FenetreFormulaire.LibelleChamp("Inspecteurs TIV présents"));
         if (cases.Count == 0)
         {
-            var aucun = Ui.Libelle("Aucun enseignant n'est inspecteur TIV : cochez « Inspecteur TIV » sur sa fiche (Membres › Enseignants).",
+            var aucun = Ui.Libelle("Aucun enseignant n'est inspecteur TIV : cochez « Inspecteur TIV » sur sa fiche (Membres › Adhérents, section Enseignant).",
                 Theme.Police(9.75f), Theme.TexteSecondaire);
             aucun.MaximumSize = new Size(460, 0);
             aucun.Margin = new Padding(0, 0, 0, 14);

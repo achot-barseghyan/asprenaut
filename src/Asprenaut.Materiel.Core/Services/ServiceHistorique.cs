@@ -67,6 +67,7 @@ public sealed class ServiceHistorique(
         [ActionsJournal.AdherentModifie] = (TypeEvenement.Autre, "Adhérent modifié"),
         [ActionsJournal.AdherentDevenuMoniteur] = (TypeEvenement.Autre, "Adhérent devenu enseignant"),
         [ActionsJournal.MoniteurDevenuAdherent] = (TypeEvenement.Autre, "Enseignant devenu adhérent"),
+        [ActionsJournal.EnseignantsRelies] = (TypeEvenement.Autre, "Enseignants reliés aux adhérents"),
         [ActionsJournal.AdherentsImportes] = (TypeEvenement.Autre, "Liste des adhérents importée"),
         [ActionsJournal.InventaireImporte] = (TypeEvenement.Materiel, "Inventaire importé"),
         [ActionsJournal.UtilisationsReprises] = (TypeEvenement.Materiel, "Compteur d'utilisation repris"),

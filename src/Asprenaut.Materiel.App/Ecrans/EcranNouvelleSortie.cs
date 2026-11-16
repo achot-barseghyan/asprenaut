@@ -408,7 +408,7 @@ public sealed class EcranNouvelleSortie : EcranBase
         _personnes.AccessibleName = g == GenreResponsable.Classe ? "Classe responsable" : "Enseignant responsable";
         _personnes.TexteVide = g == GenreResponsable.Classe
             ? "Aucune classe : ajoutez-en une dans Membres › Classes."
-            : "Aucun enseignant : ajoutez-en un dans Membres › Enseignants.";
+            : "Aucun enseignant : dans Membres › Adhérents, activez « Enseignant » sur sa fiche.";
         _personnes.Remplir(
             liste.Select((m, i) => new ChoixPersonnes.Element(
                 m.Id, EcranMoniteurs.Avatar.Initiales(m), m.NomComplet, FormulaireSortie.Detail(m), EcranMoniteurs.Avatar.Degrade(m, i), m.EstClasse, m.Actif)),

@@ -9,9 +9,11 @@ namespace Asprenaut.Materiel.Data.Depots;
 public sealed class AdherentRepository(FabriqueConnexion fabrique) : IAdherentRepository
 {
     // Formation en cours : le nom vient de la classe liée (migration 021) ; adherent.niveau seulement s'il n'y en a pas.
-    private const string Colonnes = "a.id, a.nom, a.prenom, a.classe_id, COALESCE(c.nom, a.niveau) AS niveau, a.licence, a.telephone, a.actif, a.nitrox, a.caci, a.caci_expiration";
+    // Fiche d'enseignant reliée (migration 029) : rôle actif, niveau d'encadrement, inspecteur TIV.
+    private const string Colonnes = "a.id, a.nom, a.prenom, a.classe_id, COALESCE(c.nom, a.niveau) AS niveau, a.licence, a.telephone, a.actif, a.nitrox, a.caci, a.caci_expiration, " +
+        "a.moniteur_id, COALESCE(m.actif, 0) AS enseignant, m.niveau AS niveau_encadrement, COALESCE(m.inspecteur_tiv, 0) AS inspecteur_tiv";
 
-    private const string Source = "adherent a LEFT JOIN moniteur c ON c.id = a.classe_id";
+    private const string Source = "adherent a LEFT JOIN moniteur c ON c.id = a.classe_id LEFT JOIN moniteur m ON m.id = a.moniteur_id";
 
     public async Task<IReadOnlyList<Adherent>> ListerAsync(bool actifsSeulement, CancellationToken ct = default)
     {
@@ -108,6 +110,13 @@ public sealed class AdherentRepository(FabriqueConnexion fabrique) : IAdherentRe
             new { adherentId }, tx, cancellationToken: ct));
         await tx.CommitAsync(ct);
         return supprimes > 0;
+    }
+
+    public async Task RelierEnseignantAsync(long adherentId, long moniteurId, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        await cx.ExecuteAsync(new CommandDefinition(
+            "UPDATE adherent SET moniteur_id = @moniteurId WHERE id = @adherentId;", new { adherentId, moniteurId }, cancellationToken: ct));
     }
 
     private static object Parametres(Adherent a) => new

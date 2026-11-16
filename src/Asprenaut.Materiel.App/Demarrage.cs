@@ -123,6 +123,18 @@ internal static class Demarrage
         }
 #endif
 
+        // Un enseignant est un adhérent : chaque fiche d'enseignant est reliée à la fiche d'adhérent de la même personne (même
+        // prénom et nom, une seule) ou en reçoit une ; les cas douteux attendent dans Membres (« enseignants à relier »).
+        // Sans effet une fois tout relié. Un échec ne bloque pas le démarrage.
+        try
+        {
+            await services.GetRequiredService<ServiceAdherents>().RelierEnseignantsAsync();
+        }
+        catch (Microsoft.Data.Sqlite.SqliteException ex)
+        {
+            Erreurs.Journaliser(ex);
+        }
+
         // Pictogramme choisi pour chaque catégorie (Lampes, Plombs…), utilisé partout où une catégorie est dessinée.
         Apparence.Icones.RetenirCategories(await services.GetRequiredService<ServiceInventaire>().ListerCategoriesAsync());
 

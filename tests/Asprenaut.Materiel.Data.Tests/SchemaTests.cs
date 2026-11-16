@@ -37,9 +37,51 @@ public class SchemaTests : IAsyncLifetime
     }
 
     [Fact]
-    public void Scripts_001_a_028_sont_embarques()
+    public void Scripts_001_a_029_sont_embarques()
     {
-        Assert.Equal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28], GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
+        Assert.Equal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29], GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
+    }
+
+    // 029 : un adhérent relié à sa fiche d'enseignant ; les adhérents existants restent sans lien (rapprochés par l'application).
+    [Fact]
+    public async Task La_migration_029_relie_un_adherent_a_sa_fiche_enseignant()
+    {
+        var fabrique = new Connexion.FabriqueConnexion(Path.Combine(_base.Dossier, "avant-029.db"));
+        var migrations = new GestionnaireMigrations(fabrique);
+        Assert.Equal(28, await migrations.AppliquerAsync(jusqua: 28));
+        long pascal, adherent, autre;
+        await using (var cx = await fabrique.OuvrirAsync())
+        {
+            pascal = await cx.ExecuteScalarAsync<long>(
+                "INSERT INTO moniteur (genre, nom, prenom, niveau, inspecteur_tiv, actif) VALUES ('Moniteur', 'Vermenot', 'Pascal', 'MF1', 1, 1) RETURNING id;");
+            adherent = await cx.ExecuteScalarAsync<long>("INSERT INTO adherent (nom, prenom, actif) VALUES ('Vermenot', 'Pascal', 1) RETURNING id;");
+            autre = await cx.ExecuteScalarAsync<long>("INSERT INTO adherent (nom, prenom, actif) VALUES ('Martin', 'Julie', 1) RETURNING id;");
+        }
+
+        await migrations.AppliquerAsync();
+        var depot = new AdherentRepository(fabrique);
+        var avant = (await depot.ObtenirAsync(adherent))!;
+        Assert.Equal((null, false), (avant.MoniteurId, avant.Enseignant));
+
+        await depot.RelierEnseignantAsync(adherent, pascal);
+        var lu = (await depot.ObtenirAsync(adherent))!;
+        Assert.Equal((pascal, true, "MF1", true), (lu.MoniteurId, lu.Enseignant, lu.NiveauEncadrement, lu.InspecteurTiv));
+
+        // L'enregistrement de l'adhérent ne touche pas au lien.
+        lu.Telephone = "06 12 34 56 78";
+        await depot.MettreAJourAsync(lu);
+        Assert.Equal(pascal, (await depot.ObtenirAsync(adherent))!.MoniteurId);
+
+        // Enseignant inactif : le lien reste, le rôle est coupé.
+        await using (var cx = await fabrique.OuvrirAsync())
+        {
+            await cx.ExecuteAsync("UPDATE moniteur SET actif = 0 WHERE id = @pascal;", new { pascal });
+        }
+
+        Assert.Equal((pascal, false), ((await depot.ObtenirAsync(adherent))!.MoniteurId, (await depot.ObtenirAsync(adherent))!.Enseignant));
+
+        // Une fiche d'enseignant n'est reliée qu'à un seul adhérent.
+        await Assert.ThrowsAsync<SqliteException>(() => depot.RelierEnseignantAsync(autre, pascal));
     }
 
     // 021 : le niveau texte de l'adhérent devient sa classe (formation en cours) ; une classe manquante est créée.

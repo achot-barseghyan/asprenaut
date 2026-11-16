@@ -58,6 +58,9 @@ public static class ActionsJournal
     public const string AdherentsImportes = "AdherentsImportes";
     public const string AdherentDevenuMoniteur = "AdherentDevenuMoniteur";
     public const string MoniteurDevenuAdherent = "MoniteurDevenuAdherent";
+
+    /// <summary>Fiches d'enseignant reliées à leur fiche d'adhérent (au démarrage ou à la main, migration 029).</summary>
+    public const string EnseignantsRelies = "EnseignantsRelies";
     public const string InventaireImporte = "InventaireImporte";
     public const string UtilisationsReprises = "UtilisationsReprises";
     public const string FichesEpiImportees = "FichesEpiImportees";

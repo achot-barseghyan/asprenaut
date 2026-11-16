@@ -11,16 +11,16 @@ using Asprenaut.Materiel.Core.Services;
 namespace Asprenaut.Materiel.App.Ecrans;
 
 /// <summary>
-/// Membres du club : onglets « Adhérents | Moniteurs | Classes » (Adhérents ouvert à l'arrivée). Moniteurs et classes : une carte par responsable de
-/// sortie (sorties de la saison, matériel dehors) et sa fiche (matériel dehors sous sa responsabilité, dernières sorties,
-/// modifier, créer une sortie). Une classe (Niveau 1, Niveau 2…) est responsable d'une sortie comme un moniteur ; elle a une
-/// pastille carrée (N2). Adhérents : ceux qui prennent du matériel lors d'une sortie nominative (recherche, filtres, import
-/// de la liste Excel) ; leur fiche montre le matériel qu'ils ont et celui jamais rendu. Un adhérent n'est jamais responsable.
+/// Membres du club : onglets « Adhérents | Classes » (Adhérents ouvert à l'arrivée). Toute personne du club est un adhérent
+/// (recherche, filtres, import de la liste Excel ; sa fiche montre le matériel qu'il a et celui jamais rendu) ; un adhérent peut
+/// aussi être enseignant (section « Enseignant » de sa fiche : responsable des sorties, niveau d'encadrement, inspecteur TIV ;
+/// sa fiche montre alors le matériel dehors sous sa responsabilité et ses dernières sorties). Classes : une carte par classe
+/// (Niveau 1, Niveau 2…), responsable d'une sortie comme un enseignant, pastille carrée (N2).
 /// </summary>
 public sealed class EcranMoniteurs : EcranBase
 {
-    // Onglets, dans l'ordre affiché : Adhérents (ouvert à l'arrivée), Moniteurs, Classes.
-    private const int OngletAdherents = 0, OngletMoniteurs = 1, OngletClasses = 2;
+    // Onglets, dans l'ordre affiché : Adhérents (ouvert à l'arrivée), Classes.
+    private const int OngletAdherents = 0, OngletClasses = 1;
 
     private readonly ServiceMoniteurs _moniteurs;
     private readonly ServiceAdherents _adherents;
@@ -28,8 +28,11 @@ public sealed class EcranMoniteurs : EcranBase
     private readonly GrilleAdaptative _cartes = new() { LargeurMin = 250, HauteurElement = 176, Ecart = 14, Margin = new Padding(0, 0, 22, 0) };
     private readonly Panel _fiche = new() { AutoScroll = true, BackColor = Theme.Surface, Margin = Padding.Empty };
     private readonly Carte _carteFiche = new() { Padding = new Padding(24), CouleurBordure = Theme.BordureForte };
-    private readonly Bascule _onglets = new("Adhérents", "Enseignants", "Classes");
-    private readonly BoutonArrondi _ajouter = new("Ajouter un enseignant", StyleBouton.Principal, Icones.Plus);
+    private readonly Bascule _onglets = new("Adhérents", "Classes");
+    private readonly BoutonArrondi _ajouter = new("Ajouter un adhérent", StyleBouton.Principal, Icones.Plus);
+
+    // Enseignants que le rapprochement du démarrage n'a pas pu relier seul (homonymes, noms proches) : à trancher à la main.
+    private readonly BoutonArrondi _relier = new("Enseignants à relier", StyleBouton.Secondaire, Icones.Echange) { Visible = false };
     private readonly BoutonArrondi _importer = new("Importer la liste Excel", StyleBouton.Secondaire, Icones.Document) { Visible = false };
     private readonly BoutonArrondi _modele = new("Modèle Excel à remplir", StyleBouton.Secondaire, Icones.Telecharger) { Visible = false };
     private readonly Reglages _reglages;
@@ -42,6 +45,8 @@ public sealed class EcranMoniteurs : EcranBase
     // Puces de l'onglet Adhérents (après « Tous »), dans l'ordre affiché.
     private static readonly (string Libelle, FiltreAdherents Filtre)[] PucesAdherents =
     [
+        ("Enseignants", FiltreAdherents.Enseignants),
+        ("Inspecteurs TIV", FiltreAdherents.InspecteursTiv),
         ("Matériel dehors", FiltreAdherents.MaterielDehors),
         ("Non rendu", FiltreAdherents.NonRendu),
         ("Nitrox", FiltreAdherents.Nitrox),
@@ -49,13 +54,9 @@ public sealed class EcranMoniteurs : EcranBase
         ("Désactivés", FiltreAdherents.Desactives),
     ];
 
-    // Onglet Moniteurs : mêmes recherche et puces (pas pour les classes, peu nombreuses).
-    private static readonly string[] PucesMoniteurs = ["Actifs", "Inspecteurs TIV", "Matériel dehors", "Inactifs"];
-
-    // Puces « Tous 12 / Actifs 9… » (même dessin que les filtres de catégories) ; choix gardé pour chaque onglet.
+    // Puces « Tous 12 / Enseignants 4… » (même dessin que les filtres de catégories) ; pas de filtre pour les classes.
     private readonly FiltreCategories _filtre = new(Theme.AccentClair) { LibelleTout = "Tous", Margin = new Padding(0, 10, 0, 8) };
     private FiltreAdherents _choixAdherents = FiltreAdherents.Tous;
-    private FiltreMoniteurs _choixMoniteurs = FiltreMoniteurs.Tous;
     private readonly ListeDeroulante _niveau = new() { AccessibleName = "Filtrer par niveau", Width = 220 };
     private readonly System.Windows.Forms.Timer _attenteRecherche = new() { Interval = 300 };
     private readonly TableLayoutPanel _page;
@@ -74,7 +75,10 @@ public sealed class EcranMoniteurs : EcranBase
 
         _garde.Lier(_ajouter, ActionProtegee.Moniteurs);
         _garde.Lier(_importer, ActionProtegee.Moniteurs);
-        _ajouter.Click += (_, _) => Executer(() => Adherents ? ModifierAdherentAsync(null) : ModifierAsync(null, Genre));
+        _garde.Lier(_relier, ActionProtegee.Moniteurs);
+        _ajouter.Click += (_, _) => Executer(() => Adherents ? ModifierAdherentAsync(null) : ModifierClasseAsync(null));
+        _relier.Click += (_, _) => Executer(RelierEnseignantsAsync);
+        _relier.AccessibleDescription = "Enseignants dont la fiche d'adhérent n'a pas pu être retrouvée sans hésitation : choisissez la bonne";
         _importer.Click += (_, _) => Executer(ImporterAsync);
         _modele.Click += (_, _) => Executer(EnregistrerModeleAsync); // Libre : ne change aucune donnée.
         _modele.AccessibleDescription = "Fichier Excel vide à donner au club pour noter les nouveaux adhérents, puis à importer";
@@ -85,15 +89,7 @@ public sealed class EcranMoniteurs : EcranBase
 
         _filtre.Changement += (_, _) =>
         {
-            if (Adherents)
-            {
-                _choixAdherents = PucesAdherents.Where(p => p.Libelle == _filtre.Selection).Select(p => p.Filtre).FirstOrDefault(); // Tous si aucune.
-            }
-            else
-            {
-                _choixMoniteurs = (FiltreMoniteurs)(Array.IndexOf(PucesMoniteurs, _filtre.Selection) + 1);
-            }
-
+            _choixAdherents = PucesAdherents.Where(p => p.Libelle == _filtre.Selection).Select(p => p.Filtre).FirstOrDefault(); // Tous si aucune.
             Executer(AfficherGenreAsync);
         };
 
@@ -118,7 +114,7 @@ public sealed class EcranMoniteurs : EcranBase
         _attenteRecherche.Tick += (_, _) =>
         {
             _attenteRecherche.Stop();
-            Executer(AfficherGenreAsync); // Moniteurs ou adhérents, selon l'onglet.
+            Executer(AfficherGenreAsync);
         };
 
         Natif.ScrollbarsDuTheme(_fiche);
@@ -135,7 +131,7 @@ public sealed class EcranMoniteurs : EcranBase
             (_filtre, SizeType.Absolute, Theme.HauteurCliquable + 8 + 10));
         filtres.Margin = new Padding(0, 0, 0, 20);
         _page = Ui.Colonne(
-            (Ui.Entete(Ui.Pile(Ui.Titre(Titre), Ui.SousTitre("Les responsables de sortie, les adhérents du club et le matériel encore dehors.")), _ajouter, _importer, _modele), SizeType.AutoSize, 0),
+            (Ui.Entete(Ui.Pile(Ui.Titre(Titre), Ui.SousTitre("Les adhérents du club, dont les enseignants, les classes et le matériel encore dehors.")), _ajouter, _importer, _modele, _relier), SizeType.AutoSize, 0),
             (onglets, SizeType.AutoSize, 0),
             (filtres, SizeType.Absolute, 0), // HauteurFiltres sur les onglets Moniteurs et Adhérents.
             (Ui.Colonnes((_cartes, SizeType.Percent, 60), (_carteFiche, SizeType.Percent, 40)), SizeType.Percent, 100));
@@ -150,9 +146,7 @@ public sealed class EcranMoniteurs : EcranBase
     /// <summary>Hauteur de la zone recherche + puces (pixels logiques) : 54 + puces + marges.</summary>
     private const int HauteurFiltres = 54 + Theme.HauteurCliquable + 8 + 10 + 20;
 
-    private GenreResponsable Genre => _onglets.SelectedIndex == OngletClasses ? GenreResponsable.Classe : GenreResponsable.Moniteur;
-
-    private bool Classes => Genre == GenreResponsable.Classe && !Adherents;
+    private bool Classes => _onglets.SelectedIndex == OngletClasses;
 
     private bool Adherents => _onglets.SelectedIndex == OngletAdherents;
 
@@ -172,22 +166,24 @@ public sealed class EcranMoniteurs : EcranBase
     {
         _tous = await _moniteurs.ListerFichesAsync();
         var adherents = await _adherents.ListerAsync(null, FiltreAdherents.Tous);
+        var aRelier = await _adherents.ListerEnseignantsARelierAsync();
         if (IsDisposed)
         {
             return;
         }
 
-        _onglets.DefinirNombre(OngletMoniteurs, _tous.Count(f => !f.Moniteur.EstClasse));
         _onglets.DefinirNombre(OngletClasses, _tous.Count(f => f.Moniteur.EstClasse));
         _onglets.DefinirNombre(OngletAdherents, adherents.Tous);
+        _relier.Text = _relier.AccessibleName = aRelier.Count == 1 ? "1 enseignant à relier" : $"{aRelier.Count} enseignants à relier";
+        _relier.Visible = aRelier.Count > 0;
         await AfficherGenreAsync();
     }
 
-    /// <summary>Cartes de l'onglet choisi (moniteurs ou classes) et fiche du responsable choisi dans cet onglet.</summary>
+    /// <summary>Cartes de l'onglet choisi (adhérents ou classes) et fiche de celui qui est choisi.</summary>
     private async Task AfficherGenreAsync()
     {
-        // Recherche et filtres : moniteurs et adhérents (pas les classes). Puces et niveau de l'onglet ouvert.
-        var avecFiltres = !Classes;
+        // Recherche et filtres : adhérents seulement (les classes sont peu nombreuses).
+        var avecFiltres = Adherents;
         var filtres = _page.GetControlFromPosition(0, 2)!;
         if (filtres.Visible != avecFiltres)
         {
@@ -195,17 +191,7 @@ public sealed class EcranMoniteurs : EcranBase
             _page.RowStyles[2].Height = avecFiltres ? Dessin.Echelle(this, HauteurFiltres) : 0;
         }
 
-        _niveau.Visible = Adherents;
-        _filtre.Unite = Adherents ? "adhérent" : "enseignant";
-        var indicatif = Adherents ? "Rechercher un adhérent…" : "Rechercher un enseignant (nom, niveau, téléphone)…";
-        if (_recherche.Champ.PlaceholderText != indicatif)
-        {
-            _recherche.Champ.PlaceholderText = indicatif;
-            _attenteRecherche.Stop();
-            _recherche.Champ.Text = ""; // Chaque onglet a sa recherche.
-            _attenteRecherche.Stop();
-        }
-
+        _filtre.Unite = "adhérent";
         _importer.Visible = Adherents;
         _modele.Visible = Adherents;
         if (Adherents)
@@ -215,21 +201,9 @@ public sealed class EcranMoniteurs : EcranBase
             return;
         }
 
-        var genre = Genre;
-        _ajouter.Text = Classes ? "Ajouter une classe" : "Ajouter un enseignant";
-        _ajouter.AccessibleName = _ajouter.Text;
-        var duGenre = _tous.Where(f => f.Moniteur.Genre == genre).ToList();
-        if (Classes)
-        {
-            _liste = duGenre;
-        }
-        else
-        {
-            var filtrees = ServiceMoniteurs.Filtrer(duGenre, _recherche.Champ.Text, _choixMoniteurs);
-            _filtre.Selection = _choixMoniteurs == FiltreMoniteurs.Tous ? null : PucesMoniteurs[(int)_choixMoniteurs - 1];
-            _filtre.Afficher(filtrees.Tous, PucesMoniteurs.Zip([filtrees.Actifs, filtrees.InspecteursTiv, filtrees.MaterielDehors, filtrees.Inactifs]));
-            _liste = filtrees.Fiches;
-        }
+        const GenreResponsable genre = GenreResponsable.Classe;
+        _ajouter.Text = _ajouter.AccessibleName = "Ajouter une classe";
+        _liste = _tous.Where(f => f.Moniteur.Genre == genre).ToList();
         if (!_selection.TryGetValue(genre, out var choisi) || _liste.All(f => f.Moniteur.Id != choisi))
         {
             _selection[genre] = _liste.FirstOrDefault()?.Moniteur.Id;
@@ -257,7 +231,7 @@ public sealed class EcranMoniteurs : EcranBase
 
     private async Task ChoisirAsync(long id)
     {
-        _selection[Genre] = id;
+        _selection[GenreResponsable.Classe] = id;
         foreach (var carte in _cartes.Controls.OfType<CarteMoniteur>())
         {
             carte.Selectionne = carte.MoniteurId == id;
@@ -269,8 +243,11 @@ public sealed class EcranMoniteurs : EcranBase
     private async Task AfficherFicheAsync()
     {
         var adherents = Adherents;
-        var detail = !adherents && _selection.GetValueOrDefault(Genre) is { } id ? await _moniteurs.ObtenirDetailAsync(id) : null;
+        var detail = !adherents && _selection.GetValueOrDefault(GenreResponsable.Classe) is { } id ? await _moniteurs.ObtenirDetailAsync(id) : null;
         var ficheAdherent = adherents && _adherentChoisi is { } a ? await _adherents.ObtenirFicheAsync(a) : null;
+
+        // Adhérent enseignant (ou qui l'a été) : matériel sous sa responsabilité et ses dernières sorties.
+        var encadrement = ficheAdherent?.Adherent.MoniteurId is { } moniteurId ? await _moniteurs.ObtenirDetailAsync(moniteurId) : null;
         if (IsDisposed)
         {
             return;
@@ -295,12 +272,12 @@ public sealed class EcranMoniteurs : EcranBase
             }
             else
             {
-                ConstruireFicheAdherent(ficheAdherent, Ligne);
+                ConstruireFicheAdherent(ficheAdherent, encadrement, Ligne);
             }
         }
         else if (detail is null)
         {
-            Ligne(Ui.Libelle(Classes ? "Aucune classe. Cliquez sur « Ajouter une classe »." : "Aucun enseignant. Cliquez sur « Ajouter un enseignant ».", Theme.Police(11f), Theme.TexteSecondaireClair));
+            Ligne(Ui.Libelle("Aucune classe. Cliquez sur « Ajouter une classe ».", Theme.Police(11f), Theme.TexteSecondaireClair));
         }
         else
         {
@@ -383,80 +360,13 @@ public sealed class EcranMoniteurs : EcranBase
         // Actions.
         var modifier = new BoutonArrondi("Modifier", StyleBouton.Secondaire) { AutoSize = false, Margin = new Padding(0, 0, 10, 0) };
         _garde.Lier(modifier, ActionProtegee.Moniteurs);
-        modifier.Click += (_, _) => Executer(() => ModifierAsync(m, m.Genre));
+        modifier.Click += (_, _) => Executer(() => ModifierClasseAsync(m));
         var creer = new BoutonArrondi("Créer une sortie", StyleBouton.Principal) { AutoSize = false, Margin = Padding.Empty, Enabled = m.Actif };
         creer.Click += (_, _) => _navigation.AllerA<EcranNouvelleSortie>(m.Id);
         var actions = Ui.Colonnes((modifier, SizeType.Percent, 42), (creer, SizeType.Percent, 58));
         actions.Height = Theme.HauteurBouton;
         actions.Margin = new Padding(0, 18, 0, 0);
         ligne(actions);
-
-        // Un moniteur peut redevenir simple adhérent (pas une classe).
-        if (!m.EstClasse)
-        {
-            ligne(BoutonPassage("Passer en adhérent", "Ce n'est plus un enseignant : il devient un simple adhérent", () => PasserAdherentAsync(m)));
-        }
-    }
-
-    /// <summary>Bouton « Passer en moniteur » / « Passer en adhérent » sous les actions d'une fiche (action Moniteurs).</summary>
-    private BoutonArrondi BoutonPassage(string texte, string description, Func<Task> action)
-    {
-        var bouton = new BoutonArrondi(texte, StyleBouton.Secondaire, Icones.Echange)
-        {
-            AutoSize = false,
-            Height = Theme.HauteurBouton,
-            Margin = new Padding(0, 10, 0, 0), // Au bord de la fiche défilante : la pastille du cadenas rentre d'elle-même.
-            AccessibleDescription = description,
-        };
-        _garde.Lier(bouton, ActionProtegee.Moniteurs);
-        bouton.Click += (_, _) => Executer(action);
-        return bouton;
-    }
-
-    /// <summary>L'adhérent devient moniteur (confirmation), puis l'onglet Moniteurs s'ouvre sur sa fiche.</summary>
-    private async Task PasserMoniteurAsync(Adherent a)
-    {
-        if (!_garde.Exiger(FindForm(), ActionProtegee.Moniteurs, "Passer en enseignant")
-            || !Dialogues.Confirmer(FindForm(),
-                $"{a.NomComplet} devient enseignant ?\n\nSa fiche d'adhérent est supprimée s'il n'a jamais pris de matériel en sortie, sinon désactivée (son historique est gardé). Il pourra être responsable des sorties."))
-        {
-            return;
-        }
-
-        var resultat = await _adherents.PasserMoniteurAsync(a.Id);
-        if (!resultat.Reussi)
-        {
-            Dialogues.Erreur(FindForm(), resultat.Message);
-            return;
-        }
-
-        _selection[GenreResponsable.Moniteur] = resultat.Id;
-        _choixMoniteurs = FiltreMoniteurs.Tous;
-        await OuvrirOngletAsync(OngletMoniteurs);
-        Dialogues.Information(FindForm(), resultat.Message);
-    }
-
-    /// <summary>Le moniteur redevient simple adhérent (confirmation), puis l'onglet Adhérents s'ouvre sur sa fiche.</summary>
-    private async Task PasserAdherentAsync(Moniteur m)
-    {
-        if (!_garde.Exiger(FindForm(), ActionProtegee.Moniteurs, "Passer en adhérent")
-            || !Dialogues.Confirmer(FindForm(),
-                $"{m.NomComplet} n'est plus enseignant ?\n\nIl devient un simple adhérent et ne sera plus proposé comme responsable. Ses sorties restent à son nom."))
-        {
-            return;
-        }
-
-        var resultat = await _adherents.PasserAdherentAsync(m.Id);
-        if (!resultat.Reussi)
-        {
-            Dialogues.Erreur(FindForm(), resultat.Message);
-            return;
-        }
-
-        _adherentChoisi = resultat.Id;
-        _choixAdherents = FiltreAdherents.Tous;
-        await OuvrirOngletAsync(OngletAdherents);
-        Dialogues.Information(FindForm(), resultat.Message);
     }
 
     /// <summary>Relit les listes et les nombres des onglets, en ouvrant l'onglet demandé.</summary>
@@ -566,18 +476,20 @@ public sealed class EcranMoniteurs : EcranBase
     }
 
     /// <summary>
-    /// Fiche d'un adhérent : niveau, licence, téléphone ; matériel qu'il a en ce moment ; matériel non rendu (code, sortie,
-    /// date) ; dernières sorties nominatives. Seule action : Modifier (un adhérent n'est pas responsable de sortie).
+    /// Fiche d'un adhérent : formation, licence, téléphone, CACI ; matériel qu'il a en ce moment ; matériel non rendu (code,
+    /// sortie, date) ; dernières sorties nominatives. Enseignant (<paramref name="encadrement"/>) : matériel dehors sous sa
+    /// responsabilité et dernières sorties encadrées, « Créer une sortie ». Actions : Modifier, Désactiver / Réactiver.
     /// </summary>
-    private void ConstruireFicheAdherent(DetailAdherent detail, Action<Control> ligne)
+    private void ConstruireFicheAdherent(DetailAdherent detail, DetailMoniteur? encadrement, Action<Control> ligne)
     {
         var a = detail.Adherent;
         var index = Math.Max(0, _listeAdherents.ToList().FindIndex(f => f.Adherent.Id == a.Id));
 
         var nom = Ui.Libelle(a.NomComplet, Theme.PoliceGrasse(16f));
         nom.Margin = new Padding(0, 0, 0, 4);
-        var qualite = string.Join(" · ", new[] { "Adhérent", a.Niveau is { } formation ? $"formation {formation}" : null, a.Nitrox ? "certifié nitrox" : null, a.Actif ? null : "désactivé" }.Where(p => !string.IsNullOrWhiteSpace(p)));
-        var textes = Ui.Pile(nom, Ui.Libelle(qualite, Theme.Police(9.75f), Theme.TexteSecondaireClair));
+        var role = a.Enseignant ? $"Enseignant{(a.NiveauEncadrement is { Length: > 0 } niveauEnc ? $" {niveauEnc}" : "")}{(a.InspecteurTiv ? " · inspecteur TIV" : "")}" : "Adhérent";
+        var qualite = string.Join(" · ", new[] { role, a.Niveau is { } formation ? $"formation {formation}" : null, a.Nitrox ? "certifié nitrox" : null, a.Actif ? null : "désactivé" }.Where(p => !string.IsNullOrWhiteSpace(p)));
+        var textes = Ui.Pile(nom, Ui.Libelle(qualite, Theme.Police(9.75f), a.Enseignant ? Theme.Encadrement : Theme.TexteSecondaireClair));
         if (a.Licence is { Length: > 0 } licence)
         {
             textes.Controls.Add(Ui.Libelle($"Licence {licence}", Theme.PoliceCode(9.5f), Theme.TexteDoux));
@@ -648,7 +560,37 @@ public sealed class EcranMoniteurs : EcranBase
             ligne(new LigneSortieAdherent(s));
         }
 
-        // Actions : Modifier, et Désactiver (il ne peut plus sortir de matériel) ou Réactiver. Pas de « Créer une sortie ».
+        // Enseignant (ou ancien enseignant qui a encadré) : ce qu'il a sous sa responsabilité, ses dernières sorties encadrées.
+        if (encadrement is not null && (a.Enseignant || encadrement.EnCours.Count > 0 || encadrement.Dernieres.Count > 0))
+        {
+            ligne(Section("Matériel dehors sous sa responsabilité"));
+            if (encadrement.EnCours.Count == 0)
+            {
+                var rien = new BandeauMessage { Margin = new Padding(0, 0, 0, 18), Height = 60 };
+                rien.Afficher(NiveauResultat.Succes, "Rien dehors. Tout le matériel est rentré.");
+                ligne(rien);
+            }
+
+            foreach (var sd in encadrement.EnCours)
+            {
+                ligne(CarteDehors(sd));
+            }
+
+            ligne(Section("Dernières sorties encadrées"));
+            if (encadrement.Dernieres.Count == 0)
+            {
+                var aucune = Ui.Libelle("Aucune sortie clôturée.", Theme.Police(9.75f), Theme.TexteSecondaire);
+                aucune.Margin = new Padding(0, 0, 0, 18);
+                ligne(aucune);
+            }
+
+            foreach (var s in encadrement.Dernieres)
+            {
+                ligne(new LigneHistorique(s));
+            }
+        }
+
+        // Actions : Modifier, et Désactiver (il ne peut plus sortir de matériel) ou Réactiver ; enseignant : Créer une sortie.
         var modifier = new BoutonArrondi("Modifier", StyleBouton.Secondaire) { AutoSize = false, Margin = new Padding(0, 0, 10, 0) };
         _garde.Lier(modifier, ActionProtegee.Moniteurs);
         modifier.Click += (_, _) => Executer(() => ModifierAdherentAsync(a));
@@ -669,7 +611,18 @@ public sealed class EcranMoniteurs : EcranBase
         actions.Height = Theme.HauteurBouton;
         actions.Margin = new Padding(0, 18, 0, 0);
         ligne(actions);
-        ligne(BoutonPassage("Passer en enseignant", "Cet adhérent devient enseignant : il pourra être responsable des sorties", () => PasserMoniteurAsync(a)));
+        if (a.Enseignant && a.MoniteurId is { } moniteurId)
+        {
+            var creer = new BoutonArrondi("Créer une sortie", StyleBouton.Principal, Icones.Plus)
+            {
+                AutoSize = false,
+                Height = Theme.HauteurBouton,
+                Margin = new Padding(0, 10, 0, 0),
+                AccessibleDescription = $"Nouvelle sortie avec {a.NomComplet} pour responsable",
+            };
+            creer.Click += (_, _) => _navigation.AllerA<EcranNouvelleSortie>(moniteurId);
+            ligne(creer);
+        }
     }
 
     /// <summary>Désactive (avec confirmation) ou réactive l'adhérent, puis relit la liste.</summary>
@@ -681,7 +634,7 @@ public sealed class EcranMoniteurs : EcranBase
         }
 
         if (a.Actif && !Dialogues.Confirmer(FindForm(),
-            $"Désactiver {a.NomComplet} ?\n\nIl ne pourra plus sortir de matériel. Son historique est gardé et vous pourrez le réactiver."))
+            $"Désactiver {a.NomComplet} ?\n\nIl ne pourra plus sortir de matériel{(a.Enseignant ? " ni être responsable d'une sortie" : "")}. Son historique est gardé et vous pourrez le réactiver."))
         {
             return;
         }
@@ -695,6 +648,67 @@ public sealed class EcranMoniteurs : EcranBase
 
         _adherentChoisi = a.Id;
         await RechargerAsync();
+    }
+
+    /// <summary>
+    /// « N enseignants à relier » : pour chaque enseignant que le démarrage n'a pas relié seul (homonymes, noms proches), une
+    /// fenêtre propose les fiches d'adhérent possibles ou « Créer sa fiche d'adhérent ». « Annuler » arrête ; le reste attend.
+    /// </summary>
+    private async Task RelierEnseignantsAsync()
+    {
+        if (!_garde.Exiger(FindForm(), ActionProtegee.Moniteurs, "Relier un enseignant à sa fiche d'adhérent"))
+        {
+            return;
+        }
+
+        const string Nouvelle = "nouvelle";
+        long? dernier = null;
+        foreach (var cas in await _adherents.ListerEnseignantsARelierAsync())
+        {
+            var m = cas.Enseignant;
+            var liste = new ListeChoix { AccessibleName = $"Fiche d'adhérent de {m.NomComplet}", Margin = new Padding(0, 0, 0, 4) };
+            liste.Afficher(cas.Candidats
+                .Select(a => new ElementChoix(a.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), a.Initiales, true, a.NomComplet,
+                    string.Join(" · ", new[] { a.Licence is { } l ? $"licence {l}" : null, a.Telephone, a.Niveau, a.Actif ? null : "désactivé" }
+                        .Where(t => !string.IsNullOrWhiteSpace(t))) is { Length: > 0 } detail ? detail : "Ni licence ni téléphone"))
+                .Append(new ElementChoix(Nouvelle, "+", true, "Créer sa fiche d'adhérent", "Aucune de ces fiches n'est la sienne"))
+                .ToList(), "");
+
+            ResultatOperation? relie = null;
+            using var fenetre = new FenetreFormulaire($"Relier {m.NomComplet}", "Relier", async () =>
+            {
+                if (liste.Choix is not { } choix)
+                {
+                    return ResultatOperation.Echec("Choisissez sa fiche d'adhérent dans la liste.");
+                }
+
+                relie = await _adherents.RelierEnseignantAsync(m.Id, choix.Cle == Nouvelle ? null : long.Parse(choix.Cle, System.Globalization.CultureInfo.InvariantCulture));
+                return relie;
+            }, largeur: 560, marge: 24);
+            fenetre.EnTete("Enseignant : quelle est sa fiche d'adhérent ?", icone: Icones.Echange);
+            fenetre.Avatar.Colorer(Theme.Encadrement, Theme.TexteSurEncadrement);
+            var explication = Ui.Libelle(cas.Candidats.Count == 0
+                    ? $"Aucun adhérent ne s'appelle {m.NomComplet} : choisissez « Créer sa fiche d'adhérent »."
+                    : cas.Candidats.Count > 1 && cas.Candidats.All(c => ServiceAdherents.Simplifier(c.NomComplet) == ServiceAdherents.Simplifier(m.NomComplet))
+                    ? $"Plusieurs adhérents s'appellent {m.NomComplet}. Choisissez celui qui est l'enseignant : son matériel et son CACI seront ceux de cette fiche."
+                    : $"Ces adhérents ont un nom proche de {m.NomComplet}{(m.Licence.Length > 0 ? $" (licence {m.Licence})" : "")}. Est-ce l'un d'eux ?",
+                Theme.Police(9.75f), Theme.TexteSecondaireClair);
+            explication.MaximumSize = new Size(500, 0);
+            explication.Margin = new Padding(0, 0, 0, 14);
+            fenetre.Ajouter(explication);
+            fenetre.Ajouter(liste);
+            fenetre.Shown += (_, _) => liste.Focus();
+            if (fenetre.ShowDialog(FindForm()) != DialogResult.OK)
+            {
+                break;
+            }
+
+            dernier = relie?.Id ?? dernier;
+        }
+
+        _adherentChoisi = dernier ?? _adherentChoisi;
+        _choixAdherents = FiltreAdherents.Tous;
+        await OuvrirOngletAsync(OngletAdherents);
     }
 
     /// <summary>Équipements d'un adhérent : « A07 · Lac des Settons · 25/10/2026 », pastille « Non rendu » si besoin.</summary>
@@ -729,6 +743,21 @@ public sealed class EcranMoniteurs : EcranBase
         var nitrox = new Interrupteur("Certifié nitrox") { Checked = a?.Nitrox ?? false };
         var caci = new Interrupteur("Contrôler le CACI") { Checked = a?.Caci ?? false };
         var caciExpiration = new ChampDate { Date = a?.CaciExpiration, AccessibleName = "CACI valable jusqu'au" };
+
+        // Enseignant : responsable des sorties ; niveau d'encadrement en puce (E1… MF2) ou tapé dans « Autre niveau », inspecteur TIV.
+        var enseignant = new Interrupteur("Enseignant") { Checked = a?.Enseignant ?? false };
+        var propose = ServiceMoniteurs.NiveauPropose(a?.NiveauEncadrement);
+        var niveauxEncadrement = new ChoixPuces { AccessibleName = "Niveau d'encadrement", Margin = new Padding(0, 0, 0, 12) };
+        niveauxEncadrement.GroupeDetaille(ServiceMoniteurs.NiveauxEncadrement.Select(n => (n.Code, n.Qualite)), Theme.Encadrement, Theme.TexteSurEncadrement);
+        niveauxEncadrement.Valeur = propose;
+        var autreNiveau = new ChampSaisie { Valeur = propose is null ? a?.NiveauEncadrement ?? "" : "", TexteIndicatif = "Ex. BEES 1", Size = new Size(170, Theme.HauteurCliquable) };
+        autreNiveau.Champ.AccessibleName = "Autre niveau d'encadrement";
+        autreNiveau.Champ.MaxLength = Math.Max(ServiceMoniteurs.LongueurMaxAutreNiveau, autreNiveau.Valeur.Length);
+        autreNiveau.Champ.CharacterCasing = CharacterCasing.Upper;
+        autreNiveau.Margin = Padding.Empty;
+        var tiv = new Interrupteur("Inspecteur TIV") { Checked = a?.InspecteurTiv ?? false };
+        string? NiveauEncadrement() => niveauxEncadrement.Valeur ?? (autreNiveau.Valeur.Trim() is { Length: > 0 } n ? n : null);
+
         prenom.Champ.AccessibleName = "Prénom";
         nom.Champ.AccessibleName = "Nom";
         licence.Champ.AccessibleName = "Licence";
@@ -760,7 +789,7 @@ public sealed class EcranMoniteurs : EcranBase
                 Nitrox = nitrox.Checked,
                 Caci = caci.Checked,
                 CaciExpiration = caciExpiration.Date,
-            });
+            }, new RoleEnseignant(enseignant.Checked, NiveauEncadrement(), tiv.Checked));
             if (!enregistre.Reussi && (prenom.Erreur || nom.Erreur))
             {
                 (prenom.Erreur ? prenom : nom).Champ.Focus();
@@ -796,7 +825,28 @@ public sealed class EcranMoniteurs : EcranBase
         aideNiveau.Margin = new Padding(0, 0, 0, 12);
         fenetre.Ajouter(sectionNiveau);
 
-        var autorisations = new SectionFormulaire(3, "Autorisations matériel");
+        // Enseignant : interrupteur, puis niveau d'encadrement et inspecteur TIV sous la carte.
+        var sectionEnseignant = new SectionFormulaire(3, "Enseignant");
+        var carteEnseignant = sectionEnseignant.Ajouter(new CarteAutorisation(new TuileIcone(Icones.Personne, null, Theme.Encadrement), "Enseignant", "", enseignant, Theme.Encadrement));
+        var libelleAutre = Ui.Libelle("Autre niveau :", Theme.Police(9f), Theme.TexteSecondaire);
+        libelleAutre.Margin = new Padding(0, 13, 10, 0);
+        var ligneAutre = Ui.Rangee(true, libelleAutre, autreNiveau);
+        ligneAutre.Margin = new Padding(0, 0, 0, 14);
+        var carteTiv = new CarteAutorisation(new TuileIcone(Icones.InspecteurTiv, null, Theme.Avertissement), "Inspecteur TIV",
+            "Peut faire les TIV des blocs du club.", tiv, Theme.Avertissement) { Margin = Padding.Empty };
+        var blocEnseignant = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, BackColor = Color.Transparent };
+        blocEnseignant.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        foreach (var c in new Control[] { FenetreFormulaire.LibelleChamp("Niveau d'encadrement"), niveauxEncadrement, ligneAutre, carteTiv })
+        {
+            blocEnseignant.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            c.Dock = c is Label ? DockStyle.None : DockStyle.Fill;
+            blocEnseignant.Controls.Add(c, 0, blocEnseignant.RowStyles.Count - 1);
+        }
+
+        carteEnseignant.Dessous(blocEnseignant);
+        fenetre.Ajouter(sectionEnseignant);
+
+        var autorisations = new SectionFormulaire(4, "Autorisations matériel");
         autorisations.Ajouter(new CarteAutorisation(new TuileIcone(null, "O₂", Theme.Nitrox), "Certifié nitrox",
             "Peut prendre un bloc ou un détendeur nitrox.", nitrox, Theme.Nitrox));
 
@@ -859,6 +909,14 @@ public sealed class EcranMoniteurs : EcranBase
 
             sectionNiveau.TexteDroite = niveau.Valeur ?? "non renseignée";
             sectionNiveau.CouleurDroite = niveau.Valeur is null ? Theme.TexteSecondaire : Theme.AccentClair;
+            var niveauEnc = NiveauEncadrement();
+            carteEnseignant.DessousVisible = enseignant.Checked;
+            carteEnseignant.Description = enseignant.Checked
+                ? "Proposé comme responsable des sorties."
+                : a?.MoniteurId is not null ? "N'est plus enseignant : ses sorties restent à son nom." : "Peut être responsable des sorties.";
+            sectionEnseignant.TexteDroite = enseignant.Checked ? niveauEnc ?? "niveau non renseigné" : "non";
+            sectionEnseignant.CouleurDroite = enseignant.Checked ? Theme.Encadrement : Theme.TexteSecondaire;
+            autreNiveau.CouleurBordure = niveauxEncadrement.Valeur is null && niveauEnc is not null ? Theme.Encadrement : null;
             carteCaci.DessousVisible = caci.Checked;
             carteCaci.Description = caci.Checked
                 ? "Le matériel est bloqué si le certificat est périmé."
@@ -873,6 +931,15 @@ public sealed class EcranMoniteurs : EcranBase
             fenetre.Avatar.Initiales = ServiceAdherents.Initiales(p, n);
             fenetre.Titre(p.Length + n.Length > 0 ? $"{p} {n}".Trim() : titre);
             var etiquettes = new List<(string, Color)>();
+            if (enseignant.Checked)
+            {
+                etiquettes.Add((niveauEnc is null ? "Enseignant" : $"Enseignant {niveauEnc}", Theme.Encadrement));
+                if (tiv.Checked)
+                {
+                    etiquettes.Add(("Inspecteur TIV", Theme.Avertissement));
+                }
+            }
+
             if (niveau.Valeur is { } nv)
             {
                 etiquettes.Add((nv, Theme.AccentClair));
@@ -908,6 +975,26 @@ public sealed class EcranMoniteurs : EcranBase
             }
         };
         niveau.ValeurChangee += (_, _) => Afficher();
+        enseignant.CheckedChanged += (_, _) => Afficher();
+        tiv.CheckedChanged += (_, _) => Afficher();
+        niveauxEncadrement.ValeurChangee += (_, _) =>
+        {
+            if (niveauxEncadrement.Valeur is not null)
+            {
+                autreNiveau.Valeur = "";
+            }
+
+            Afficher();
+        };
+        autreNiveau.Champ.TextChanged += (_, _) =>
+        {
+            if (autreNiveau.Valeur.Trim().Length > 0)
+            {
+                niveauxEncadrement.Valeur = null;
+            }
+
+            Afficher();
+        };
         nitrox.CheckedChanged += (_, _) => Afficher();
         caci.CheckedChanged += (_, _) => Afficher();
         caciExpiration.DateChangee += (_, _) => Afficher();
@@ -1061,190 +1148,6 @@ public sealed class EcranMoniteurs : EcranBase
         }
 
         return string.Join(" · ", parties);
-    }
-
-    /// <summary>Ajout (m = null) ou modification d'un moniteur ou d'une classe.</summary>
-    private Task ModifierAsync(Moniteur? m, GenreResponsable genre) =>
-        genre == GenreResponsable.Classe ? ModifierClasseAsync(m) : ModifierMoniteurAsync(m);
-
-    /// <summary>
-    /// Maquette « Ajouter un moniteur » : en-tête qui montre la fiche pendant la saisie (initiales, niveau, INSPECTEUR TIV),
-    /// trois sections : identité, niveau d'encadrement (puces E1… MF2 ou autre niveau tapé), rôles au club.
-    /// </summary>
-    private async Task ModifierMoniteurAsync(Moniteur? m)
-    {
-        var titre = m is null ? "Ajouter un enseignant" : "Modifier l'enseignant";
-        if (!_garde.Exiger(FindForm(), ActionProtegee.Moniteurs, titre))
-        {
-            return;
-        }
-
-        var prenom = new ChampSaisie { Valeur = m?.Prenom ?? "", TexteIndicatif = "Ex. Pascal" };
-        var nom = new ChampSaisie { Valeur = m?.Nom ?? "", TexteIndicatif = "Ex. Durand" };
-        var telephone = new ChampSaisie { Valeur = m?.Telephone ?? "", TexteIndicatif = "06 12 34 56 78", Icone = Icones.Telephone };
-        var licence = new ChampSaisie { Valeur = m?.Licence ?? "", TexteIndicatif = "A-12-345678", Icone = Icones.CarteLicence };
-        prenom.Champ.AccessibleName = "Prénom";
-        nom.Champ.AccessibleName = "Nom";
-        telephone.Champ.AccessibleName = "Téléphone";
-        licence.Champ.AccessibleName = "Licence";
-        licence.Champ.CharacterCasing = CharacterCasing.Upper;
-        licence.Champ.MaxLength = Math.Max(ServiceMoniteurs.LongueurMaxLicence, licence.Valeur.Length);
-        licence.Champ.Font = telephone.Champ.Font = Theme.PoliceCode(11f);
-
-        // Niveau : une puce s'il est proposé (E1… MF2), sinon dans « Autre niveau » ; l'un efface l'autre.
-        var propose = ServiceMoniteurs.NiveauPropose(m?.Niveau);
-        var niveaux = new ChoixPuces { AccessibleName = "Niveau d'encadrement", Margin = new Padding(0, 0, 0, 12) };
-        niveaux.GroupeDetaille(ServiceMoniteurs.NiveauxEncadrement.Select(n => (n.Code, n.Qualite)), Theme.Encadrement, Theme.TexteSurEncadrement);
-        niveaux.Valeur = propose;
-        var autre = new ChampSaisie { Valeur = propose is null ? m?.Niveau ?? "" : "", TexteIndicatif = "Ex. BEES 1", Size = new Size(170, Theme.HauteurCliquable) };
-        autre.Champ.AccessibleName = "Autre niveau";
-        autre.Champ.MaxLength = Math.Max(ServiceMoniteurs.LongueurMaxAutreNiveau, autre.Valeur.Length);
-        autre.Champ.CharacterCasing = CharacterCasing.Upper;
-        var libelleAutre = Ui.Libelle("Autre niveau :", Theme.Police(9f), Theme.TexteSecondaire);
-        libelleAutre.Margin = new Padding(0, 13, 10, 0);
-        autre.Margin = Padding.Empty;
-        var ligneAutre = Ui.Rangee(true, libelleAutre, autre);
-        ligneAutre.Margin = new Padding(0, 0, 0, 14);
-
-        var tiv = new Interrupteur("Inspecteur TIV") { Checked = m?.InspecteurTiv ?? false };
-        var actif = new Interrupteur("Actif") { Checked = m?.Actif ?? true };
-        string? Niveau() => niveaux.Valeur ?? (autre.Valeur.Trim() is { Length: > 0 } n ? n : null);
-
-        ResultatOperation? enregistre = null;
-        using var fenetre = new FenetreFormulaire(titre, m is null ? "Ajouter" : "Enregistrer", async () =>
-        {
-            // Champs obligatoires vides : bordure rouge (le service refuse et donne le message).
-            prenom.Erreur = prenom.Valeur.Trim().Length == 0;
-            nom.Erreur = nom.Valeur.Trim().Length == 0;
-            enregistre = await _moniteurs.EnregistrerAsync(new Moniteur
-            {
-                Id = m?.Id ?? 0,
-                Genre = GenreResponsable.Moniteur,
-                Prenom = ServiceAdherents.MajusculesMots(prenom.Valeur),
-                Nom = ServiceAdherents.MajusculesMots(nom.Valeur),
-                Niveau = Niveau(),
-                Telephone = telephone.Valeur,
-                Licence = licence.Valeur,
-                InspecteurTiv = tiv.Checked,
-                Actif = actif.Checked,
-            });
-            if (!enregistre.Reussi && (prenom.Erreur || nom.Erreur))
-            {
-                (prenom.Erreur ? prenom : nom).Champ.Focus();
-            }
-
-            return enregistre;
-        }, largeur: 640, marge: 24);
-
-        fenetre.EnTete(m is null ? "Nouvelle fiche encadrant" : "Fiche encadrant", icone: Icones.Personne);
-        fenetre.Avatar.Colorer(Theme.Encadrement, Theme.TexteSurEncadrement);
-        fenetre.Note("champs obligatoires");
-        fenetre.Separations = true;
-        if (m is null)
-        {
-            fenetre.Valider.Icone = Icones.Plus;
-        }
-
-        var identite = new SectionFormulaire(1, "Identité");
-        identite.DeuxChamps("Prénom *", prenom, "Nom *", nom);
-        identite.DeuxChamps("Téléphone", telephone, "N° de licence", licence);
-        fenetre.Ajouter(identite);
-
-        var sectionNiveau = new SectionFormulaire(2, "Niveau d'encadrement");
-        sectionNiveau.Ajouter(niveaux);
-        sectionNiveau.Ajouter(ligneAutre);
-        fenetre.Ajouter(sectionNiveau);
-
-        var roles = new SectionFormulaire(3, "Rôles au club");
-        roles.Ajouter(new CarteAutorisation(new TuileIcone(Icones.InspecteurTiv, null, Theme.Avertissement), "Inspecteur TIV",
-            "Peut faire les TIV des blocs du club.", tiv, Theme.Avertissement));
-        if (m is not null)
-        {
-            var carteActif = roles.Ajouter(new CarteAutorisation(new TuileIcone(Icones.Personne, null, Theme.AccentClair), "Enseignant actif", "", actif, Theme.Accent));
-            void AfficherActif() => carteActif.Description = actif.Checked
-                ? "Proposé comme responsable des sorties."
-                : "Inactif : plus proposé pour les sorties ; son historique est gardé.";
-            actif.CheckedChanged += (_, _) => AfficherActif();
-            AfficherActif();
-        }
-
-        fenetre.Ajouter(roles);
-
-        // Aperçu : initiales et nom dans l'en-tête, étiquettes niveau / INSPECTEUR TIV / INACTIF.
-        void Afficher()
-        {
-            var niveau = Niveau();
-            sectionNiveau.TexteDroite = niveau ?? "non renseigné";
-            sectionNiveau.CouleurDroite = niveau is null ? Theme.TexteSecondaire : Theme.Encadrement;
-            autre.CouleurBordure = niveaux.Valeur is null && niveau is not null ? Theme.Encadrement : null;
-
-            var p = ServiceAdherents.MajusculesMots(prenom.Valeur);
-            var n = ServiceAdherents.MajusculesMots(nom.Valeur);
-            fenetre.Avatar.Initiales = ServiceAdherents.Initiales(p, n);
-            fenetre.Titre(p.Length + n.Length > 0 ? $"{p} {n}".Trim() : titre);
-            var etiquettes = new List<(string, Color)>();
-            if (niveau is not null)
-            {
-                etiquettes.Add((niveau, Theme.Encadrement));
-            }
-
-            if (tiv.Checked)
-            {
-                etiquettes.Add(("Inspecteur TIV", Theme.Avertissement));
-            }
-
-            if (!actif.Checked)
-            {
-                etiquettes.Add(("Inactif", Theme.TexteSecondaire));
-            }
-
-            fenetre.Etiquettes(etiquettes);
-        }
-
-        foreach (var champ in new[] { prenom, nom })
-        {
-            champ.Champ.TextChanged += (_, _) => Afficher();
-            champ.Champ.Leave += (_, _) => champ.Valeur = ServiceAdherents.MajusculesMots(champ.Valeur); // « pascal » → « Pascal ».
-        }
-
-        // 0612345678 → 06 12 34 56 78 pendant la frappe (curseur gardé en fin de saisie).
-        telephone.Champ.TextChanged += (_, _) =>
-        {
-            var forme = ServiceAdherents.FormaterTelephone(telephone.Valeur);
-            if (forme != telephone.Valeur && telephone.Champ.SelectionStart == telephone.Valeur.Length)
-            {
-                telephone.Valeur = forme;
-                telephone.Champ.SelectionStart = forme.Length;
-            }
-        };
-        niveaux.ValeurChangee += (_, _) =>
-        {
-            if (niveaux.Valeur is not null)
-            {
-                autre.Valeur = "";
-            }
-
-            Afficher();
-        };
-        autre.Champ.TextChanged += (_, _) =>
-        {
-            if (autre.Valeur.Trim().Length > 0)
-            {
-                niveaux.Valeur = null;
-            }
-
-            Afficher();
-        };
-        tiv.CheckedChanged += (_, _) => Afficher();
-        actif.CheckedChanged += (_, _) => Afficher();
-        Afficher();
-        fenetre.Shown += (_, _) => prenom.Champ.Focus();
-
-        if (fenetre.ShowDialog(FindForm()) == DialogResult.OK && enregistre?.Id is { } id)
-        {
-            _selection[GenreResponsable.Moniteur] = id;
-            await RechargerAsync();
-        }
     }
 
     /// <summary>
@@ -1748,7 +1651,7 @@ public sealed class EcranMoniteurs : EcranBase
             _fiche = fiche;
             _index = index;
             var a = fiche.Adherent;
-            AccessibleName = $"{a.NomComplet}{(a.Niveau is null ? "" : $", {a.Niveau}")}, {Libelles.Pluriel(fiche.NbDehors, "équipement")} dehors, {fiche.NbNonRendus} non rendu{(fiche.NbNonRendus > 1 ? "s" : "")}{(a.Nitrox ? ", certifié nitrox" : "")}{(fiche.CaciExpire ? ", CACI expiré" : fiche.CaciBientot ? ", CACI à renouveler bientôt" : "")}{(a.Actif ? "" : ", désactivé")}";
+            AccessibleName = $"{a.NomComplet}{(a.Enseignant ? $", enseignant{(a.NiveauEncadrement is { } enc ? $" {enc}" : "")}{(a.InspecteurTiv ? ", inspecteur TIV" : "")}" : "")}{(a.Niveau is null ? "" : $", {a.Niveau}")},{Libelles.Pluriel(fiche.NbDehors, "équipement")} dehors, {fiche.NbNonRendus} non rendu{(fiche.NbNonRendus > 1 ? "s" : "")}{(a.Nitrox ? ", certifié nitrox" : "")}{(fiche.CaciExpire ? ", CACI expiré" : fiche.CaciBientot ? ", CACI à renouveler bientôt" : "")}{(a.Actif ? "" : ", désactivé")}";
         }
 
         public long AdherentId => _fiche.Adherent.Id;
@@ -1812,6 +1715,17 @@ public sealed class EcranMoniteurs : EcranBase
             Dessin.Texte(g, a.NomComplet, Theme.PoliceTitre(12.75f), new Rectangle(gauche, (int)(y + E(2)), Width - gauche - (int)E(12), (int)E(26)), a.Actif ? Theme.Texte : Theme.TexteSecondaire);
             var px = (float)gauche;
             var py = y + E(32);
+
+            // Enseignant : son niveau d'encadrement (MF1) en violet, ou « ENSEIGNANT » s'il n'est pas noté ; TIV en doré.
+            if (a.Enseignant)
+            {
+                px = Pastille(g, a.NiveauEncadrement is { Length: > 0 } enc ? enc.ToUpper(Libelles.Culture) : "ENSEIGNANT", px, py, Theme.Encadrement) + E(6);
+                if (a.InspecteurTiv)
+                {
+                    px = Pastille(g, "TIV", px, py, Theme.Avertissement) + E(6);
+                }
+            }
+
             if (!string.IsNullOrWhiteSpace(a.Niveau))
             {
                 px = Pastille(g, a.Niveau.ToUpper(Libelles.Culture), px, py, Theme.AccentClair) + E(6);

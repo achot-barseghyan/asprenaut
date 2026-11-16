@@ -115,7 +115,7 @@ internal static class FormulaireModele
             personnes.AccessibleName = g == GenreResponsable.Classe ? "Classe responsable" : "Enseignant responsable";
             personnes.TexteVide = g == GenreResponsable.Classe
                 ? "Aucune classe : ajoutez-en une dans Membres › Classes."
-                : "Aucun enseignant : ajoutez-en un dans Membres › Enseignants.";
+                : "Aucun enseignant : dans Membres › Adhérents, activez « Enseignant » sur sa fiche.";
             personnes.Remplir(
                 responsables.Where(r => r.Genre == g).Select((r, i) => new ChoixPersonnes.Element(
                     r.Id, EcranMoniteurs.Avatar.Initiales(r), r.NomComplet, FormulaireSortie.Detail(r), EcranMoniteurs.Avatar.Degrade(r, i), r.EstClasse, r.Actif)),

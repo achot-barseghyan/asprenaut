@@ -1,8 +1,9 @@
 namespace Asprenaut.Materiel.Core.Modeles;
 
 /// <summary>
-/// Adhérent du club (table adherent, migration 014) : il prend du matériel lors d'une sortie nominative.
-/// Jamais responsable d'une sortie, jamais supprimé (<see cref="Actif"/> faux : plus proposé au départ, gardé dans l'historique).
+/// Adhérent du club (table adherent, migration 014) : il prend du matériel lors d'une sortie nominative. Toute personne du
+/// club est un adhérent ; un adhérent peut aussi être enseignant (<see cref="MoniteurId"/> : sa fiche de responsable de sortie,
+/// migration 029). Jamais supprimé (<see cref="Actif"/> faux : plus proposé au départ, gardé dans l'historique).
 /// </summary>
 public sealed class Adherent
 {
@@ -41,6 +42,21 @@ public sealed class Adherent
     /// <summary>Dernier jour de validité du CACI (null si <see cref="Caci"/> est faux).</summary>
     public DateOnly? CaciExpiration { get; set; }
 
+    /// <summary>
+    /// Sa fiche d'enseignant (table moniteur, responsable des sorties), ou null s'il n'a jamais été enseignant. Écrite seulement
+    /// par <see cref="Abstractions.IAdherentRepository.RelierEnseignantAsync"/>, jamais par l'enregistrement de l'adhérent.
+    /// </summary>
+    public long? MoniteurId { get; set; }
+
+    /// <summary>Enseignant en ce moment : fiche d'enseignant reliée et active (lu par jointure).</summary>
+    public bool Enseignant { get; set; }
+
+    /// <summary>Niveau d'encadrement de sa fiche d'enseignant (E1… MF2), ou null (lu par jointure).</summary>
+    public string? NiveauEncadrement { get; set; }
+
+    /// <summary>Inspecteur TIV d'après sa fiche d'enseignant (lu par jointure).</summary>
+    public bool InspecteurTiv { get; set; }
+
     /// <summary>CACI coché et date d'expiration passée (le jour même est encore valable).</summary>
     public bool CaciExpire(DateOnly aujourdhui) => Caci && CaciExpiration is { } fin && fin < aujourdhui;
 
@@ -56,6 +72,22 @@ public sealed class Adherent
 
     public override string ToString() => NomComplet;
 }
+
+/// <summary>
+/// Rôle d'enseignant saisi dans la fiche d'un adhérent (<see cref="Services.ServiceAdherents.EnregistrerAsync"/>) : actif ou non,
+/// niveau d'encadrement, inspecteur TIV. Coupé, le niveau et le TIV déjà notés sont gardés.
+/// </summary>
+public sealed record RoleEnseignant(bool Actif, string? Niveau = null, bool InspecteurTiv = false);
+
+/// <summary>
+/// Enseignant sans fiche d'adhérent que <see cref="Services.ServiceAdherents.RelierEnseignantsAsync"/> n'a pas relié seul :
+/// plusieurs adhérents du même nom, ou des noms proches (faute de frappe ?). À relier à la main parmi <see cref="Candidats"/>,
+/// ou fiche d'adhérent à créer.
+/// </summary>
+public sealed record EnseignantARelier(Moniteur Enseignant, IReadOnlyList<Adherent> Candidats);
+
+/// <summary>Bilan du rapprochement des enseignants et des adhérents : fiches reliées, fiches créées, cas laissés à trancher.</summary>
+public sealed record BilanLiaison(int Relies, int Crees, IReadOnlyList<EnseignantARelier> ARelier);
 
 /// <summary>Matériel d'un adhérent : encore dehors, et jamais rendu (manquant à la clôture).</summary>
 public sealed class SituationAdherent
@@ -87,6 +119,13 @@ public sealed class PassageAdherent
 public enum FiltreAdherents
 {
     Tous,
+
+    /// <summary>Enseignants en ce moment.</summary>
+    Enseignants,
+
+    /// <summary>Enseignants inspecteurs TIV.</summary>
+    InspecteursTiv,
+
     MaterielDehors,
     NonRendu,
 
@@ -104,7 +143,7 @@ public enum FiltreAdherents
 public sealed record FicheAdherent(Adherent Adherent, int NbDehors, int NbNonRendus, bool CaciExpire = false, bool CaciBientot = false);
 
 /// <summary>Onglet Adhérents : les cartes filtrées et le nombre d'adhérents de chaque filtre (après recherche et niveau).</summary>
-public sealed record ListeAdherents(IReadOnlyList<FicheAdherent> Fiches, int Tous, int MaterielDehors, int NonRendu, int Nitrox = 0, int Desactives = 0, int CaciARenouveler = 0);
+public sealed record ListeAdherents(IReadOnlyList<FicheAdherent> Fiches, int Tous, int MaterielDehors, int NonRendu, int Nitrox = 0, int Desactives = 0, int CaciARenouveler = 0, int Enseignants = 0, int InspecteursTiv = 0);
 
 /// <summary>Une sortie nominative d'un adhérent : équipements pris, rendus, non rendus.</summary>
 public sealed record SortieAdherent(long SortieId, DateOnly Date, string Intitule, string Type, int NbEquipements, int NbNonRendus, bool EnCours)
