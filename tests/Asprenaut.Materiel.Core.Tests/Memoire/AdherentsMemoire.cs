@@ -28,6 +28,21 @@ public sealed class AdherentRepositoryMemoire(BaseMemoire db) : IAdherentReposit
         return Task.CompletedTask;
     }
 
+    public Task<bool> SupprimerSiJamaisSortiAsync(long adherentId, CancellationToken ct = default)
+    {
+        if (db.Affectations.Any(a => a.AdherentId == adherentId))
+        {
+            return Task.FromResult(false);
+        }
+
+        foreach (var j in db.Journal.Where(j => j.AdherentId == adherentId))
+        {
+            j.AdherentId = null;
+        }
+
+        return Task.FromResult(db.Adherents.RemoveAll(a => a.Id == adherentId) > 0);
+    }
+
     private void VerifierLicence(Adherent adherent)
     {
         if (adherent.Licence is { Length: > 0 } l && db.Adherents.Any(a => a.Id != adherent.Id && a.Licence == l))

@@ -15,10 +15,17 @@ public class PassageMembresTests
         return _ctx.Db.Adherents.Single(x => x.Id == r.Id);
     }
 
+    /// <summary>L'adhérent a déjà pris du matériel dans une sortie (ligne sortie_equipement à son nom).</summary>
+    private void DejaSorti(Adherent a) => _ctx.Db.Affectations.Add(new SortieEquipement
+    {
+        Id = _ctx.Db.ProchainId(), SortieId = 1, EquipementId = 1, AdherentId = a.Id, Statut = StatutSortieEquipement.Rendu,
+    });
+
     [Fact]
     public async Task Un_adherent_devient_moniteur_et_n_est_plus_adherent_actif()
     {
         var julie = await AdherentAsync("Julie", "Lemoine", "06 12 34 56 78");
+        DejaSorti(julie);
 
         var r = await _ctx.Adherents.PasserMoniteurAsync(julie.Id);
 
@@ -47,9 +54,26 @@ public class PassageMembresTests
     }
 
     [Fact]
+    public async Task Un_adherent_sans_aucune_sortie_est_supprime()
+    {
+        var julie = await AdherentAsync("Julie", "Lemoine", "06 12 34 56 78");
+        _ctx.Db.Journal.Add(new EntreeJournal { Id = _ctx.Db.ProchainId(), Action = ActionsJournal.AdherentModifie, AdherentId = julie.Id });
+
+        var r = await _ctx.Adherents.PasserMoniteurAsync(julie.Id);
+
+        Assert.True(r.Reussi, r.Message);
+        Assert.Contains("supprimée", r.Message);
+        Assert.DoesNotContain(_ctx.Db.Adherents, a => a.Id == julie.Id);
+        Assert.DoesNotContain(_ctx.Db.Journal, j => j.AdherentId == julie.Id);
+        var moniteur = _ctx.Db.Moniteurs.Single(m => m.Id == r.Id);
+        Assert.Equal(("Julie Lemoine", "06 12 34 56 78", true), (moniteur.NomComplet, moniteur.Telephone, moniteur.Actif));
+    }
+
+    [Fact]
     public async Task L_aller_retour_reprend_les_memes_fiches_sans_doublon()
     {
         var julie = await AdherentAsync("Julie", "Lemoine");
+        DejaSorti(julie);
         var moniteurId = (await _ctx.Adherents.PasserMoniteurAsync(julie.Id)).Id!.Value;
 
         var retour = await _ctx.Adherents.PasserAdherentAsync(moniteurId);

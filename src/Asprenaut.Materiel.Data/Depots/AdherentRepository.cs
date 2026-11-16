@@ -86,6 +86,30 @@ public sealed class AdherentRepository(FabriqueConnexion fabrique) : IAdherentRe
         return lignes.AsList();
     }
 
+    public async Task<bool> SupprimerSiJamaisSortiAsync(long adherentId, CancellationToken ct = default)
+    {
+        await using var cx = await fabrique.OuvrirAsync(ct);
+        await using var tx = await cx.BeginTransactionAsync(ct);
+        var dejaSorti = await cx.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT EXISTS (SELECT 1 FROM sortie_equipement WHERE adherent_id = @adherentId);",
+            new { adherentId }, tx, cancellationToken: ct));
+        if (dejaSorti != 0)
+        {
+            return false;
+        }
+
+        await cx.ExecuteAsync(new CommandDefinition(
+            "UPDATE journal SET adherent_id = NULL WHERE adherent_id = @adherentId;", new { adherentId }, tx, cancellationToken: ct));
+        var supprimes = await cx.ExecuteAsync(new CommandDefinition(
+            """
+            DELETE FROM adherent WHERE id = @adherentId
+              AND NOT EXISTS (SELECT 1 FROM sortie_equipement WHERE adherent_id = @adherentId);
+            """,
+            new { adherentId }, tx, cancellationToken: ct));
+        await tx.CommitAsync(ct);
+        return supprimes > 0;
+    }
+
     private static object Parametres(Adherent a) => new
     {
         a.Id,

@@ -253,6 +253,12 @@ public interface IAdherentRepository
 
     /// <summary>Tout le matériel pris par cet adhérent, de la sortie la plus récente à la plus ancienne.</summary>
     Task<IReadOnlyList<PassageAdherent>> ListerPassagesAsync(long adherentId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Supprime l'adhérent s'il n'a jamais pris de matériel dans une sortie (aucune ligne sortie_equipement) ; ses lignes du
+    /// journal sont détachées (adherent_id à NULL). Retourne faux, sans rien toucher, s'il a déjà pris du matériel.
+    /// </summary>
+    Task<bool> SupprimerSiJamaisSortiAsync(long adherentId, CancellationToken ct = default);
 }
 
 public interface ISignalementRepository

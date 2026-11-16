@@ -56,6 +56,40 @@ public class AdherentsDepotsTests : IAsyncLifetime
         Assert.Equal(0L, await cx.ExecuteScalarAsync<long>("SELECT actif FROM adherent WHERE id = @id;", new { id = julie.Id }));
     }
 
+    // Règle 44 : un adhérent passé moniteur est supprimé s'il n'a jamais pris de matériel ; son journal est détaché.
+    [Fact]
+    public async Task Un_adherent_jamais_sorti_est_supprime_pas_les_autres()
+    {
+        var horloge = new HorlogeFixe();
+        Assert.True(await DonneesDemo.ChargerSiVideAsync(_base.Fabrique, horloge.AujourdHui));
+        var adherents = new AdherentRepository(_base.Fabrique);
+        var thomas = new Adherent { Nom = "Bernard", Prenom = "Thomas" };
+        await adherents.AjouterAsync(thomas);
+        var julie = (await adherents.ListerAsync(true)).Single(a => a.Prenom == "Julie");
+
+        var sorties = new SortieRepository(_base.Fabrique);
+        var moniteurs = new MoniteurRepository(_base.Fabrique);
+        var journal = new JournalRepository(_base.Fabrique);
+        var service = new ServiceSortie(sorties, moniteurs, journal, horloge, new Reglages(), null, new TypeSortieRepository(_base.Fabrique), adherents);
+        var pascal = (await moniteurs.ListerAsync(true)).Single(m => m.Prenom == "Pascal");
+        var id = (await service.CreerAsync(new NouvelleSortie(horloge.AujourdHui, TypeSortie.Lac, "Lac", pascal.Id))).Id!.Value;
+        await new ServiceScan(new EquipementRepository(_base.Fabrique), sorties, journal, horloge, new Reglages()).ScannerDepartAsync(id, "A01");
+        var a01 = (await new EquipementRepository(_base.Fabrique).ObtenirParCodeAsync("A01"))!;
+        Assert.True((await service.AttribuerAdherentAsync(id, a01.Id, julie.Id)).Reussi);
+        await using (var cx0 = await _base.Fabrique.OuvrirAsync())
+        {
+            await cx0.ExecuteAsync("INSERT INTO journal (horodatage, action, details, adherent_id) VALUES ('2026-11-06T18:30:00.000Z', 'AdherentModifie', '', @id);", new { id = thomas.Id });
+        }
+
+        Assert.False(await adherents.SupprimerSiJamaisSortiAsync(julie.Id));
+        Assert.True(await adherents.SupprimerSiJamaisSortiAsync(thomas.Id));
+
+        Assert.NotNull(await adherents.ObtenirAsync(julie.Id));
+        Assert.Null(await adherents.ObtenirAsync(thomas.Id));
+        await using var cx = await _base.Fabrique.OuvrirAsync();
+        Assert.Equal(0L, await cx.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM journal WHERE adherent_id = @id;", new { id = thomas.Id }));
+    }
+
     // 019 : CACI de l'adhérent (case et date d'expiration), format brut stocké.
     [Fact]
     public async Task Le_caci_est_enregistre_et_relu()

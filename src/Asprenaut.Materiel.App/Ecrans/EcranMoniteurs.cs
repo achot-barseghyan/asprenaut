@@ -413,7 +413,7 @@ public sealed class EcranMoniteurs : EcranBase
     {
         if (!_garde.Exiger(FindForm(), ActionProtegee.Moniteurs, "Passer en moniteur")
             || !Dialogues.Confirmer(FindForm(),
-                $"{a.NomComplet} devient moniteur ?\n\nSa fiche d'adhérent est désactivée (son historique est gardé). Il pourra être responsable des sorties."))
+                $"{a.NomComplet} devient moniteur ?\n\nSa fiche d'adhérent est supprimée s'il n'a jamais pris de matériel en sortie, sinon désactivée (son historique est gardé). Il pourra être responsable des sorties."))
         {
             return;
         }

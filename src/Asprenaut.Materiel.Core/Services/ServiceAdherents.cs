@@ -364,8 +364,9 @@ public sealed class ServiceAdherents(
 
     /// <summary>
     /// L'adhérent devient moniteur : un moniteur du même prénom et nom (majuscules et accents ignorés) est réactivé, sinon
-    /// il est créé (prénom, nom, téléphone ; niveau d'encadrement à compléter). L'adhérent est désactivé : son historique
-    /// et le matériel qu'il a encore restent à son nom. Action Moniteurs. L'Id du résultat est celui du moniteur.
+    /// il est créé (prénom, nom, téléphone ; niveau d'encadrement à compléter). L'adhérent qui n'a jamais pris de matériel
+    /// dans une sortie est supprimé ; sinon il est désactivé : son historique et le matériel qu'il a encore restent à son nom.
+    /// Action Moniteurs. L'Id du résultat est celui du moniteur.
     /// </summary>
     public async Task<ResultatOperation> PasserMoniteurAsync(long adherentId, CancellationToken ct = default)
     {
@@ -415,14 +416,19 @@ public sealed class ServiceAdherents(
             }
         }
 
-        if (a.Actif)
+        // Jamais pris de matériel dans une sortie : la fiche d'adhérent n'a rien à garder, elle est supprimée.
+        var supprime = await adherents.SupprimerSiJamaisSortiAsync(a.Id, ct);
+        if (!supprime && a.Actif)
         {
             a.Actif = false;
             await adherents.MettreAJourAsync(a, ct);
         }
 
-        await JournaliserAsync(ActionsJournal.AdherentDevenuMoniteur, $"{a.NomComplet} : adhérent devenu moniteur", ct);
-        return ResultatOperation.Ok($"{a.NomComplet} est maintenant moniteur. Complétez son niveau dans sa fiche.", moniteurId);
+        await JournaliserAsync(ActionsJournal.AdherentDevenuMoniteur,
+            $"{a.NomComplet} : adhérent devenu moniteur{(supprime ? " (fiche d'adhérent supprimée)" : "")}", ct);
+        return ResultatOperation.Ok(supprime
+            ? $"{a.NomComplet} est maintenant moniteur. Sa fiche d'adhérent, sans aucune sortie, est supprimée. Complétez son niveau dans sa fiche."
+            : $"{a.NomComplet} est maintenant moniteur. Complétez son niveau dans sa fiche.", moniteurId);
     }
 
     /// <summary>

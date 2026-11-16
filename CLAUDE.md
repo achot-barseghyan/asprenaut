@@ -543,7 +543,9 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     action protégée Moniteurs) : boutons « Passer en moniteur » (fiche adhérent) et « Passer en adhérent » (fiche moniteur, pas les
     classes) de Membres, avec confirmation ; l'onglet d'arrivée s'ouvre sur la fiche. La fiche de l'autre côté du même prénom et nom
     (majuscules et accents ignorés) est réactivée, sinon créée (prénom, nom, téléphone ; niveau d'encadrement à compléter) ; l'ancienne
-    est désactivée, jamais supprimée (historique, sorties et matériel dehors gardés). Journal `AdherentDevenuMoniteur` / `MoniteurDevenuAdherent`.
+    est désactivée (historique, sorties et matériel dehors gardés), sauf un adhérent qui n'a jamais pris de matériel en sortie
+    (aucune ligne sortie_equipement) : il est supprimé (`IAdherentRepository.SupprimerSiJamaisSortiAsync`, re-vérifié en SQL,
+    journal détaché). Un moniteur n'est jamais supprimé. Journal `AdherentDevenuMoniteur` / `MoniteurDevenuAdherent`.
 
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
