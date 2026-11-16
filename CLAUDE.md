@@ -609,7 +609,7 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.
-- Données de démo : `DonneesDemo.ChargerSiVideAsync`, appelé seulement sous `#if DEBUG` si la base est vide.
+- Données de démo : `DonneesDemo.ChargerSiVideAsync`, appelé seulement sous `#if DEBUG`, dans une base d'essai (`--base`, `ParametresApplication.BaseEssai`) vide : jamais dans la base réelle.
 - Erreurs inattendues : message simple + détail dans `%LOCALAPPDATA%\Asprenaut\erreurs.log`.
 
 ## Conventions
