@@ -542,18 +542,19 @@
   </table>
   <p>On ne supprime pas un membre : on le <b>désactive</b>. Il n'est plus proposé mais reste dans l'historique.</p>
 
-  <figure class="ecran" data-image="captures/14b-adherent-fiche.png" data-taille="1782x1337" data-cadre="360,40,1400,1270" data-hauteur="130"
-    data-reperes="380,204,510,65 ; 869,90,288,62 ; 1172,90,278,62 ; 1465,90,267,62 ; 380,383,856,45 ; 1192,468,539,140 ; 1221,954,481,62">
+  <figure class="ecran" data-image="captures/14b-adherent-fiche.png" data-taille="1782x1337" data-cadre="360,40,1400,1280" data-hauteur="130"
+    data-reperes="380,197,326,52 ; 911,95,276,50 ; 1199,95,266,50 ; 1477,95,255,50 ; 380,335,1181,55 ; 484,740,95,28>690,754 ; 1210,470,500,105 ; 1215,890,493,200 ; 1215,1125,493,136">
     <figcaption>
-      <div class="titre-fig">Membres › Adhérents, avec la fiche d'un adhérent à droite</div>
+      <div class="titre-fig">Membres › Adhérents, avec la fiche d'un enseignant à droite</div>
       <ol class="legende">
         <li>Les onglets <b>Adhérents</b> et <b>Classes</b>.</li>
         <li><span class="ui">Modèle Excel à remplir</span>.</li>
         <li><span class="ui">Importer la liste Excel</span>.</li>
         <li><span class="ui">Ajouter un adhérent</span> à la main.</li>
         <li>Les <b>filtres</b> : enseignants, inspecteurs TIV, matériel dehors, non rendu, nitrox, CACI à renouveler, désactivés.</li>
-        <li>La <b>fiche</b> de l'adhérent cliqué : formation, licence, matériel ; pour un enseignant, aussi le matériel sous sa
-          responsabilité et ses dernières sorties.</li>
+        <li>Un <b>enseignant</b> : pastille violette de son niveau (MF1), et <b>TIV</b> s'il est inspecteur.</li>
+        <li>La <b>fiche</b> de l'adhérent cliqué : rôle, formation, licence, téléphone, matériel qu'il a.</li>
+        <li>Pour un enseignant : le matériel <b>sous sa responsabilité</b> et ses dernières sorties encadrées.</li>
         <li><span class="ui">Modifier</span> et <span class="ui">Désactiver</span> ; un enseignant a aussi
           <span class="ui">Créer une sortie</span>.</li>
       </ol>
@@ -570,6 +571,20 @@
     <li>Coupez l'interrupteur quand il n'encadre plus : il n'est plus proposé comme responsable, ses sorties restent à son nom.</li>
     <li>Désactiver l'adhérent le retire aussi des responsables.</li>
   </ul>
+
+  <figure class="ecran" data-image="captures/15-adherent-enseignant.png" data-taille="858x1319" data-cadre="0,40,858,1279" data-hauteur="125"
+    data-reperes="114,125,283,27 ; 681,784,75,55 ; 71,861,590,160 ; 661,1053,75,55 ; 672,1226,155,62">
+    <figcaption>
+      <div class="titre-fig">Modifier l'adhérent › section 3 Enseignant</div>
+      <ol class="legende une">
+        <li>L'en-tête montre le rôle pendant la saisie (<b>Enseignant MF1</b>, <b>Inspecteur TIV</b>).</li>
+        <li>L'interrupteur <b>Enseignant</b> : il est proposé comme responsable des sorties.</li>
+        <li>Le <b>niveau d'encadrement</b> (E1… MF2), ou un autre niveau tapé à la main.</li>
+        <li><b>Inspecteur TIV</b> : seuls les inspecteurs peuvent enregistrer une TIV.</li>
+        <li><span class="ui">Enregistrer</span> (code gestionnaire demandé).</li>
+      </ol>
+    </figcaption>
+  </figure>
 
   <h3>« Enseignants à relier »</h3>
   <p>Au démarrage, l'application retrouve la fiche d'adhérent de chaque enseignant : même prénom et même nom (sans tenir compte

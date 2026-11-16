@@ -432,6 +432,8 @@ public sealed class EcranMoniteurs : EcranBase
         _filtre.Selection = PucesAdherents.FirstOrDefault(p => p.Filtre == filtre).Libelle; // Null pour « Tous ».
         _filtre.Afficher(liste.Tous, PucesAdherents.Select(p => (p.Libelle, p.Filtre switch
         {
+            FiltreAdherents.Enseignants => liste.Enseignants,
+            FiltreAdherents.InspecteursTiv => liste.InspecteursTiv,
             FiltreAdherents.MaterielDehors => liste.MaterielDehors,
             FiltreAdherents.NonRendu => liste.NonRendu,
             FiltreAdherents.Nitrox => liste.Nitrox,
