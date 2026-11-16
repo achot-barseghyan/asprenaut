@@ -131,7 +131,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
   sur le nom, le double-clic ou Entrée ouvrent la fiche de suivi. Colonne « Actions » (maquette) : trois boutons carrés dessinés
   (`Tableaux.PeindreBoutonsIcones`, clic par `BoutonIconeSous`) — fiche de suivi EPI, drapeau « Signaler » (rempli et coloré
   si un problème est ouvert : il le modifie), crayon « Modifier » (`FormulaireEquipement.ModifierAsync`, cadenas jaune tant
-  que le mode gestion est fermé, mis à jour sur `ServiceGestion.EtatChange`), et devant eux une corbeille rouge si l'équipement
+  que le mode gestion est fermé, mis à jour sur `ServiceGestion.EtatChange`), puis en dernier une corbeille rouge si l'équipement
   n'a jamais servi (`LigneInventaire.JamaisUtilise`, règle 43 ; boutons repérés par leur pictogramme, colonne de 196 px logiques
   au moins) ; au-dessus, la pastille du problème ouvert
   (« À surveiller · Débit continu », rouge si hors service) et la ligne légèrement teintée. Bulle de la cellule : les trois

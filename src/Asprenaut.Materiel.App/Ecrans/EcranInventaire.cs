@@ -86,7 +86,7 @@ public sealed class EcranInventaire : EcranBase
 
         // Clic sur la ligne (nom souligné, double-clic, Entrée) : fiche de suivi. La cellule d'actions a trois boutons
         // carrés (maquette) : fiche de suivi EPI, signaler (libre, comme au retour d'une sortie) puis modifier (code) ;
-        // devant eux, une corbeille (code) pour l'équipement qui n'a jamais servi.
+        // en dernier, une corbeille (code) pour l'équipement qui n'a jamais servi.
         _grille.CellMouseClick += (_, e) =>
         {
             if (e.Button != MouseButtons.Left || e.RowIndex < 0 || _grille.Rows[e.RowIndex].Tag is not LigneInventaire l)
@@ -596,8 +596,7 @@ public sealed class EcranInventaire : EcranBase
 
     /// <summary>
     /// Boutons de la colonne Actions : fiche de suivi EPI, drapeau (rempli et coloré si un problème est ouvert : il le modifie),
-    /// crayon (cadenas tant que le mode gestion est fermé). Équipement jamais utilisé : une corbeille rouge devant, pour que
-    /// les trois autres restent alignés à droite.
+    /// crayon (cadenas tant que le mode gestion est fermé). Équipement jamais utilisé : une corbeille rouge en dernier.
     /// </summary>
     private Tableaux.BoutonIcone[] BoutonsAction(LigneInventaire l)
     {
@@ -608,11 +607,11 @@ public sealed class EcranInventaire : EcranBase
             : [];
         return
         [
-            .. corbeille,
             new(Icones.Document, "Fiche de suivi EPI"),
             new(Icones.Drapeau, probleme is null ? "Signaler un problème" : "Modifier le problème signalé",
                 probleme is null ? null : CouleurProbleme(probleme), Plein: probleme is not null),
             new(Icones.Crayon, verrou ? "Modifier (code gestionnaire requis)" : "Modifier", Verrou: verrou),
+            .. corbeille,
         ];
     }
 
