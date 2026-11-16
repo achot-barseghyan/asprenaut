@@ -539,6 +539,12 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     révisions, interventions prévues, signalements, séances, composants, passages en atelier, contrôles et reprise, et détache ses
     lignes du journal (`equipement_id` à NULL : un nouvel équipement peut reprendre l'id). Journal `EquipementSupprime` (sans lien).
 
+44. Passer d'adhérent à moniteur et l'inverse (`ServiceAdherents.PasserMoniteurAsync` / `PasserAdherentAsync`, `PassageMembresTests`,
+    action protégée Moniteurs) : boutons « Passer en moniteur » (fiche adhérent) et « Passer en adhérent » (fiche moniteur, pas les
+    classes) de Membres, avec confirmation ; l'onglet d'arrivée s'ouvre sur la fiche. La fiche de l'autre côté du même prénom et nom
+    (majuscules et accents ignorés) est réactivée, sinon créée (prénom, nom, téléphone ; niveau d'encadrement à compléter) ; l'ancienne
+    est désactivée, jamais supprimée (historique, sorties et matériel dehors gardés). Journal `AdherentDevenuMoniteur` / `MoniteurDevenuAdherent`.
+
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
 à côté de la base d'essai : les essais ne touchent jamais les réglages réels. Préfixe des étiquettes : `CodeScanne.Nettoyer(brut, prefixe)`.
