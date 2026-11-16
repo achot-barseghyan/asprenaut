@@ -500,6 +500,7 @@ public sealed class EcranInventaire : EcranBase
         if (_colonnes.Select(c => c.Nom).SequenceEqual(colonnes.Select(c => c.Nom)))
         {
             _colonnes = colonnes;
+            RetablirProportions();
             return;
         }
 
@@ -532,6 +533,37 @@ public sealed class EcranInventaire : EcranBase
         if (largeursFixes)
         {
             _grille.Columns[0].Frozen = true; // Le code reste visible quand on fait défiler.
+        }
+
+        _grille.ResumeLayout();
+    }
+
+    /// <summary>
+    /// Colonnes créées dans le constructeur, avant la mise à l'échelle de l'écran : <c>Scale</c> change la largeur de
+    /// chaque colonne et, en pleine largeur (Fill), DataGridView en déduit de nouveaux poids. Les dernières colonnes
+    /// se retrouvaient tassées (« Prochaine révision » coupée) et « Actions » prenait tout le reste. Poids et largeur
+    /// minimale sont donc remis à chaque affichage.
+    /// </summary>
+    private void RetablirProportions()
+    {
+        if (_grille.AutoSizeColumnsMode != DataGridViewAutoSizeColumnsMode.Fill)
+        {
+            return;
+        }
+
+        _grille.SuspendLayout();
+        foreach (var c in _colonnes)
+        {
+            if (_grille.Columns[c.Nom] is not { } colonne)
+            {
+                continue;
+            }
+
+            colonne.MinimumWidth = c.Nom == "action" ? (int)Dessin.Echelle(this, 196) : 5;
+            if (Math.Abs(colonne.FillWeight - c.Largeur) > 0.01f)
+            {
+                colonne.FillWeight = c.Largeur;
+            }
         }
 
         _grille.ResumeLayout();
