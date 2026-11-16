@@ -205,15 +205,14 @@ public sealed class PucesFiltre : ControleDessine
         Placer(Width);
         if (!_zoneIntitule.IsEmpty && _intitule is not null)
         {
-            Dessin.Texte(g, _intitule, PoliceIntitule, Rectangle.Round(_zoneIntitule), _style == StylePuces.Etiquette ? Theme.TexteDoux : Theme.TexteSecondaire);
+            Ecrire(g, _intitule, PoliceIntitule, _zoneIntitule.X, _zoneIntitule, _style == StylePuces.Etiquette ? Theme.TexteDoux : Theme.TexteSecondaire);
         }
 
         if (!_zoneLien.IsEmpty && _lien is not null)
         {
             var focusLien = Focused && ShowFocusCues && _focus == _zones.Count;
             using var souligne = new Font(PoliceLien, FontStyle.Bold | FontStyle.Underline);
-            var zone = Rectangle.Round(new RectangleF(_zoneLien.X + E(6), _zoneLien.Y, _zoneLien.Width - E(6), _zoneLien.Height));
-            Dessin.Texte(g, _lien, souligne, zone, _survolLien || focusLien ? Theme.Texte : Theme.TexteSecondaire);
+            Ecrire(g, _lien, souligne, _zoneLien.X + E(6), _zoneLien, _survolLien || focusLien ? Theme.Texte : Theme.TexteSecondaire);
         }
 
         var fondParent = Dessin.CouleurParent(this);
@@ -221,6 +220,14 @@ public sealed class PucesFiltre : ControleDessine
         {
             PeindrePuce(g, _zones[i].Zone, _zones[i].Puce, i == _survol, Focused && ShowFocusCues && i == _focus, fondParent);
         }
+    }
+
+    /// <summary>Texte d'une ligne, sans marge interne ni coupure, centré verticalement dans la zone (mesuré de la même façon).</summary>
+    private static void Ecrire(Graphics g, string texte, Font police, float x, RectangleF zone, Color couleur)
+    {
+        const TextFormatFlags drapeaux = TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix;
+        var h = TextRenderer.MeasureText(g, texte, police, Size.Empty, drapeaux).Height;
+        TextRenderer.DrawText(g, texte, police, new Point((int)x, (int)(zone.Y + ((zone.Height - h) / 2))), couleur, drapeaux);
     }
 
     private void PeindrePuce(Graphics g, RectangleF zone, PuceFiltre p, bool survol, bool focus, Color fondParent)
@@ -272,7 +279,8 @@ public sealed class PucesFiltre : ControleDessine
         }
 
         const TextFormatFlags drapeaux = TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis;
-        var taille = TextRenderer.MeasureText(g, p.Texte, PoliceTexte, Size.Empty, drapeaux);
+        // Mesure sans EndEllipsis : avec une largeur vide, elle rendait la largeur du texte déjà coupé (« R… »).
+        var taille = TextRenderer.MeasureText(g, p.Texte, PoliceTexte, Size.Empty, drapeaux & ~TextFormatFlags.EndEllipsis);
         var reste = p.Nombre is { } n0 ? E(6) + LargeurNombre(n0) : 0;
         var fin = r.Right - (_style == StylePuces.Etiquette ? E(6 + 14 + 8) : _style == StylePuces.Raccourci && p.Nombre is not null ? E(6) : E(12)) - reste;
         var largeurTexte = Math.Min(taille.Width, (int)(fin - x));
@@ -295,7 +303,7 @@ public sealed class PucesFiltre : ControleDessine
             }
             else
             {
-                Dessin.Texte(g, texteNombre, PoliceNombre, Rectangle.Round(new RectangleF(x, r.Y, ln + 2, r.Height)), nombre);
+                Ecrire(g, texteNombre, PoliceNombre, x, r, nombre);
             }
         }
 
