@@ -290,7 +290,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     (`Theme.Encadrement`) avec initiales et étiquettes ; classe : nom | abréviation (« AUTO » tant qu'elle suit le nom, compteur 0/4),
     exemples (`ExemplesClasses`, à l'ajout, sans les noms pris), couleur, aperçu (`ApercuClasse`), carte « Classe active » en modification. Journal `ClasseCreee` / `ClasseModifiee`. Afficher `SortieResume.LibelleResponsable`
     (« Moniteur : … » / « Classe : … »). App : onglets `Bascule` dans `EcranMoniteurs` (ordre : Adhérents, ouvert à l'arrivée, puis Moniteurs et Classes ; `OngletAdherents` / `OngletMoniteurs` / `OngletClasses`), `Bascule` Moniteur | Classe
-    puis `ChoixPersonnes` dans Nouvelle sortie et Modifier la sortie. Filtres de l'écran Membres (`FiltresMembresTests`) : onglet Moniteurs, recherche (prénom, nom, niveau, téléphone, accents ignorés) et puces Tous / Actifs / Inspecteurs TIV / Matériel dehors / Inactifs (`ServiceMoniteurs.Filtrer` → `ListeMoniteurs`, nombres après la recherche) ; onglet Adhérents, recherche, liste « formation en cours » (toutes, les classes actives, « Sans formation » = `ServiceAdherents.SansNiveau`) et puces Tous / Matériel dehors / Non rendu / Nitrox / Désactivés ; pas de filtre pour les classes ; chaque onglet a sa recherche. Données de démo : chargées si aucun moniteur (genre Moniteur).
+    puis `ChoixPersonnes` dans Nouvelle sortie et Modifier la sortie. Filtres de l'écran Membres (`FiltresMembresTests`) : onglet Moniteurs, recherche (prénom, nom, niveau, téléphone, licence, accents ignorés) et puces Tous / Actifs / Inspecteurs TIV / Matériel dehors / Inactifs (`ServiceMoniteurs.Filtrer` → `ListeMoniteurs`, nombres après la recherche) ; onglet Adhérents, recherche, liste « formation en cours » (toutes, les classes actives, « Sans formation » = `ServiceAdherents.SansNiveau`) et puces Tous / Matériel dehors / Non rendu / Nitrox / Désactivés ; pas de filtre pour les classes ; chaque onglet a sa recherche. Données de démo : chargées si aucun moniteur (genre Moniteur).
 25. Manuels (`ServiceManuels`, migration 009, écran `EcranManuels`, maquette « Manuels ») : consultation libre ; ajouter, modifier,
     retirer = action protégée Matériel. Le PDF est copié dans `Manuels\` à côté de la base (`IStockageManuels`, nom déjà pris →
     « (2) ») ; l'écran lit son nombre de pages (`LecteurPdf.CompterPagesAsync`). Marque et titre obligatoires ; sommaire tapé une
@@ -542,7 +542,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
 44. Passer d'adhérent à moniteur et l'inverse (`ServiceAdherents.PasserMoniteurAsync` / `PasserAdherentAsync`, `PassageMembresTests`,
     action protégée Moniteurs) : boutons « Passer en moniteur » (fiche adhérent) et « Passer en adhérent » (fiche moniteur, pas les
     classes) de Membres, avec confirmation ; l'onglet d'arrivée s'ouvre sur la fiche. La fiche de l'autre côté du même prénom et nom
-    (majuscules et accents ignorés) est réactivée, sinon créée (prénom, nom, téléphone ; niveau d'encadrement à compléter) ; l'ancienne
+    (majuscules et accents ignorés) est réactivée, sinon créée (prénom, nom, téléphone, licence si personne d'autre de ce côté ne l'a ; niveau d'encadrement à compléter) ; l'ancienne
     est désactivée (historique, sorties et matériel dehors gardés), sauf un adhérent qui n'a jamais pris de matériel en sortie
     (aucune ligne sortie_equipement) : il est supprimé (`IAdherentRepository.SupprimerSiJamaisSortiAsync`, re-vérifié en SQL,
     journal détaché). Un moniteur n'est jamais supprimé. Journal `AdherentDevenuMoniteur` / `MoniteurDevenuAdherent`.
@@ -618,11 +618,12 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   024 : modele_sortie (nom unique NOCASE `ux_modele_sortie_nom`, jour 0–6 null = sans jour, type_sortie_id et moniteur_id ON DELETE
   SET NULL, lieu, intitule, utilisations null = celles du type, un_par_categorie, notes, cree_le).
   025 : utilisation_reprise (equipement_id clé primaire ON DELETE CASCADE, utilisations ≥ 0, reprise_le) : compteur repris de l'import.
+  026 : moniteur.licence (texte, vide = non renseignée, toujours vide pour une classe).
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/026_xxx.sql`, sans jamais modifier un script déjà livré
+- Nouvelle migration : ajouter `Migrations/027_xxx.sql`, sans jamais modifier un script déjà livré
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.

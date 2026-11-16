@@ -14,6 +14,9 @@ public sealed class Moniteur
     public string? Niveau { get; set; }
     public string Telephone { get; set; } = "";
 
+    /// <summary>Numéro de licence d'un moniteur (vide = non renseigné ; toujours vide pour une classe).</summary>
+    public string Licence { get; set; } = "";
+
     /// <summary>Abréviation d'une classe (N1, N2…), affichée dans sa pastille.</summary>
     public string Abrege { get; set; } = "";
 

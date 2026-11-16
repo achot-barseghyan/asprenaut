@@ -331,6 +331,11 @@ public sealed class EcranMoniteurs : EcranBase
         var sortiesSaison = _liste.FirstOrDefault(f => f.Moniteur.Id == m.Id)?.SortiesSaison ?? 0;
         var qualite = Ui.Libelle(Qualite(m, sortiesSaison), Theme.Police(9.75f), Theme.TexteSecondaireClair);
         var textes = Ui.Pile(nom, qualite);
+        if (m.Licence.Length > 0)
+        {
+            textes.Controls.Add(Ui.Libelle($"Licence {m.Licence}", Theme.PoliceCode(9.5f), Theme.TexteDoux));
+        }
+
         if (m.Telephone.Length > 0)
         {
             var tel = Ui.Rangee(true, new Picto(Icones.Telephone, 18, Theme.TexteSecondaire, Color.Transparent) { Margin = new Padding(0, 2, 6, 0) },
@@ -339,7 +344,7 @@ public sealed class EcranMoniteurs : EcranBase
         }
 
         var entete = Ui.Colonnes((new Avatar(m, index, 72), SizeType.Absolute, 72 + 16), (textes, SizeType.Percent, 100));
-        entete.Height = 80;
+        entete.Height = textes.Controls.Count > 3 ? 96 : 80;
         entete.Margin = new Padding(0, 0, 0, 18);
         entete.Controls[0].Dock = DockStyle.None;
         entete.Controls[0].Anchor = AnchorStyles.Left;
@@ -1077,10 +1082,14 @@ public sealed class EcranMoniteurs : EcranBase
         var prenom = new ChampSaisie { Valeur = m?.Prenom ?? "", TexteIndicatif = "Ex. Pascal" };
         var nom = new ChampSaisie { Valeur = m?.Nom ?? "", TexteIndicatif = "Ex. Durand" };
         var telephone = new ChampSaisie { Valeur = m?.Telephone ?? "", TexteIndicatif = "06 12 34 56 78", Icone = Icones.Telephone };
+        var licence = new ChampSaisie { Valeur = m?.Licence ?? "", TexteIndicatif = "A-12-345678", Icone = Icones.CarteLicence };
         prenom.Champ.AccessibleName = "Prénom";
         nom.Champ.AccessibleName = "Nom";
         telephone.Champ.AccessibleName = "Téléphone";
-        telephone.Champ.Font = Theme.PoliceCode(11f);
+        licence.Champ.AccessibleName = "Licence";
+        licence.Champ.CharacterCasing = CharacterCasing.Upper;
+        licence.Champ.MaxLength = Math.Max(ServiceMoniteurs.LongueurMaxLicence, licence.Valeur.Length);
+        licence.Champ.Font = telephone.Champ.Font = Theme.PoliceCode(11f);
 
         // Niveau : une puce s'il est proposé (E1… MF2), sinon dans « Autre niveau » ; l'un efface l'autre.
         var propose = ServiceMoniteurs.NiveauPropose(m?.Niveau);
@@ -1115,6 +1124,7 @@ public sealed class EcranMoniteurs : EcranBase
                 Nom = ServiceAdherents.MajusculesMots(nom.Valeur),
                 Niveau = Niveau(),
                 Telephone = telephone.Valeur,
+                Licence = licence.Valeur,
                 InspecteurTiv = tiv.Checked,
                 Actif = actif.Checked,
             });
@@ -1137,7 +1147,7 @@ public sealed class EcranMoniteurs : EcranBase
 
         var identite = new SectionFormulaire(1, "Identité");
         identite.DeuxChamps("Prénom *", prenom, "Nom *", nom);
-        identite.Champ("Téléphone", telephone);
+        identite.DeuxChamps("Téléphone", telephone, "N° de licence", licence);
         fenetre.Ajouter(identite);
 
         var sectionNiveau = new SectionFormulaire(2, "Niveau d'encadrement");

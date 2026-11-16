@@ -61,8 +61,13 @@ public class DepotsTests : IAsyncLifetime
     public async Task Moniteur_aller_retour_et_filtre_actifs()
     {
         var depot = new MoniteurRepository(_base.Fabrique);
-        await depot.AjouterAsync(new Moniteur { Nom = "Durand", Prenom = "Pascal", Niveau = "MF1", Actif = true });
+        var pascal = await depot.AjouterAsync(new Moniteur { Nom = "Durand", Prenom = "Pascal", Niveau = "MF1", Licence = "A-12-345678", Actif = true });
         await depot.AjouterAsync(new Moniteur { Nom = "Ancien", Prenom = "Paul", Actif = false });
+        var relu = (await depot.ObtenirAsync(pascal))!;
+        Assert.Equal("A-12-345678", relu.Licence);
+        relu.Licence = "B-99";
+        await depot.MettreAJourAsync(relu);
+        Assert.Equal("B-99", (await depot.ObtenirAsync(pascal))!.Licence);
 
         var actifs = await depot.ListerAsync(actifsSeulement: true);
         var tous = await depot.ListerAsync(actifsSeulement: false);

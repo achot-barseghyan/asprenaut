@@ -66,6 +66,25 @@ public class MoniteursTests
     }
 
     [Fact]
+    public async Task La_licence_est_en_majuscules_unique_et_cherchable()
+    {
+        var ajout = await _ctx.Moniteurs.EnregistrerAsync(new Moniteur { Prenom = "Julie", Nom = "Bernard", Licence = " a-12-345678 " });
+        Assert.True(ajout.Reussi, ajout.Message);
+        Assert.Equal("A-12-345678", _ctx.Db.Moniteurs.Single(m => m.Id == ajout.Id!.Value).Licence);
+
+        var doublon = await _ctx.Moniteurs.EnregistrerAsync(new Moniteur { Prenom = "Paul", Nom = "Martin", Licence = "A-12-345678" });
+        Assert.False(doublon.Reussi);
+        Assert.Contains("Julie Bernard", doublon.Message);
+        Assert.False((await _ctx.Moniteurs.EnregistrerAsync(new Moniteur { Prenom = "Paul", Nom = "Martin", Licence = new string('X', 31) })).Reussi);
+
+        // Modifier sa propre fiche garde la licence acceptée.
+        Assert.True((await _ctx.Moniteurs.EnregistrerAsync(new Moniteur { Id = ajout.Id!.Value, Prenom = "Julie", Nom = "Bernard", Licence = "A-12-345678", Actif = true })).Reussi);
+
+        var liste = ServiceMoniteurs.Filtrer(await _ctx.Moniteurs.ListerFichesAsync(), "345678", FiltreMoniteurs.Tous);
+        Assert.Equal("Julie Bernard", Assert.Single(liste.Fiches).Moniteur.NomComplet);
+    }
+
+    [Fact]
     public async Task Prenom_et_nom_obligatoires()
     {
         Assert.False((await _ctx.Moniteurs.EnregistrerAsync(new Moniteur { Prenom = "Julie", Nom = "  " })).Reussi);

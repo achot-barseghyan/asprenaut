@@ -28,6 +28,9 @@ public sealed class ServiceMoniteurs(IMoniteurRepository moniteurs, ISortieRepos
     public const int LongueurMaxClasse = 30;
     public const int LongueurMaxAbrege = 4;
 
+    /// <summary>Longueur maximale du numéro de licence d'un moniteur (comme celle d'un adhérent).</summary>
+    public const int LongueurMaxLicence = Adherent.LongueurMaxLicence;
+
     /// <summary>
     /// Abréviation proposée pour une classe : « Niveau 2 » → « N2 », « Initiateur » → « INIT » (un mot : 4 lettres),
     /// « Plongée enfants » → « PE » (initiales, nombres gardés : « Groupe 12 » → « G12 »), accents retirés.
@@ -113,7 +116,7 @@ public sealed class ServiceMoniteurs(IMoniteurRepository moniteurs, ISortieRepos
     }
 
     /// <summary>
-    /// Onglet Moniteurs : recherche (prénom, nom, niveau, téléphone ; majuscules et accents ignorés) puis filtre
+    /// Onglet Moniteurs : recherche (prénom, nom, niveau, téléphone, licence ; majuscules et accents ignorés) puis filtre
     /// (actifs, inspecteurs TIV actifs, matériel dehors, inactifs), avec le nombre de chaque filtre après la recherche.
     /// </summary>
     public static ListeMoniteurs Filtrer(IEnumerable<FicheMoniteur> fiches, string? recherche, FiltreMoniteurs filtre)
@@ -122,7 +125,7 @@ public sealed class ServiceMoniteurs(IMoniteurRepository moniteurs, ISortieRepos
         var trouves = fiches.Where(f =>
         {
             var m = f.Moniteur;
-            var texte = ServiceAdherents.Simplifier($"{m.Prenom} {m.Nom} {m.Niveau} {m.Abrege} {m.Telephone}");
+            var texte = ServiceAdherents.Simplifier($"{m.Prenom} {m.Nom} {m.Niveau} {m.Abrege} {m.Telephone} {m.Licence}");
             var chiffres = new string(m.Telephone.Where(char.IsDigit).ToArray());
             return mots.All(mot => texte.Contains(mot, StringComparison.Ordinal) || (mot.All(char.IsDigit) && chiffres.Contains(mot, StringComparison.Ordinal)));
         }).ToList();
@@ -194,6 +197,19 @@ public sealed class ServiceMoniteurs(IMoniteurRepository moniteurs, ISortieRepos
             return ResultatOperation.Echec("Indiquez le prénom et le nom.");
         }
 
+        // Licence : majuscules, unique parmi les moniteurs (vide = non renseignée).
+        var licence = saisie.Licence.Trim().ToUpper(Libelles.Culture);
+        if (licence.Length > LongueurMaxLicence)
+        {
+            return ResultatOperation.Echec($"Licence trop longue : {LongueurMaxLicence} caractères au plus.");
+        }
+
+        if (licence.Length > 0 && (await moniteurs.ListerAsync(actifsSeulement: false, ct))
+                .FirstOrDefault(x => !x.EstClasse && x.Id != saisie.Id && string.Equals(x.Licence, licence, StringComparison.OrdinalIgnoreCase)) is { } autre)
+        {
+            return ResultatOperation.Echec($"La licence {licence} est déjà celle de {autre.NomComplet}.");
+        }
+
         var moniteur = new Moniteur
         {
             Id = saisie.Id,
@@ -202,6 +218,7 @@ public sealed class ServiceMoniteurs(IMoniteurRepository moniteurs, ISortieRepos
             Nom = nom,
             Niveau = string.IsNullOrWhiteSpace(saisie.Niveau) ? null : saisie.Niveau.Trim(),
             Telephone = saisie.Telephone.Trim(),
+            Licence = licence,
             InspecteurTiv = saisie.InspecteurTiv,
             Actif = saisie.Actif,
         };

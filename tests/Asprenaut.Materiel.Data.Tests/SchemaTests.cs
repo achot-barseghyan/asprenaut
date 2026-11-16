@@ -37,9 +37,9 @@ public class SchemaTests : IAsyncLifetime
     }
 
     [Fact]
-    public void Scripts_001_a_025_sont_embarques()
+    public void Scripts_001_a_026_sont_embarques()
     {
-        Assert.Equal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25], GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
+        Assert.Equal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26],GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
     }
 
     // 021 : le niveau texte de l'adhérent devient sa classe (formation en cours) ; une classe manquante est créée.

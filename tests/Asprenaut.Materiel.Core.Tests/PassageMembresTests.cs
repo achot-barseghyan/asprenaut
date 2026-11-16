@@ -40,6 +40,21 @@ public class PassageMembresTests
     }
 
     [Fact]
+    public async Task La_licence_suit_le_passage_dans_les_deux_sens()
+    {
+        var r = await _ctx.Adherents.EnregistrerAsync(new Adherent { Prenom = "Julie", Nom = "Lemoine", Licence = "a-12-345678" });
+        Assert.True(r.Reussi, r.Message);
+        DejaSorti(_ctx.Db.Adherents.Single(x => x.Id == r.Id));
+
+        var moniteur = await _ctx.Adherents.PasserMoniteurAsync(r.Id!.Value);
+        Assert.Equal("A-12-345678", _ctx.Db.Moniteurs.Single(m => m.Id == moniteur.Id).Licence);
+
+        _ctx.Pascal.Licence = "B-99";
+        var adherent = await _ctx.Adherents.PasserAdherentAsync(_ctx.Pascal.Id);
+        Assert.Equal("B-99", _ctx.Db.Adherents.Single(a => a.Id == adherent.Id).Licence);
+    }
+
+    [Fact]
     public async Task Un_moniteur_devient_adherent_et_n_est_plus_responsable_propose()
     {
         var r = await _ctx.Adherents.PasserAdherentAsync(_ctx.Pascal.Id);

@@ -389,6 +389,11 @@ public sealed class ServiceAdherents(
             .Where(m => !m.EstClasse && MemeNom(m.Prenom, m.Nom, a.Prenom, a.Nom))
             .OrderByDescending(m => m.Actif)
             .FirstOrDefault();
+        // Licence reprise si aucun autre moniteur ne l'a déjà.
+        var tousMoniteurs = await classes.ListerAsync(actifsSeulement: false, ct);
+        var licence = a.Licence is { Length: > 0 } l
+            && !tousMoniteurs.Any(x => !x.EstClasse && x.Id != moniteur?.Id && string.Equals(x.Licence, l, StringComparison.OrdinalIgnoreCase))
+            ? l : "";
         long moniteurId;
         if (moniteur is null)
         {
@@ -398,18 +403,26 @@ public sealed class ServiceAdherents(
                 Prenom = a.Prenom,
                 Nom = a.Nom,
                 Telephone = a.Telephone ?? "",
+                Licence = licence,
                 Actif = true,
             }, ct);
         }
         else
         {
             moniteurId = moniteur.Id;
-            if (!moniteur.Actif || (moniteur.Telephone.Length == 0 && a.Telephone is { Length: > 0 }))
+            var telephoneRepris = moniteur.Telephone.Length == 0 && a.Telephone is { Length: > 0 };
+            var licenceReprise = moniteur.Licence.Length == 0 && licence.Length > 0;
+            if (!moniteur.Actif || telephoneRepris || licenceReprise)
             {
                 moniteur.Actif = true;
-                if (moniteur.Telephone.Length == 0)
+                if (telephoneRepris)
                 {
                     moniteur.Telephone = a.Telephone ?? "";
+                }
+
+                if (licenceReprise)
+                {
+                    moniteur.Licence = licence;
                 }
 
                 await classes.MettreAJourAsync(moniteur, ct);
@@ -455,10 +468,14 @@ public sealed class ServiceAdherents(
 
         var tous = await adherents.ListerAsync(actifsSeulement: false, ct);
         var adherent = tous.Where(x => MemeNom(x.Prenom, x.Nom, m.Prenom, m.Nom)).OrderByDescending(x => x.Actif).FirstOrDefault();
+        // Licence reprise si aucun autre adhérent ne l'a déjà (la licence d'un adhérent est unique).
+        var licence = m.Licence is { Length: > 0 and <= Adherent.LongueurMaxLicence } l
+            && !tous.Any(x => x.Id != adherent?.Id && string.Equals(x.Licence, l, StringComparison.OrdinalIgnoreCase))
+            ? l : null;
         long adherentId;
         if (adherent is null)
         {
-            var nouveau = new Adherent { Prenom = m.Prenom, Nom = m.Nom, Telephone = m.Telephone };
+            var nouveau = new Adherent { Prenom = m.Prenom, Nom = m.Nom, Telephone = m.Telephone, Licence = licence };
             if (Normaliser(nouveau, tous) is { } erreur)
             {
                 return erreur;
@@ -469,12 +486,19 @@ public sealed class ServiceAdherents(
         else
         {
             adherentId = adherent.Id;
-            if (!adherent.Actif || (adherent.Telephone is not { Length: > 0 } && m.Telephone.Length is > 0 and <= Adherent.LongueurMaxTelephone))
+            var telephoneRepris = adherent.Telephone is not { Length: > 0 } && m.Telephone.Length is > 0 and <= Adherent.LongueurMaxTelephone;
+            var licenceReprise = adherent.Licence is not { Length: > 0 } && licence is not null;
+            if (!adherent.Actif || telephoneRepris || licenceReprise)
             {
                 adherent.Actif = true;
-                if (adherent.Telephone is not { Length: > 0 } && m.Telephone.Length <= Adherent.LongueurMaxTelephone)
+                if (telephoneRepris)
                 {
                     adherent.Telephone = Vide(m.Telephone);
+                }
+
+                if (licenceReprise)
+                {
+                    adherent.Licence = licence;
                 }
 
                 await adherents.MettreAJourAsync(adherent, ct);
