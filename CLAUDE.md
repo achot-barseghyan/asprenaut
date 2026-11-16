@@ -410,7 +410,12 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     « N2 » / « niv 2 » → « Niveau 2 ») ; classe désactivée refusée sauf si c'était déjà la sienne ; un moniteur n'est pas une classe.
     Plus de liste « Niveaux des adhérents » dans Paramètres. Import : colonne « Formation en cours » (aussi « Niveau », « Classe »,
     « Groupe »), inconnue laissée vide (l'ancienne gardée) et comptée ; modèle Excel : liste des classes. Export : colonne « Formation en cours ».
-    Formulaire (maquette « Ajouter un adhérent ») : section « Formation en cours », puces des classes ; en-tête qui montre initiales, nom
+    Niveau obtenu (migration 031, `EnseignantsAdherentsTests`) : le dernier brevet, à côté de la formation (`Adherent.NiveauObtenu`,
+    puces `ServiceAdherents.NiveauxPlongee` Niveau 1… 4 ou autre niveau tapé, 30 car. ; `NiveauObtenuReconnu` : « N1 » → « Niveau 1 »).
+    Import : colonne « Niveau obtenu » (aussi « Brevet », « Dernier niveau »… ; « Brevet » n'est plus la formation), vide = inchangé ;
+    modèle Excel et export adherents.csv : colonne « Niveau obtenu ». Carte : pastilles « N1 » puis « PRÉPARE N2 ».
+    Formulaire (maquette « Ajouter un adhérent ») : sections 1 Identité, 2 Niveau et formation (niveau obtenu, puis puces des classes),
+    3 Rôles au club (Enseignant et son niveau d'encadrement, Inspecteur TIV à part), 4 Autorisations matériel ; en-tête qui montre initiales, nom
     et étiquettes pendant la saisie ; `MajusculesMots`, `FormaterTelephone`, `Initiales`, `EtatCaciSaisi` → pastille « Expire dans 17 j »,
     « Délivré aujourd'hui (+1 an) ».
 
@@ -552,11 +557,14 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     de sortie (`Adherent.MoniteurId` → adherent.moniteur_id, une fiche d'enseignant par adhérent `ux_adherent_moniteur` ; écrit
     seulement par `IAdherentRepository.RelierEnseignantAsync`, jamais par `MettreAJourAsync`). `Enseignant` (fiche reliée active),
     `NiveauEncadrement`, `InspecteurTiv` sont lus par jointure. La table moniteur reste celle des responsables (sorties, séances TIV,
-    modèles). Rôle saisi dans la fiche de l'adhérent : `EnregistrerAsync(saisie, RoleEnseignant? role)` (null = inchangé) ; actif →
-    fiche d'enseignant créée et reliée, ou réactivée (niveau, TIV) ; coupé → désactivée (lien, niveau et TIV gardés, sorties à son
-    nom) ; refusé pour un adhérent désactivé, un niveau de plus de 30 car., la licence d'un autre enseignant. La fiche reliée reprend
+    modèles). Rôles saisis dans la fiche de l'adhérent (section « Rôles au club ») : `EnregistrerAsync(saisie, RolesAdherent? roles)`
+    (null = inchangés), deux rôles indépendants (migration 030) : enseignant = moniteur.actif (responsable des sorties ; coupé → lien
+    et niveau d'encadrement gardés, sorties à son nom) et inspecteur TIV = moniteur.inspecteur_tiv, enseignant ou non (les listes
+    d'inspecteurs, `ListerInspecteursTivAsync` / `InspecteursTivAsync`, ne regardent plus « actif »). Un premier rôle crée et relie la
+    fiche d'encadrement ; refusé pour un adhérent désactivé, un niveau de plus de 30 car., la licence d'un autre enseignant. La fiche reliée reprend
     toujours prénom, nom, téléphone et licence de l'adhérent (aussi à l'import Excel, `SynchroniserEnseignantAsync`). Désactiver
-    l'adhérent (`ChangerActifAsync`) désactive aussi l'enseignant ; le réactiver ne remet pas le rôle. Au départ, un enseignant
+    l'adhérent (`ChangerActifAsync`) lui retire les deux rôles ; le réactiver ne les remet pas. Carte d'un enseignant teintée de violet
+    (`Theme.Encadrement`), pastille « ENSEIGNANT E2 » ; les pastilles qui ne tiennent pas sur la ligne sont omises. Au départ, un enseignant
     prend du matériel comme tout adhérent (mêmes contrôles : CACI seulement s'il est coché, nitrox, un par catégorie).
     Rapprochement des fiches existantes (`RelierEnseignantsAsync`, au démarrage dans `Demarrage.PreparerBaseAsync`, sans code,
     sans effet une fois tout relié) : un seul adhérent libre du même prénom et nom (majuscules et accents ignorés ; homonymes
@@ -667,11 +675,13 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   028 : noms génériques (« DÉTENDEUR », « STAB », « MASQUE »…) → « Détendeur adulte A24 », « Gilet stabilisateur S12 », « Masque M1 ».
   029 : adherent.moniteur_id (fiche d'enseignant reliée, ON DELETE SET NULL, unique `ux_adherent_moniteur`) ; rapprochement des
   fiches existantes fait par l'application au démarrage (règle 44).
+  030 : inspecteur TIV indépendant du rôle d'enseignant (règle 44) : la case TIV des enseignants déjà inactifs est retirée.
+  031 : adherent.niveau_obtenu (dernier niveau obtenu, null = non renseigné ; règle 31).
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/030_xxx.sql`, sans jamais modifier un script déjà livré
+- Nouvelle migration : ajouter `Migrations/032_xxx.sql`, sans jamais modifier un script déjà livré
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.

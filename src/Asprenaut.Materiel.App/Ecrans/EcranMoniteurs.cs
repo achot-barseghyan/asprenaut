@@ -489,8 +489,12 @@ public sealed class EcranMoniteurs : EcranBase
 
         var nom = Ui.Libelle(a.NomComplet, Theme.PoliceGrasse(16f));
         nom.Margin = new Padding(0, 0, 0, 4);
-        var role = a.Enseignant ? $"Enseignant{(a.NiveauEncadrement is { Length: > 0 } niveauEnc ? $" {niveauEnc}" : "")}{(a.InspecteurTiv ? " · inspecteur TIV" : "")}" : "Adhérent";
-        var qualite = string.Join(" · ", new[] { role, a.Niveau is { } formation ? $"formation {formation}" : null, a.Nitrox ? "certifié nitrox" : null, a.Actif ? null : "désactivé" }.Where(p => !string.IsNullOrWhiteSpace(p)));
+        var role = a.Enseignant ? $"Enseignant{(a.NiveauEncadrement is { Length: > 0 } niveauEnc ? $" {niveauEnc}" : "")}" : "Adhérent";
+        var qualite = string.Join(" · ", new[]
+        {
+            role, a.InspecteurTiv ? "inspecteur TIV" : null, a.NiveauObtenu, a.Niveau is { } formation ? $"prépare {formation}" : null,
+            a.Nitrox ? "certifié nitrox" : null, a.Actif ? null : "désactivé",
+        }.Where(p => !string.IsNullOrWhiteSpace(p)));
         var textes = Ui.Pile(nom, Ui.Libelle(qualite, Theme.Police(9.75f), a.Enseignant ? Theme.Encadrement : Theme.TexteSecondaireClair));
         if (a.Licence is { Length: > 0 } licence)
         {
@@ -739,6 +743,18 @@ public sealed class EcranMoniteurs : EcranBase
         var niveau = new ChoixPuces { AccessibleName = "Formation en cours", Margin = new Padding(0, 0, 0, 10) };
         niveau.Groupe("Classe", formations.Select(f => (f.Nom, f.Actif ? f.Nom : $"{f.Nom} (désactivée)")));
         niveau.Valeur = formations.FirstOrDefault(f => f.Id == a?.ClasseId)?.Nom;
+
+        // Niveau obtenu : puce (Niveau 1… 4) ou un autre niveau tapé (PA40, Guide de palanquée) ; l'un efface l'autre.
+        var obtenuPropose = ServiceAdherents.NiveauxPlongee.FirstOrDefault(n => n == a?.NiveauObtenu);
+        var obtenu = new ChoixPuces { AccessibleName = "Niveau obtenu", Margin = new Padding(0, 0, 0, 8) };
+        obtenu.Groupe("Obtenu", ServiceAdherents.NiveauxPlongee.Select(n => (n, n)));
+        obtenu.Valeur = obtenuPropose;
+        var autreObtenu = new ChampSaisie { Valeur = obtenuPropose is null ? a?.NiveauObtenu ?? "" : "", TexteIndicatif = "Ex. PA40", Size = new Size(200, Theme.HauteurCliquable) };
+        autreObtenu.Champ.AccessibleName = "Autre niveau obtenu";
+        autreObtenu.Champ.MaxLength = Adherent.LongueurMaxNiveau;
+        autreObtenu.Margin = Padding.Empty;
+        string? NiveauObtenu() => obtenu.Valeur ?? (autreObtenu.Valeur.Trim() is { Length: > 0 } o ? o : null);
+
         var licence = new ChampSaisie { Valeur = a?.Licence ?? "", TexteIndicatif = "A-12-345678", Icone = Icones.CarteLicence };
         var telephone = new ChampSaisie { Valeur = a?.Telephone ?? "", TexteIndicatif = "06 12 34 56 78", Icone = Icones.Telephone };
         var actif = new Interrupteur("Actif") { Checked = a?.Actif ?? true };
@@ -746,7 +762,8 @@ public sealed class EcranMoniteurs : EcranBase
         var caci = new Interrupteur("Contrôler le CACI") { Checked = a?.Caci ?? false };
         var caciExpiration = new ChampDate { Date = a?.CaciExpiration, AccessibleName = "CACI valable jusqu'au" };
 
-        // Enseignant : responsable des sorties ; niveau d'encadrement en puce (E1… MF2) ou tapé dans « Autre niveau », inspecteur TIV.
+        // Rôles : enseignant (responsable des sorties ; niveau d'encadrement en puce E1… MF2 ou tapé dans « Autre niveau ») et,
+        // à part, inspecteur TIV (enseignant ou non).
         var enseignant = new Interrupteur("Enseignant") { Checked = a?.Enseignant ?? false };
         var propose = ServiceMoniteurs.NiveauPropose(a?.NiveauEncadrement);
         var niveauxEncadrement = new ChoixPuces { AccessibleName = "Niveau d'encadrement", Margin = new Padding(0, 0, 0, 12) };
@@ -785,13 +802,14 @@ public sealed class EcranMoniteurs : EcranBase
                 Nom = nom.Valeur,
                 ClasseId = formations.FirstOrDefault(f => f.Nom == niveau.Valeur)?.Id,
                 Niveau = niveau.Valeur,
+                NiveauObtenu = NiveauObtenu(),
                 Licence = licence.Valeur,
                 Telephone = telephone.Valeur,
                 Actif = actif.Checked,
                 Nitrox = nitrox.Checked,
                 Caci = caci.Checked,
                 CaciExpiration = caciExpiration.Date,
-            }, new RoleEnseignant(enseignant.Checked, NiveauEncadrement(), tiv.Checked));
+            }, new RolesAdherent(enseignant.Checked, NiveauEncadrement(), tiv.Checked));
             if (!enregistre.Reussi && (prenom.Erreur || nom.Erreur))
             {
                 (prenom.Erreur ? prenom : nom).Champ.Focus();
@@ -814,7 +832,16 @@ public sealed class EcranMoniteurs : EcranBase
         identite.DeuxChamps("Téléphone", telephone, "N° de licence", licence);
         fenetre.Ajouter(identite);
 
-        var sectionNiveau = new SectionFormulaire(2, "Formation en cours");
+        // Niveau et formation : le niveau déjà obtenu (brevet), puis la classe suivie (formation en cours).
+        var sectionNiveau = new SectionFormulaire(2, "Niveau et formation");
+        sectionNiveau.Ajouter(obtenu);
+        var libelleAutreObtenu = Ui.Libelle("Autre niveau :", Theme.Police(9f), Theme.TexteSecondaire);
+        libelleAutreObtenu.Margin = new Padding(0, 13, 10, 0);
+        var ligneAutreObtenu = sectionNiveau.Ajouter(Ui.Rangee(true, libelleAutreObtenu, autreObtenu));
+        ligneAutreObtenu.Margin = new Padding(0, 0, 0, 6);
+        var aideObtenu = sectionNiveau.Ajouter(Ui.Libelle("Le dernier niveau qu'il a obtenu (son brevet). Touche à nouveau une puce pour la retirer.",
+            Theme.Police(9f), Theme.TexteSecondaire));
+        aideObtenu.Margin = new Padding(0, 0, 0, 16);
         if (formations.Count > 0)
         {
             sectionNiveau.Ajouter(niveau);
@@ -822,23 +849,21 @@ public sealed class EcranMoniteurs : EcranBase
 
         var aideNiveau = sectionNiveau.Ajouter(Ui.Libelle(formations.Count > 0
                 ? "La classe qu'il suit : « Niveau 2 » = il prépare le niveau 2. Touche à nouveau une classe pour la retirer."
-                : "Aucune classe : créez-les dans Membres › Classes (Niveau 1, Niveau 2… Autonome).",
+                : "Formation en cours : aucune classe ; créez-les dans Membres › Classes (Niveau 1, Niveau 2… Autonome).",
             Theme.Police(9f), Theme.TexteSecondaire));
         aideNiveau.Margin = new Padding(0, 0, 0, 12);
         fenetre.Ajouter(sectionNiveau);
 
-        // Enseignant : interrupteur, puis niveau d'encadrement et inspecteur TIV sous la carte.
-        var sectionEnseignant = new SectionFormulaire(3, "Enseignant");
-        var carteEnseignant = sectionEnseignant.Ajouter(new CarteAutorisation(new TuileIcone(Icones.Personne, null, Theme.Encadrement), "Enseignant", "", enseignant, Theme.Encadrement));
+        // Rôles au club : enseignant (niveau d'encadrement sous la carte) et, à part, inspecteur TIV.
+        var sectionRoles = new SectionFormulaire(3, "Rôles au club");
+        var carteEnseignant = sectionRoles.Ajouter(new CarteAutorisation(new TuileIcone(Icones.Personne, null, Theme.Encadrement), "Enseignant", "", enseignant, Theme.Encadrement));
         var libelleAutre = Ui.Libelle("Autre niveau :", Theme.Police(9f), Theme.TexteSecondaire);
         libelleAutre.Margin = new Padding(0, 13, 10, 0);
         var ligneAutre = Ui.Rangee(true, libelleAutre, autreNiveau);
-        ligneAutre.Margin = new Padding(0, 0, 0, 14);
-        var carteTiv = new CarteAutorisation(new TuileIcone(Icones.InspecteurTiv, null, Theme.Avertissement), "Inspecteur TIV",
-            "Peut faire les TIV des blocs du club.", tiv, Theme.Avertissement) { Margin = Padding.Empty };
+        ligneAutre.Margin = Padding.Empty;
         var blocEnseignant = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, BackColor = Color.Transparent };
         blocEnseignant.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        foreach (var c in new Control[] { FenetreFormulaire.LibelleChamp("Niveau d'encadrement"), niveauxEncadrement, ligneAutre, carteTiv })
+        foreach (var c in new Control[] { FenetreFormulaire.LibelleChamp("Niveau d'encadrement"), niveauxEncadrement, ligneAutre })
         {
             blocEnseignant.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             c.Dock = c is Label ? DockStyle.None : DockStyle.Fill;
@@ -846,7 +871,9 @@ public sealed class EcranMoniteurs : EcranBase
         }
 
         carteEnseignant.Dessous(blocEnseignant);
-        fenetre.Ajouter(sectionEnseignant);
+        sectionRoles.Ajouter(new CarteAutorisation(new TuileIcone(Icones.InspecteurTiv, null, Theme.Avertissement), "Inspecteur TIV",
+            "Peut faire les TIV des blocs du club, qu'il soit enseignant ou non.", tiv, Theme.Avertissement));
+        fenetre.Ajouter(sectionRoles);
 
         var autorisations = new SectionFormulaire(4, "Autorisations matériel");
         autorisations.Ajouter(new CarteAutorisation(new TuileIcone(null, "O₂", Theme.Nitrox), "Certifié nitrox",
@@ -909,15 +936,19 @@ public sealed class EcranMoniteurs : EcranBase
                 _ => Theme.TexteSecondaire,
             };
 
-            sectionNiveau.TexteDroite = niveau.Valeur ?? "non renseignée";
-            sectionNiveau.CouleurDroite = niveau.Valeur is null ? Theme.TexteSecondaire : Theme.AccentClair;
+            var niveauObtenu = NiveauObtenu();
+            sectionNiveau.TexteDroite = niveauObtenu is null && niveau.Valeur is null ? "non renseignés"
+                : string.Join(" · ", new[] { niveauObtenu, niveau.Valeur is { } prepare ? $"prépare {prepare}" : null }.Where(t => t is not null));
+            sectionNiveau.CouleurDroite = niveauObtenu is null && niveau.Valeur is null ? Theme.TexteSecondaire : Theme.AccentClair;
+            autreObtenu.CouleurBordure = obtenu.Valeur is null && niveauObtenu is not null ? Theme.AccentClair : null;
             var niveauEnc = NiveauEncadrement();
             carteEnseignant.DessousVisible = enseignant.Checked;
             carteEnseignant.Description = enseignant.Checked
                 ? "Proposé comme responsable des sorties."
-                : a?.MoniteurId is not null ? "N'est plus enseignant : ses sorties restent à son nom." : "Peut être responsable des sorties.";
-            sectionEnseignant.TexteDroite = enseignant.Checked ? niveauEnc ?? "niveau non renseigné" : "non";
-            sectionEnseignant.CouleurDroite = enseignant.Checked ? Theme.Encadrement : Theme.TexteSecondaire;
+                : a?.Enseignant == false && a.NiveauEncadrement is not null ? "N'est plus enseignant : ses sorties restent à son nom." : "Peut être responsable des sorties.";
+            sectionRoles.TexteDroite = string.Join(" · ", new[] { enseignant.Checked ? $"enseignant{(niveauEnc is null ? "" : $" {niveauEnc}")}" : null, tiv.Checked ? "inspecteur TIV" : null }
+                .Where(t => t is not null)) is { Length: > 0 } texteRoles ? texteRoles : "aucun";
+            sectionRoles.CouleurDroite = enseignant.Checked ? Theme.Encadrement : tiv.Checked ? Theme.Avertissement : Theme.TexteSecondaire;
             autreNiveau.CouleurBordure = niveauxEncadrement.Valeur is null && niveauEnc is not null ? Theme.Encadrement : null;
             carteCaci.DessousVisible = caci.Checked;
             carteCaci.Description = caci.Checked
@@ -936,15 +967,21 @@ public sealed class EcranMoniteurs : EcranBase
             if (enseignant.Checked)
             {
                 etiquettes.Add((niveauEnc is null ? "Enseignant" : $"Enseignant {niveauEnc}", Theme.Encadrement));
-                if (tiv.Checked)
-                {
-                    etiquettes.Add(("Inspecteur TIV", Theme.Avertissement));
-                }
+            }
+
+            if (tiv.Checked)
+            {
+                etiquettes.Add(("Inspecteur TIV", Theme.Avertissement));
+            }
+
+            if (niveauObtenu is not null)
+            {
+                etiquettes.Add((niveauObtenu, Theme.TexteSecondaireClair));
             }
 
             if (niveau.Valeur is { } nv)
             {
-                etiquettes.Add((nv, Theme.AccentClair));
+                etiquettes.Add(($"Prépare {nv}", Theme.AccentClair));
             }
 
             if (nitrox.Checked)
@@ -977,6 +1014,24 @@ public sealed class EcranMoniteurs : EcranBase
             }
         };
         niveau.ValeurChangee += (_, _) => Afficher();
+        obtenu.ValeurChangee += (_, _) =>
+        {
+            if (obtenu.Valeur is not null)
+            {
+                autreObtenu.Valeur = "";
+            }
+
+            Afficher();
+        };
+        autreObtenu.Champ.TextChanged += (_, _) =>
+        {
+            if (autreObtenu.Valeur.Trim().Length > 0)
+            {
+                obtenu.Valeur = null;
+            }
+
+            Afficher();
+        };
         enseignant.CheckedChanged += (_, _) => Afficher();
         tiv.CheckedChanged += (_, _) => Afficher();
         niveauxEncadrement.ValeurChangee += (_, _) =>
@@ -1653,7 +1708,7 @@ public sealed class EcranMoniteurs : EcranBase
             _fiche = fiche;
             _index = index;
             var a = fiche.Adherent;
-            AccessibleName = $"{a.NomComplet}{(a.Enseignant ? $", enseignant{(a.NiveauEncadrement is { } enc ? $" {enc}" : "")}{(a.InspecteurTiv ? ", inspecteur TIV" : "")}" : "")}{(a.Niveau is null ? "" : $", {a.Niveau}")},{Libelles.Pluriel(fiche.NbDehors, "équipement")} dehors, {fiche.NbNonRendus} non rendu{(fiche.NbNonRendus > 1 ? "s" : "")}{(a.Nitrox ? ", certifié nitrox" : "")}{(fiche.CaciExpire ? ", CACI expiré" : fiche.CaciBientot ? ", CACI à renouveler bientôt" : "")}{(a.Actif ? "" : ", désactivé")}";
+            AccessibleName = $"{a.NomComplet}{(a.Enseignant ? $", enseignant{(a.NiveauEncadrement is { } enc ? $" {enc}" : "")}" : "")}{(a.InspecteurTiv ? ", inspecteur TIV" : "")}{(a.NiveauObtenu is null ? "" : $", {a.NiveauObtenu}")}{(a.Niveau is null ? "" : $", prépare {a.Niveau}")},{Libelles.Pluriel(fiche.NbDehors, "équipement")} dehors, {fiche.NbNonRendus} non rendu{(fiche.NbNonRendus > 1 ? "s" : "")}{(a.Nitrox ? ", certifié nitrox" : "")}{(fiche.CaciExpire ? ", CACI expiré" : fiche.CaciBientot ? ", CACI à renouveler bientôt" : "")}{(a.Actif ? "" : ", désactivé")}";
         }
 
         public long AdherentId => _fiche.Adherent.Id;
@@ -1694,12 +1749,17 @@ public sealed class EcranMoniteurs : EcranBase
             var a = _fiche.Adherent;
 
             var r = new RectangleF(0.75f, 0.75f, Width - 2.5f, Height - 2.5f);
-            var fond = _selectionne ? Theme.Teinte(Theme.Accent, 0.10f) : _survol ? Theme.Sur(Theme.Surface, Theme.AccentClair, 0.05f) : Theme.Surface;
+
+            // Enseignant : toute la carte est teintée de violet (bordure comprise), pour le repérer d'un coup d'œil.
+            var enseignant = a.Enseignant;
+            var teinte = enseignant ? Theme.Sur(Theme.Surface, Theme.Encadrement, 0.13f) : Theme.Surface;
+            var fond = _selectionne ? Theme.Sur(teinte, Theme.Accent, 0.10f) : _survol ? Theme.Sur(teinte, Theme.AccentClair, 0.05f) : teinte;
             using (var chemin = Dessin.Arrondi(r, E(22)))
             {
                 using var pinceau = new SolidBrush(fond);
                 g.FillPath(pinceau, chemin);
-                using var bord = new Pen(_selectionne ? Theme.Sur(Theme.Surface, Theme.Accent, 0.55f) : Theme.Bordure, E(_selectionne ? 1.5f : 1));
+                var couleurBord = _selectionne ? Theme.Sur(Theme.Surface, Theme.Accent, 0.55f) : enseignant ? Theme.Sur(Theme.Surface, Theme.Encadrement, 0.5f) : Theme.Bordure;
+                using var bord = new Pen(couleurBord, E(_selectionne || enseignant ? 1.5f : 1));
                 g.DrawPath(bord, chemin);
                 if (Focused && ShowFocusCues)
                 {
@@ -1718,38 +1778,47 @@ public sealed class EcranMoniteurs : EcranBase
             var px = (float)gauche;
             var py = y + E(32);
 
-            // Enseignant : son niveau d'encadrement (MF1) en violet, ou « ENSEIGNANT » s'il n'est pas noté ; TIV en doré.
-            if (a.Enseignant)
+            // Pastilles, de la plus importante à la moins importante ; celles qui ne tiennent plus sur la ligne sont omises
+            // (la fiche donne tout). Désactivé en premier : il ne sort plus rien.
+            if (!a.Actif)
             {
-                px = Pastille(g, a.NiveauEncadrement is { Length: > 0 } enc ? enc.ToUpper(Libelles.Culture) : "ENSEIGNANT", px, py, Theme.Encadrement) + E(6);
-                if (a.InspecteurTiv)
-                {
-                    px = Pastille(g, "TIV", px, py, Theme.Avertissement) + E(6);
-                }
-            }
-
-            if (!string.IsNullOrWhiteSpace(a.Niveau))
-            {
-                px = Pastille(g, a.Niveau.ToUpper(Libelles.Culture), px, py, Theme.AccentClair) + E(6);
-            }
-
-            if (a.Nitrox)
-            {
-                px = Pastille(g, "NITROX", px, py, Theme.Retour) + E(6);
+                px = Pastille(g, "DÉSACTIVÉ", px, py, Theme.Erreur);
             }
 
             if (_fiche.CaciExpire)
             {
-                px = Pastille(g, "CACI EXPIRÉ", px, py, Theme.Erreur) + E(6);
-            }
-            else if (_fiche.CaciBientot)
-            {
-                px = Pastille(g, "CACI BIENTÔT", px, py, Theme.Avertissement) + E(6);
+                px = Pastille(g, "CACI EXPIRÉ", px, py, Theme.Erreur);
             }
 
-            if (!a.Actif)
+            if (enseignant)
             {
-                Pastille(g, "DÉSACTIVÉ", px, py, Theme.Erreur);
+                px = Pastille(g, a.NiveauEncadrement is { Length: > 0 } enc ? $"ENSEIGNANT {enc.ToUpper(Libelles.Culture)}" : "ENSEIGNANT", px, py, Theme.Encadrement);
+            }
+
+            if (a.InspecteurTiv)
+            {
+                px = Pastille(g, "TIV", px, py, Theme.Avertissement);
+            }
+
+            // Niveau obtenu (N1), puis la classe suivie (« PRÉPARE N2 »).
+            if (!string.IsNullOrWhiteSpace(a.NiveauObtenu))
+            {
+                px = Pastille(g, ServiceMoniteurs.AbregeDe(a.NiveauObtenu), px, py, Theme.TexteSecondaireClair);
+            }
+
+            if (!string.IsNullOrWhiteSpace(a.Niveau))
+            {
+                px = Pastille(g, $"PRÉPARE {ServiceMoniteurs.AbregeDe(a.Niveau)}", px, py, Theme.AccentClair);
+            }
+
+            if (a.Nitrox)
+            {
+                px = Pastille(g, "NITROX", px, py, Theme.Retour);
+            }
+
+            if (_fiche.CaciBientot)
+            {
+                Pastille(g, "CACI BIENTÔT", px, py, Theme.Avertissement);
             }
 
             var hb = E(58);
@@ -1767,6 +1836,11 @@ public sealed class EcranMoniteurs : EcranBase
         {
             var police = Theme.PoliceTitre(7.5f);
             var l = TextRenderer.MeasureText(g, texte, police, Size.Empty, TextFormatFlags.NoPadding).Width + E(16);
+            if (x + l > Width - E(14))
+            {
+                return x; // Ne tient plus sur la ligne : omise.
+            }
+
             var r = new RectangleF(x, y, l, E(20));
             using (var chemin = Dessin.Arrondi(r, r.Height / 2))
             using (var pinceau = new SolidBrush(Theme.Teinte(couleur, 0.14f)))
@@ -1775,7 +1849,7 @@ public sealed class EcranMoniteurs : EcranBase
             }
 
             Dessin.Texte(g, texte, police, Rectangle.Round(r), couleur, centre: true);
-            return r.Right;
+            return r.Right + E(6);
         }
 
         private void Encadre(Graphics g, RectangleF r, string nombre, string legende, Color fond, Color couleurNombre, Color couleurLegende)

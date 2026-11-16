@@ -1210,9 +1210,9 @@ public sealed partial class ServiceRevisions(
             : $"Séance TIV annulée : {Libelles.Pluriel(blocs.Count, "bloc")} de retour dans « À prévoir ».", id);
     }
 
-    /// <summary>Moniteurs actifs inspecteurs TIV (choix des inspecteurs d'une séance), par nom.</summary>
+    /// <summary>Inspecteurs TIV (enseignants ou non : la case TIV suffit, migration 030 ; choix des inspecteurs d'une séance), par nom.</summary>
     public async Task<IReadOnlyList<Moniteur>> InspecteursTivAsync(CancellationToken ct = default) =>
-        (await moniteurs.ListerAsync(actifsSeulement: true, ct))
+        (await moniteurs.ListerAsync(actifsSeulement: false, ct))
             .Where(m => m.InspecteurTiv && !m.EstClasse)
             .OrderBy(m => m.Prenom, StringComparer.CurrentCultureIgnoreCase)
             .ThenBy(m => m.Nom, StringComparer.CurrentCultureIgnoreCase)

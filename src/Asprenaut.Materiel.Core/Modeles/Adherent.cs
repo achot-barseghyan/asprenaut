@@ -25,6 +25,12 @@ public sealed class Adherent
     /// <summary>Nom de la classe de <see cref="ClasseId"/> (« Niveau 2 », « Autonome »), pour l'affichage et la recherche ; ou null.</summary>
     public string? Niveau { get; set; }
 
+    /// <summary>
+    /// Niveau de plongée déjà obtenu (adherent.niveau_obtenu, migration 031) : « Niveau 1 »… ou un autre niveau tapé (PA40),
+    /// ou null. Celui qui prépare le niveau 2 (<see cref="Niveau"/>) a obtenu le niveau 1.
+    /// </summary>
+    public string? NiveauObtenu { get; set; }
+
     /// <summary>Numéro de licence FFESSM (unique s'il est renseigné), ou null.</summary>
     public string? Licence { get; set; }
     public string? Telephone { get; set; }
@@ -43,18 +49,19 @@ public sealed class Adherent
     public DateOnly? CaciExpiration { get; set; }
 
     /// <summary>
-    /// Sa fiche d'enseignant (table moniteur, responsable des sorties), ou null s'il n'a jamais été enseignant. Écrite seulement
-    /// par <see cref="Abstractions.IAdherentRepository.RelierEnseignantAsync"/>, jamais par l'enregistrement de l'adhérent.
+    /// Sa fiche d'encadrement (table moniteur : responsable des sorties s'il est enseignant, inspecteur des TIV), ou null s'il
+    /// n'a jamais eu de rôle. Écrite seulement par <see cref="Abstractions.IAdherentRepository.RelierEnseignantAsync"/>, jamais
+    /// par l'enregistrement de l'adhérent.
     /// </summary>
     public long? MoniteurId { get; set; }
 
-    /// <summary>Enseignant en ce moment : fiche d'enseignant reliée et active (lu par jointure).</summary>
+    /// <summary>Enseignant en ce moment : fiche d'encadrement reliée et active (moniteur.actif, lu par jointure).</summary>
     public bool Enseignant { get; set; }
 
-    /// <summary>Niveau d'encadrement de sa fiche d'enseignant (E1… MF2), ou null (lu par jointure).</summary>
+    /// <summary>Niveau d'encadrement de sa fiche d'encadrement (E1… MF2), ou null (lu par jointure).</summary>
     public string? NiveauEncadrement { get; set; }
 
-    /// <summary>Inspecteur TIV d'après sa fiche d'enseignant (lu par jointure).</summary>
+    /// <summary>Inspecteur TIV (moniteur.inspecteur_tiv, lu par jointure) : enseignant ou non (migration 030).</summary>
     public bool InspecteurTiv { get; set; }
 
     /// <summary>CACI coché et date d'expiration passée (le jour même est encore valable).</summary>
@@ -74,10 +81,10 @@ public sealed class Adherent
 }
 
 /// <summary>
-/// Rôle d'enseignant saisi dans la fiche d'un adhérent (<see cref="Services.ServiceAdherents.EnregistrerAsync"/>) : actif ou non,
-/// niveau d'encadrement, inspecteur TIV. Coupé, le niveau et le TIV déjà notés sont gardés.
+/// Rôles au club saisis dans la fiche d'un adhérent (<see cref="Services.ServiceAdherents.EnregistrerAsync"/>), indépendants :
+/// enseignant (responsable des sorties, avec son niveau d'encadrement ; coupé, le niveau est gardé) et inspecteur TIV.
 /// </summary>
-public sealed record RoleEnseignant(bool Actif, string? Niveau = null, bool InspecteurTiv = false);
+public sealed record RolesAdherent(bool Enseignant, string? NiveauEncadrement = null, bool InspecteurTiv = false);
 
 /// <summary>
 /// Enseignant sans fiche d'adhérent que <see cref="Services.ServiceAdherents.RelierEnseignantsAsync"/> n'a pas relié seul :
@@ -123,7 +130,7 @@ public enum FiltreAdherents
     /// <summary>Enseignants en ce moment.</summary>
     Enseignants,
 
-    /// <summary>Enseignants inspecteurs TIV.</summary>
+    /// <summary>Inspecteurs TIV (enseignants ou non).</summary>
     InspecteursTiv,
 
     MaterielDehors,

@@ -58,8 +58,8 @@ public sealed class ExportRepository(FabriqueConnexion fabrique) : IExportReposi
              new("Statut", GenreColonne.StatutSortieEquipement), new("Parti le", GenreColonne.Horodatage), new("Rentré le", GenreColonne.Horodatage),
              new("Adhérent")]),
         ("adherents.csv",
-            "SELECT a.nom, a.prenom, COALESCE(c.nom, a.niveau), a.licence, a.telephone, a.nitrox, a.caci, a.caci_expiration, a.actif FROM adherent a LEFT JOIN moniteur c ON c.id = a.classe_id ORDER BY a.nom, a.prenom",
-            [new("Nom"), new("Prénom"), new("Formation en cours"), new("Licence"), new("Téléphone"), new("Certifié nitrox", GenreColonne.OuiNon), new("CACI", GenreColonne.OuiNon), new("CACI valable jusqu'au", GenreColonne.Date), new("Actif", GenreColonne.OuiNon)]),
+            "SELECT a.nom, a.prenom, a.niveau_obtenu, COALESCE(c.nom, a.niveau), a.licence, a.telephone, a.nitrox, a.caci, a.caci_expiration, a.actif FROM adherent a LEFT JOIN moniteur c ON c.id = a.classe_id ORDER BY a.nom, a.prenom",
+            [new("Nom"), new("Prénom"), new("Niveau obtenu"), new("Formation en cours"), new("Licence"), new("Téléphone"), new("Certifié nitrox", GenreColonne.OuiNon), new("CACI", GenreColonne.OuiNon), new("CACI valable jusqu'au", GenreColonne.Date), new("Actif", GenreColonne.OuiNon)]),
         ("controles.csv",
             $"""
             SELECT ct.date_controle, e.code, e.libelle, ct.type, ct.resultat, {Moniteur}, ct.notes, ct.saisi_le

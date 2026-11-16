@@ -93,6 +93,16 @@ public sealed class ServiceAdherents(
         return abrege.Success ? niveaux.FirstOrDefault(n => Cle(n) == $"niveau{abrege.Groups[2].Value}") : null;
     }
 
+    /// <summary>Niveaux de plongée proposés en puces pour le niveau obtenu ; un autre niveau peut être tapé (PA40, Guide de palanquée).</summary>
+    public static IReadOnlyList<string> NiveauxPlongee { get; } = ["Niveau 1", "Niveau 2", "Niveau 3", "Niveau 4"];
+
+    /// <summary>
+    /// Niveau obtenu nettoyé : un niveau proposé écrit autrement (« N2 », « niv 2 ») devient « Niveau 2 », un autre niveau est
+    /// gardé tel quel (espaces retirés), vide → null.
+    /// </summary>
+    public static string? NiveauObtenuReconnu(string? saisie) =>
+        Vide(saisie) is { } texte ? NiveauReconnu(texte, NiveauxPlongee) ?? texte : null;
+
     /// <summary>Majuscule au début de chaque mot (« jean-pierre le goff » → « Jean-Pierre Le Goff ») ; le reste est gardé tel quel.</summary>
     public static string MajusculesMots(string texte)
     {
@@ -241,7 +251,7 @@ public sealed class ServiceAdherents(
         var filtrees = fiches.Where(f => filtre switch
         {
             FiltreAdherents.Enseignants => f.Adherent.Enseignant,
-            FiltreAdherents.InspecteursTiv => f.Adherent.Enseignant && f.Adherent.InspecteurTiv,
+            FiltreAdherents.InspecteursTiv => f.Adherent.InspecteurTiv,
             FiltreAdherents.MaterielDehors => f.NbDehors > 0,
             FiltreAdherents.NonRendu => f.NbNonRendus > 0,
             FiltreAdherents.Nitrox => f.Adherent.Nitrox,
@@ -251,7 +261,7 @@ public sealed class ServiceAdherents(
         }).ToList();
         return new ListeAdherents(filtrees, fiches.Count, fiches.Count(f => f.NbDehors > 0), fiches.Count(f => f.NbNonRendus > 0),
             fiches.Count(f => f.Adherent.Nitrox), fiches.Count(f => !f.Adherent.Actif), fiches.Count(f => f.CaciExpire || f.CaciBientot),
-            fiches.Count(f => f.Adherent.Enseignant), fiches.Count(f => f.Adherent.Enseignant && f.Adherent.InspecteurTiv));
+            fiches.Count(f => f.Adherent.Enseignant), fiches.Count(f => f.Adherent.InspecteurTiv));
     }
 
     /// <summary>Fiche : matériel qu'il a en ce moment, matériel non rendu (manquant à la clôture), dernières sorties nominatives.</summary>
@@ -291,11 +301,12 @@ public sealed class ServiceAdherents(
     /// <summary>
     /// Ajoute (Id = 0) ou modifie un adhérent. Nom et prénom obligatoires ; licence unique si elle est renseignée.
     /// Le rendre inactif le retire de la liste du départ, sans toucher à son historique.
-    /// <paramref name="role"/> : rôle d'enseignant (null = inchangé). Actif, il crée ou réactive sa fiche d'enseignant (responsable
-    /// des sorties) ; coupé, elle est désactivée (ses sorties la gardent). Sa fiche d'enseignant reprend toujours prénom, nom,
-    /// téléphone et licence de l'adhérent ; un adhérent désactivé n'est plus enseignant.
+    /// <paramref name="roles"/> : rôles au club (null = inchangés), indépendants l'un de l'autre. Enseignant : sa fiche
+    /// d'encadrement est active (responsable des sorties) ; coupé, elle est désactivée (ses sorties la gardent, le niveau aussi).
+    /// Inspecteur TIV : enseignant ou non. Un premier rôle crée et relie sa fiche d'encadrement, qui reprend toujours prénom,
+    /// nom, téléphone et licence de l'adhérent. Un adhérent désactivé n'a plus aucun rôle.
     /// </summary>
-    public async Task<ResultatOperation> EnregistrerAsync(Adherent saisie, RoleEnseignant? role = null, CancellationToken ct = default)
+    public async Task<ResultatOperation> EnregistrerAsync(Adherent saisie, RolesAdherent? roles = null, CancellationToken ct = default)
     {
         if (Autorisation() is { Reussi: false } refus)
         {
@@ -324,50 +335,51 @@ public sealed class ServiceAdherents(
             return ResultatOperation.Echec("Cet adhérent n'existe plus.");
         }
 
-        // Rôle d'enseignant : tout est vérifié avant d'écrire.
-        if (await VerifierRoleAsync(saisie, role, fiche, ct) is { } refusRole)
+        // Rôles : tout est vérifié avant d'écrire.
+        if (await VerifierRolesAsync(saisie, roles, fiche, ct) is { } refusRoles)
         {
-            return refusRole;
+            return refusRoles;
         }
 
         if (saisie.Id == 0)
         {
             var id = await adherents.AjouterAsync(saisie, ct);
-            var roleAjoute = await AppliquerRoleAsync(saisie, role, null, ct);
-            await JournaliserAsync(ActionsJournal.AdherentCree, $"Adhérent ajouté : {saisie.NomComplet}{ChangementCaci(avant, saisie)}{roleAjoute}", ct);
+            var rolesAjoutes = await AppliquerRolesAsync(saisie, roles, null, ct);
+            await JournaliserAsync(ActionsJournal.AdherentCree, $"Adhérent ajouté : {saisie.NomComplet}{ChangementCaci(avant, saisie)}{rolesAjoutes}", ct);
             return ResultatOperation.Ok($"{saisie.NomComplet} ajouté.", id);
         }
 
         await adherents.MettreAJourAsync(saisie, ct);
-        var changementRole = await AppliquerRoleAsync(saisie, role, fiche, ct);
-        await JournaliserAsync(ActionsJournal.AdherentModifie, $"Adhérent modifié : {saisie.NomComplet}{(saisie.Actif ? "" : " (inactif)")}{ChangementCaci(avant, saisie)}{changementRole}", ct);
+        var changementRoles = await AppliquerRolesAsync(saisie, roles, fiche, ct);
+        await JournaliserAsync(ActionsJournal.AdherentModifie, $"Adhérent modifié : {saisie.NomComplet}{(saisie.Actif ? "" : " (inactif)")}{ChangementCaci(avant, saisie)}{changementRoles}", ct);
         return ResultatOperation.Ok($"{saisie.NomComplet} enregistré.", saisie.Id);
     }
 
-    /// <summary>Refus du rôle d'enseignant saisi, ou null : adhérent désactivé, niveau trop long, licence d'un autre enseignant.</summary>
-    private async Task<ResultatOperation?> VerifierRoleAsync(Adherent saisie, RoleEnseignant? role, Moniteur? fiche, CancellationToken ct)
+    /// <summary>Refus des rôles saisis, ou null : adhérent désactivé, niveau d'encadrement trop long, licence d'un autre encadrant.</summary>
+    private async Task<ResultatOperation?> VerifierRolesAsync(Adherent saisie, RolesAdherent? roles, Moniteur? fiche, CancellationToken ct)
     {
-        if (role is not { Actif: true } && fiche is null)
+        var unRole = roles is { Enseignant: true } or { InspecteurTiv: true };
+        if (!unRole && fiche is null)
         {
-            return null; // Rien à écrire côté enseignant.
+            return null; // Rien à écrire côté encadrement.
         }
 
         if (classes is null)
         {
-            return role is { Actif: true } ? ResultatOperation.Echec("Les enseignants ne sont pas disponibles.") : null;
+            return unRole ? ResultatOperation.Echec("Les enseignants ne sont pas disponibles.") : null;
         }
 
-        if (role is { Actif: true } && !saisie.Actif)
+        if (unRole && !saisie.Actif)
         {
-            return ResultatOperation.Echec("Un adhérent désactivé ne peut pas être enseignant : laissez « Adhérent actif » coché.");
+            return ResultatOperation.Echec("Un adhérent désactivé ne peut être ni enseignant ni inspecteur TIV : laissez « Adhérent actif » coché.");
         }
 
-        if (role is { Actif: true } && role.Niveau?.Trim().Length > LongueurMaxNiveauEncadrement)
+        if (roles is { Enseignant: true } && roles.NiveauEncadrement?.Trim().Length > LongueurMaxNiveauEncadrement)
         {
             return ResultatOperation.Echec($"Niveau d'encadrement trop long ({LongueurMaxNiveauEncadrement} caractères au plus).");
         }
 
-        // La licence de l'adhérent devient celle de sa fiche d'enseignant : unique parmi les enseignants.
+        // La licence de l'adhérent devient celle de sa fiche d'encadrement : unique parmi les enseignants et inspecteurs.
         return saisie.Licence is { } licence
             && (await classes.ListerAsync(actifsSeulement: false, ct)).FirstOrDefault(m => !m.EstClasse && m.Id != fiche?.Id
                 && string.Equals(m.Licence, licence, StringComparison.OrdinalIgnoreCase)) is { } autre
@@ -376,10 +388,10 @@ public sealed class ServiceAdherents(
     }
 
     /// <summary>
-    /// Écrit le rôle d'enseignant de l'adhérent (déjà enregistré) : crée et relie sa fiche d'enseignant, ou met à jour celle qui
-    /// est reliée (identité reprise de l'adhérent ; désactivée si l'adhérent l'est). Retourne la fin du texte du journal.
+    /// Écrit les rôles de l'adhérent (déjà enregistré) : crée et relie sa fiche d'encadrement au premier rôle, ou met à jour celle
+    /// qui est reliée (identité reprise de l'adhérent ; plus aucun rôle si l'adhérent est désactivé). Retourne la fin du texte du journal.
     /// </summary>
-    private async Task<string> AppliquerRoleAsync(Adherent a, RoleEnseignant? role, Moniteur? fiche, CancellationToken ct)
+    private async Task<string> AppliquerRolesAsync(Adherent a, RolesAdherent? roles, Moniteur? fiche, CancellationToken ct)
     {
         if (classes is null)
         {
@@ -388,7 +400,7 @@ public sealed class ServiceAdherents(
 
         if (fiche is null)
         {
-            if (role is not { Actif: true })
+            if (roles is not ({ Enseignant: true } or { InspecteurTiv: true }))
             {
                 return "";
             }
@@ -400,39 +412,45 @@ public sealed class ServiceAdherents(
                 Nom = a.Nom,
                 Telephone = a.Telephone ?? "",
                 Licence = a.Licence ?? "",
-                Niveau = Vide(role.Niveau),
-                InspecteurTiv = role.InspecteurTiv,
-                Actif = true,
+                Niveau = roles.Enseignant ? Vide(roles.NiveauEncadrement) : null,
+                InspecteurTiv = roles.InspecteurTiv,
+                Actif = roles.Enseignant,
             };
             var id = await classes.AjouterAsync(nouvelle, ct);
             await adherents.RelierEnseignantAsync(a.Id, id, ct);
             a.MoniteurId = id;
-            return " · devient enseignant";
+            return ChangementRoles(false, false, nouvelle);
         }
 
-        var etaitEnseignant = fiche.Actif;
+        var (etaitEnseignant, etaitInspecteur) = (fiche.Actif, fiche.InspecteurTiv);
         fiche.Prenom = a.Prenom;
         fiche.Nom = a.Nom;
         fiche.Telephone = a.Telephone ?? "";
         fiche.Licence = a.Licence ?? "";
-        if (role is not null)
+        if (roles is not null)
         {
-            fiche.Actif = role.Actif;
-            if (role.Actif)
+            fiche.Actif = roles.Enseignant;
+            fiche.InspecteurTiv = roles.InspecteurTiv;
+            if (roles.Enseignant)
             {
-                fiche.Niveau = Vide(role.Niveau);
-                fiche.InspecteurTiv = role.InspecteurTiv;
+                fiche.Niveau = Vide(roles.NiveauEncadrement);
             }
         }
 
         if (!a.Actif)
         {
             fiche.Actif = false;
+            fiche.InspecteurTiv = false;
         }
 
         await classes.MettreAJourAsync(fiche, ct);
-        return etaitEnseignant == fiche.Actif ? "" : fiche.Actif ? " · enseignant de nouveau" : " · n'est plus enseignant";
+        return ChangementRoles(etaitEnseignant, etaitInspecteur, fiche);
     }
+
+    /// <summary>Fin du texte du journal quand un rôle change : « · devient enseignant », « · n'est plus inspecteur TIV »…</summary>
+    private static string ChangementRoles(bool etaitEnseignant, bool etaitInspecteur, Moniteur apres) =>
+        (etaitEnseignant == apres.Actif ? "" : apres.Actif ? " · devient enseignant" : " · n'est plus enseignant")
+        + (etaitInspecteur == apres.InspecteurTiv ? "" : apres.InspecteurTiv ? " · devient inspecteur TIV" : " · n'est plus inspecteur TIV");
 
     /// <summary>Fin du texte du journal quand le CACI change : « · CACI jusqu'au 15/03/2027 », « · CACI retiré », sinon vide.</summary>
     public static string ChangementCaci((bool Caci, DateOnly? Expiration) avant, Adherent apres) =>
@@ -442,7 +460,8 @@ public sealed class ServiceAdherents(
 
     /// <summary>
     /// Désactive (ne peut plus sortir de matériel, n'est plus proposé au départ ; son historique reste) ou réactive un adhérent.
-    /// Le matériel qu'il a déjà reste à son nom jusqu'au retour.
+    /// Le matériel qu'il a déjà reste à son nom jusqu'au retour. Désactivé, il perd ses rôles (enseignant, inspecteur TIV) ;
+    /// réactivé, ils sont à remettre dans sa fiche.
     /// </summary>
     public async Task<ResultatOperation> ChangerActifAsync(long id, bool actif, CancellationToken ct = default)
     {
@@ -464,16 +483,19 @@ public sealed class ServiceAdherents(
         a.Actif = actif;
         await adherents.MettreAJourAsync(a, ct);
 
-        // Désactivé : il n'est plus enseignant non plus (plus proposé comme responsable). Réactivé : rôle à remettre dans sa fiche.
         var fiche = !actif && a.MoniteurId is { } idFiche && classes is not null ? await classes.ObtenirAsync(idFiche, ct) : null;
+        var roles = "";
         var etaitEnseignant = fiche is { Actif: true };
-        if (etaitEnseignant)
+        if (fiche is { Actif: true } or { InspecteurTiv: true })
         {
-            fiche!.Actif = false;
+            var etaitInspecteur = fiche.InspecteurTiv;
+            fiche.Actif = false;
+            fiche.InspecteurTiv = false;
             await classes!.MettreAJourAsync(fiche, ct);
+            roles = ChangementRoles(etaitEnseignant, etaitInspecteur, fiche);
         }
 
-        await JournaliserAsync(ActionsJournal.AdherentModifie, $"Adhérent {(actif ? "réactivé" : "désactivé")} : {a.NomComplet}{(etaitEnseignant ? " · n'est plus enseignant" : "")}", ct);
+        await JournaliserAsync(ActionsJournal.AdherentModifie, $"Adhérent {(actif ? "réactivé" : "désactivé")} : {a.NomComplet}{roles}", ct);
         return ResultatOperation.Ok(actif
             ? $"{a.NomComplet} est réactivé : il peut de nouveau sortir du matériel."
             : $"{a.NomComplet} est désactivé : il ne peut plus sortir de matériel{(etaitEnseignant ? " ni être responsable d'une sortie" : "")}.", id);
@@ -766,6 +788,7 @@ public sealed class ServiceAdherents(
         a.Nom = (a.Nom ?? "").Trim();
         a.Prenom = (a.Prenom ?? "").Trim();
         a.Niveau = Vide(a.Niveau);
+        a.NiveauObtenu = NiveauObtenuReconnu(a.NiveauObtenu);
         a.Licence = Vide(a.Licence)?.ToUpper(Libelles.Culture);
         a.Telephone = Vide(a.Telephone);
         if (a.Nom.Length == 0 || a.Prenom.Length == 0)
@@ -778,7 +801,7 @@ public sealed class ServiceAdherents(
             return ResultatOperation.Echec($"Nom ou prénom trop long ({Adherent.LongueurMaxNom} caractères au plus).");
         }
 
-        if (a.Niveau?.Length > Adherent.LongueurMaxNiveau || a.Licence?.Length > Adherent.LongueurMaxLicence || a.Telephone?.Length > Adherent.LongueurMaxTelephone)
+        if (a.Niveau?.Length > Adherent.LongueurMaxNiveau || a.NiveauObtenu?.Length > Adherent.LongueurMaxNiveau || a.Licence?.Length > Adherent.LongueurMaxLicence || a.Telephone?.Length > Adherent.LongueurMaxTelephone)
         {
             return ResultatOperation.Echec("Niveau, licence ou téléphone trop long (30 caractères au plus).");
         }
@@ -808,17 +831,19 @@ public sealed class ServiceAdherents(
     /// <param name="CaciIllisible">Case CACI remplie mais pas une date (signalé dans le message de l'import).</param>
     public sealed record LigneImport(int Numero, Adherent? Adherent, string? Erreur, bool? Nitrox = null, DateOnly? Caci = null, bool CaciIllisible = false);
 
-    // En-têtes reconnus (sans accents ni majuscules), dans l'ordre : nom, prénom, niveau, licence, téléphone.
+    // En-têtes reconnus (sans accents ni majuscules), dans l'ordre : nom, prénom, formation, licence, téléphone, nitrox, CACI,
+    // niveau obtenu (le brevet, pas la formation en cours).
     private static readonly string[][] EnTetes =
     [
         ["nom", "nom de famille", "nom adherent"],
         ["prenom"],
-        ["formation en cours", "formation", "classe", "groupe", "niveau", "niveau de plongee", "niveau en cours", "brevet"],
+        ["formation en cours", "formation", "classe", "groupe", "niveau", "niveau de plongee", "niveau en cours"],
         ["licence", "n licence", "no licence", "numero de licence", "num licence", "licence ffessm", "n de licence"],
         ["telephone", "tel", "portable", "mobile", "telephone portable"],
         ["nitrox", "certifie nitrox", "certification nitrox", "brevet nitrox"],
         ["caci valable jusqu'au", "caci valable jusqu au", "caci", "caci jusqu'au", "date caci", "fin caci", "fin du caci", "expiration caci", "validite caci",
             "certificat medical", "date certificat medical", "fin certificat medical"],
+        ["niveau obtenu", "niveaux obtenus", "brevet", "brevet obtenu", "dernier niveau", "dernier niveau obtenu", "niveau atteint"],
     ];
 
     /// <summary>Une colonne du modèle Excel à remplir par le club : en-tête (reconnu par l'import), aide, largeur, obligatoire.</summary>
@@ -832,6 +857,7 @@ public sealed class ServiceAdherents(
     [
         new("Nom", "Nom de famille", 22, true),
         new("Prénom", "Prénom", 18, true),
+        new("Niveau obtenu", "Dernier niveau de plongée obtenu (ex. Niveau 1) : choisissez dans la liste (flèche de la case)", 16, false, NiveauxPlongee),
         new("Formation en cours", "Classe suivie (ex. Niveau 2 = prépare le niveau 2) : choisissez dans la liste (flèche de la case)", 20, false, niveaux),
         new("Licence", "Numéro de licence FFESSM (sert à reconnaître l'adhérent à l'import suivant)", 18, false),
         new("Téléphone", "Ex. : 06 12 34 56 78", 18, false),
@@ -851,7 +877,7 @@ public sealed class ServiceAdherents(
         "2. Nom et Prénom sont obligatoires. Les autres colonnes peuvent rester vides.",
         "3. Ne changez pas la première ligne (les titres des colonnes) : l'application s'en sert pour lire le fichier.",
         "4. Licence : si elle est remplie, l'adhérent est reconnu à l'import suivant et mis à jour au lieu d'être ajouté en double.",
-        "5. Formation en cours et Nitrox : choisissez dans la liste (flèche à droite de la case). La formation est la classe suivie (Niveau 2 = prépare le niveau 2). Ne tapez pas d'autre formation : elle serait ignorée. Vide = inchangé.",
+        "5. Niveau obtenu, Formation en cours et Nitrox : choisissez dans la liste (flèche à droite de la case). Le niveau obtenu est le dernier brevet (Niveau 1) ; la formation est la classe suivie (Niveau 2 = prépare le niveau 2). Ne tapez pas d'autre formation : elle serait ignorée. Vide = inchangé.",
         "6. CACI valable jusqu'au : date de fin du certificat, au format jj/mm/aaaa (ex. 15/09/2027). Passée cette date, l'adhérent ne sort plus de matériel. Vide = inchangé.",
         "7. Enregistrez en .xlsx et rapportez le fichier au responsable matériel : Membres › Adhérents › Importer la liste Excel.",
         "Personne n'est retiré par l'import : les adhérents absents du fichier restent dans l'application.",
@@ -901,6 +927,7 @@ public sealed class ServiceAdherents(
                 Niveau = Cellule(ligne, colonnes[2]),
                 Licence = Cellule(ligne, colonnes[3]),
                 Telephone = Cellule(ligne, colonnes[4]),
+                NiveauObtenu = Cellule(ligne, colonnes[7]), // Nettoyé (« N1 » → « Niveau 1 ») par Normaliser.
             };
             // Cellule vide (colonne présente, ex. le modèle à remplir) : statut inchangé, comme une colonne absente.
             var celluleNitrox = colonnes[5] >= 0 ? Cellule(ligne, colonnes[5]) : null;
@@ -988,6 +1015,7 @@ public sealed class ServiceAdherents(
             }
 
             existant.Licence = nouveau.Licence ?? existant.Licence;
+            existant.NiveauObtenu = nouveau.NiveauObtenu ?? existant.NiveauObtenu;
             existant.Telephone = nouveau.Telephone ?? existant.Telephone;
             existant.Nitrox = lu.Nitrox ?? existant.Nitrox;
             if (lu.Caci is { } finCaci)

@@ -20,9 +20,9 @@ public sealed class ServiceMoniteurs(IMoniteurRepository moniteurs, ISortieRepos
     public Task<IReadOnlyList<Moniteur>> ListerTousAsync(CancellationToken ct = default) =>
         moniteurs.ListerAsync(actifsSeulement: false, ct);
 
-    /// <summary>Moniteurs actifs habilités à faire les TIV (jamais une classe).</summary>
+    /// <summary>Habilités à faire les TIV (jamais une classe), enseignants ou non : la case TIV suffit (migration 030).</summary>
     public async Task<IReadOnlyList<Moniteur>> ListerInspecteursTivAsync(CancellationToken ct = default) =>
-        (await moniteurs.ListerAsync(actifsSeulement: true, ct)).Where(m => !m.EstClasse && m.InspecteurTiv).ToList();
+        (await moniteurs.ListerAsync(actifsSeulement: false, ct)).Where(m => !m.EstClasse && m.InspecteurTiv).ToList();
 
     /// <summary>Longueur maximale du nom d'une classe et de son abréviation.</summary>
     public const int LongueurMaxClasse = 30;

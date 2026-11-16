@@ -543,7 +543,7 @@
   <p>On ne supprime pas un membre : on le <b>désactive</b>. Il n'est plus proposé mais reste dans l'historique.</p>
 
   <figure class="ecran" data-image="captures/14b-adherent-fiche.png" data-taille="1782x1337" data-cadre="360,40,1400,1280" data-hauteur="130"
-    data-reperes="380,197,326,52 ; 911,95,276,50 ; 1199,95,266,50 ; 1477,95,255,50 ; 380,335,1181,55 ; 484,740,95,28>690,754 ; 1210,470,500,105 ; 1215,890,493,200 ; 1215,1125,493,136">
+    data-reperes="380,204,326,65 ; 869,90,288,62 ; 1172,90,278,62 ; 1465,90,267,62 ; 380,377,1181,55 ; 380,941,370,220 ; 870,1003,165,28>1060,1080 ; 1215,500,470,115 ; 1221,920,460,200 ; 1221,1157,460,136">
     <figcaption>
       <div class="titre-fig">Membres › Adhérents, avec la fiche d'un enseignant à droite</div>
       <ol class="legende">
@@ -552,8 +552,9 @@
         <li><span class="ui">Importer la liste Excel</span>.</li>
         <li><span class="ui">Ajouter un adhérent</span> à la main.</li>
         <li>Les <b>filtres</b> : enseignants, inspecteurs TIV, matériel dehors, non rendu, nitrox, CACI à renouveler, désactivés.</li>
-        <li>Un <b>enseignant</b> : pastille violette de son niveau (MF1), et <b>TIV</b> s'il est inspecteur.</li>
-        <li>La <b>fiche</b> de l'adhérent cliqué : rôle, formation, licence, téléphone, matériel qu'il a.</li>
+        <li>Un <b>enseignant</b> : carte violette, pastille <b>ENSEIGNANT E3</b> (et <b>TIV</b> s'il est inspecteur).</li>
+        <li>Niveau obtenu (<b>N1</b>) et formation en cours (<b>PRÉPARE N2</b>).</li>
+        <li>La <b>fiche</b> de l'adhérent cliqué : rôles, niveau, formation, licence, téléphone, matériel qu'il a.</li>
         <li>Pour un enseignant : le matériel <b>sous sa responsabilité</b> et ses dernières sorties encadrées.</li>
         <li><span class="ui">Modifier</span> et <span class="ui">Désactiver</span> ; un enseignant a aussi
           <span class="ui">Créer une sortie</span>.</li>
@@ -561,26 +562,35 @@
     </figcaption>
   </figure>
 
-  <h3>Un adhérent devient enseignant (ou ne l'est plus)</h3>
-  <p>Sur la fiche de l'adhérent, <span class="ui">Modifier</span> (code demandé), section <b>3 Enseignant</b> : activez
-    l'interrupteur <b>Enseignant</b>, puis choisissez son niveau d'encadrement (E1… MF2, ou « Autre niveau ») et, s'il y a lieu,
-    <b>Inspecteur TIV</b> (seuls les inspecteurs peuvent enregistrer une TIV). Il est aussitôt proposé comme responsable des sorties.</p>
+  <h3>Niveau obtenu et formation en cours</h3>
+  <p>Section <b>2 Niveau et formation</b> de la fiche : le <b>niveau obtenu</b> (son dernier brevet : Niveau 1… 4, ou un autre
+    niveau tapé, comme PA40) et la <b>formation en cours</b> (la classe qu'il suit). Exemple : niveau obtenu Niveau 1,
+    formation Niveau 2. Sur sa carte : <b>N1</b> et <b>PRÉPARE N2</b>.</p>
+
+  <h3>Rôles au club : enseignant, inspecteur TIV</h3>
+  <p>Sur la fiche de l'adhérent, <span class="ui">Modifier</span> (code demandé), section <b>3 Rôles au club</b>. Les deux rôles
+    sont indépendants :</p>
   <ul>
+    <li><b>Enseignant</b> : activez l'interrupteur, puis choisissez son niveau d'encadrement (E1… MF2, ou « Autre niveau »).
+      Il est aussitôt proposé comme responsable des sorties, et sa carte devient <b>violette</b>.</li>
+    <li><b>Inspecteur TIV</b> : seuls les inspecteurs peuvent enregistrer une TIV. Un adhérent peut être inspecteur sans être enseignant.</li>
     <li>C'est <b>la même personne</b> : son CACI, son nitrox et le matériel qu'il prend sont ceux de sa fiche d'adhérent ;
-      il prend du matériel au départ comme n'importe quel adhérent.</li>
+      un enseignant prend du matériel au départ comme n'importe quel adhérent.</li>
     <li>Coupez l'interrupteur quand il n'encadre plus : il n'est plus proposé comme responsable, ses sorties restent à son nom.</li>
-    <li>Désactiver l'adhérent le retire aussi des responsables.</li>
+    <li>Désactiver l'adhérent lui retire ses rôles (enseignant et inspecteur TIV).</li>
   </ul>
 
   <figure class="ecran" data-image="captures/15-adherent-enseignant.png" data-taille="858x1319" data-cadre="0,40,858,1279" data-hauteur="125"
-    data-reperes="114,125,283,27 ; 681,784,75,55 ; 71,861,590,160 ; 661,1053,75,55 ; 672,1226,155,62">
+    data-reperes="114,125,283,27 ; 51,305,725,160 ; 51,505,725,52 ; 681,709,75,55 ; 71,786,590,160 ; 681,990,75,55 ; 672,1226,155,62">
     <figcaption>
-      <div class="titre-fig">Modifier l'adhérent › section 3 Enseignant</div>
+      <div class="titre-fig">Modifier l'adhérent › sections 2 Niveau et formation, 3 Rôles au club</div>
       <ol class="legende une">
-        <li>L'en-tête montre le rôle pendant la saisie (<b>Enseignant MF1</b>, <b>Inspecteur TIV</b>).</li>
+        <li>L'en-tête montre les rôles pendant la saisie (<b>Enseignant MF1</b>, <b>Inspecteur TIV</b>).</li>
+        <li>Le <b>niveau obtenu</b> (son dernier brevet), ou un autre niveau tapé à la main.</li>
+        <li>La <b>formation en cours</b> : la classe qu'il suit.</li>
         <li>L'interrupteur <b>Enseignant</b> : il est proposé comme responsable des sorties.</li>
-        <li>Le <b>niveau d'encadrement</b> (E1… MF2), ou un autre niveau tapé à la main.</li>
-        <li><b>Inspecteur TIV</b> : seuls les inspecteurs peuvent enregistrer une TIV.</li>
+        <li>Son <b>niveau d'encadrement</b> (E1… MF2), ou un autre niveau tapé à la main.</li>
+        <li><b>Inspecteur TIV</b>, à part : enseignant ou non, seuls les inspecteurs peuvent enregistrer une TIV.</li>
         <li><span class="ui">Enregistrer</span> (code gestionnaire demandé).</li>
       </ol>
     </figcaption>
@@ -599,7 +609,7 @@
     <li>Onglet <span class="ui">Adhérents</span> › <span class="ui">Modèle Excel à remplir</span> : enregistrez le classeur
       proposé. Il contient les bonnes colonnes, des listes déroulantes et un mode d'emploi.</li>
     <li>Remplissez-le (ou collez-y l'export de votre logiciel de licences). Seules les colonnes <b>Nom</b> et <b>Prénom</b>
-      sont obligatoires ; <b>Formation en cours</b>, <b>Licence</b>, <b>Téléphone</b>, <b>Nitrox</b> et
+      sont obligatoires ; <b>Niveau obtenu</b>, <b>Formation en cours</b>, <b>Licence</b>, <b>Téléphone</b>, <b>Nitrox</b> et
       <b>CACI valable jusqu'au</b> sont facultatives.</li>
     <li><span class="ui">Importer</span> et choisissez le fichier (.xlsx ou .csv). Un adhérent déjà connu (même licence, sinon
       même nom et prénom) est mis à jour ; les autres sont ajoutés ; personne n'est retiré.</li>

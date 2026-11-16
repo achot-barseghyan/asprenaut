@@ -37,9 +37,9 @@ public class SchemaTests : IAsyncLifetime
     }
 
     [Fact]
-    public void Scripts_001_a_029_sont_embarques()
+    public void Scripts_001_a_031_sont_embarques()
     {
-        Assert.Equal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29], GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
+        Assert.Equal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31], GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
     }
 
     // 029 : un adhérent relié à sa fiche d'enseignant ; les adhérents existants restent sans lien (rapprochés par l'application).
@@ -82,6 +82,39 @@ public class SchemaTests : IAsyncLifetime
 
         // Une fiche d'enseignant n'est reliée qu'à un seul adhérent.
         await Assert.ThrowsAsync<SqliteException>(() => depot.RelierEnseignantAsync(autre, pascal));
+    }
+
+    // 030 : un ancien enseignant inactif perd la case TIV (les inspecteurs se lisent désormais sans regarder « actif »).
+    // 031 : niveau obtenu de l'adhérent, écrit et relu.
+    [Fact]
+    public async Task Les_migrations_030_et_031_inspecteur_independant_et_niveau_obtenu()
+    {
+        var fabrique = new Connexion.FabriqueConnexion(Path.Combine(_base.Dossier, "avant-030.db"));
+        var migrations = new GestionnaireMigrations(fabrique);
+        Assert.Equal(29, await migrations.AppliquerAsync(jusqua: 29));
+        await using (var cx = await fabrique.OuvrirAsync())
+        {
+            await cx.ExecuteAsync("""
+                INSERT INTO moniteur (genre, nom, prenom, inspecteur_tiv, actif) VALUES
+                    ('Moniteur', 'Durand', 'Pascal', 1, 1), ('Moniteur', 'Ancien', 'Paul', 1, 0);
+                """);
+        }
+
+        await migrations.AppliquerAsync();
+
+        await using (var cx = await fabrique.OuvrirAsync())
+        {
+            var tiv = (await cx.QueryAsync<(string, long)>("SELECT nom, inspecteur_tiv FROM moniteur WHERE genre = 'Moniteur' ORDER BY nom;")).ToList();
+            Assert.Equal([("Ancien", 0L), ("Durand", 1L)], tiv);
+        }
+
+        var depot = new AdherentRepository(fabrique);
+        var a = new Core.Modeles.Adherent { Nom = "Martin", Prenom = "Julie", NiveauObtenu = "Niveau 1" };
+        await depot.AjouterAsync(a);
+        Assert.Equal("Niveau 1", (await depot.ObtenirAsync(a.Id))!.NiveauObtenu);
+        a.NiveauObtenu = "Niveau 2";
+        await depot.MettreAJourAsync(a);
+        Assert.Equal("Niveau 2", (await depot.ObtenirAsync(a.Id))!.NiveauObtenu);
     }
 
     // 021 : le niveau texte de l'adhérent devient sa classe (formation en cours) ; une classe manquante est créée.
