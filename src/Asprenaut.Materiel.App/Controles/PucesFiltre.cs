@@ -127,7 +127,8 @@ public sealed class PucesFiltre : ControleDessine
 
     private float LargeurPuce(PuceFiltre p)
     {
-        var l = E(12) + TextRenderer.MeasureText(p.Texte, PoliceTexte, Size.Empty, TextFormatFlags.NoPadding).Width;
+        // + 2 : le contour (1 px de chaque côté) est pris sur la largeur de la puce.
+        var l = E(12 + 2) + TextRenderer.MeasureText(p.Texte, PoliceTexte, Size.Empty, TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix).Width;
         if (p.Point is not null)
         {
             l += E(8 + 8);
@@ -283,8 +284,21 @@ public sealed class PucesFiltre : ControleDessine
         var taille = TextRenderer.MeasureText(g, p.Texte, PoliceTexte, Size.Empty, drapeaux & ~TextFormatFlags.EndEllipsis);
         var reste = p.Nombre is { } n0 ? E(6) + LargeurNombre(n0) : 0;
         var fin = r.Right - (_style == StylePuces.Etiquette ? E(6 + 14 + 8) : _style == StylePuces.Raccourci && p.Nombre is not null ? E(6) : E(12)) - reste;
-        var largeurTexte = Math.Min(taille.Width, (int)(fin - x));
-        TextRenderer.DrawText(g, p.Texte, PoliceTexte, new Rectangle((int)x, (int)(r.Y + ((r.Height - taille.Height) / 2)), Math.Max(0, largeurTexte), taille.Height), texte, drapeaux);
+        // La puce est mesurée pour son texte entier : il est écrit sans coupure. Un rectangle à la largeur exacte
+        // (moins le pixel du contour et les arrondis) faisait déborder d'un pixel, et Windows mettait « … ».
+        int largeurTexte;
+        if (taille.Width <= fin - x + E(4))
+        {
+            Ecrire(g, p.Texte, PoliceTexte, x, r, texte);
+            largeurTexte = taille.Width;
+        }
+        else
+        {
+            // Seulement si la puce est plus large que le contrôle entier.
+            largeurTexte = Math.Max(0, (int)(fin - x));
+            TextRenderer.DrawText(g, p.Texte, PoliceTexte, new Rectangle((int)x, (int)(r.Y + ((r.Height - taille.Height) / 2)), largeurTexte, taille.Height), texte, drapeaux);
+        }
+
         x += largeurTexte;
 
         if (p.Nombre is { } n)
