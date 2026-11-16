@@ -69,6 +69,20 @@
   .sommaire li .n { width: 9mm; color: var(--turquoise); font-weight: 700; }
   .sommaire li .t { flex: 1; }
   .sommaire li .d { color: var(--doux); font-size: 9pt; }
+
+  /* Captures annotées : repères roses numérotés (dessinés par le script en bas de page) + légende */
+  :root { --repere: #ff2e88; }
+  figure.ecran { margin: 3mm 0 5mm; break-inside: avoid; }
+  figure.ecran svg { display: block; margin: 0 auto; border: 1px solid #b9c7cf; border-radius: 4px; background: #0b1d2b; }
+  figure.ecran figcaption { margin-top: 2mm; }
+  figure.ecran .titre-fig { font-size: 8.5pt; color: var(--doux); font-style: italic; margin-bottom: 1.5mm; text-align: center; }
+  ol.legende { list-style: none; padding: 0; margin: 0; counter-reset: r; display: grid; grid-template-columns: 1fr 1fr; gap: 1.2mm 6mm; font-size: 9pt; }
+  ol.legende.une { grid-template-columns: 1fr; }
+  ol.legende > li { counter-increment: r; position: relative; padding-left: 7mm; margin: 0; line-height: 1.35; }
+  ol.legende > li::before { content: counter(r); position: absolute; left: 0; top: 0.2mm; width: 4.6mm; height: 4.6mm; border-radius: 50%;
+    background: var(--repere); color: #fff; font-weight: 700; font-size: 7.5pt; text-align: center; line-height: 4.6mm; }
+  .repere { display: inline-block; width: 4.2mm; height: 4.2mm; border-radius: 50%; background: var(--repere); color: #fff;
+    font-weight: 700; font-size: 7pt; text-align: center; line-height: 4.2mm; vertical-align: 0.3mm; }
 </style>
 </head>
 <body>
@@ -148,6 +162,23 @@
       <span class="ui">Configuration du club</span> (club, types de sortie, prestataires…).</td></tr>
   </table>
   <p>Le bouton <span class="ui">Réduire le menu</span>, en bas du menu, ne garde que les icônes pour laisser plus de place.</p>
+  <p>Dans ce guide, les captures d'écran portent des <b>repères roses numérotés</b> <span class="repere">1</span> ; la légende
+    sous chaque capture explique chacun d'eux. Les captures viennent d'un club d'exemple : vos noms et votre logo seront différents.</p>
+
+  <figure class="ecran" data-image="captures/01-sorties.png" data-taille="1782x1107" data-cadre="0,30,1782,1077"
+    data-reperes="22,160,290,512 ; 380,69,484,65 ; 654,356,225,62 ; 1464,510,268,62 ; 382,685,436,213 ; 22,984,286,58">
+    <figcaption>
+      <div class="titre-fig">L'écran Sorties, page d'accueil de l'application</div>
+      <ol class="legende">
+        <li><b>Le menu</b> : un clic pour changer d'écran.</li>
+        <li>Les onglets <b>En cours</b>, <b>Clôturées</b> et <b>Modèles</b>.</li>
+        <li><b>Nouvelle sortie</b> : le point de départ de toute sortie (chapitre 11).</li>
+        <li>Rappel de <b>sauvegarde complète</b>, tant qu'elle n'est pas faite (chapitre 10).</li>
+        <li><b>Démarrage rapide</b> : une sortie habituelle créée en un clic (chapitre 8).</li>
+        <li><b>Réduire le menu</b> aux seules icônes.</li>
+      </ol>
+    </figcaption>
+  </figure>
 
   <h3>Vocabulaire</h3>
   <table>
@@ -244,6 +275,22 @@
       La corbeille le retire : des initiales s'affichent à la place. L'aperçu montre le résultat sur l'écran d'accueil.</td></tr>
   </table>
   <p>Cliquez sur <span class="ui">Enregistrer</span> en bas de la carte. Tant que rien n'a changé, le bouton reste grisé.</p>
+
+  <figure class="ecran" data-image="captures/18-config-club.png" data-taille="1782x1107" data-cadre="360,160,1400,920"
+    data-reperes="526,184,229,52 ; 410,452,298,372 ; 745,450,456,64 ; 1223,450,456,64 ; 745,645,934,64 ; 745,780,934,175 ; 1491,1003,188,60">
+    <figcaption>
+      <div class="titre-fig">Paramètres › Configuration du club › Club</div>
+      <ol class="legende">
+        <li>L'onglet <b>Configuration du club</b>.</li>
+        <li>Le <b>logo</b> : cliquez dessus ou glissez une image ; <span class="ui">Remplacer</span> ou la corbeille.</li>
+        <li>Le <b>nom du club</b> (obligatoire).</li>
+        <li>Le <b>numéro d'affiliation</b> fédéral.</li>
+        <li>Le <b>responsable matériel</b> et son téléphone.</li>
+        <li>L'<b>aperçu</b> de l'écran d'accueil avec ce logo et ce nom.</li>
+        <li><span class="ui">Enregistrer</span> (grisé tant que rien n'a changé).</li>
+      </ol>
+    </figcaption>
+  </figure>
   <div class="encadre attention">
     <span class="titre">Club qui reçoit l'application d'un autre club</span>
     <p>L'application peut être livrée avec le nom et le logo du club qui l'a créée. Remplacez-les tous les deux ici avant
@@ -291,6 +338,20 @@
     <li>un clic sur la carte du mode gestion dans le menu.</li>
   </ul>
   <p>Après 5 codes faux d'affilée, la saisie est bloquée une minute. Pour changer ou retirer le code, l'ancien est demandé.</p>
+
+  <figure class="ecran" data-image="captures/17-parametres.png" data-taille="1782x1107" data-cadre="380,270,665,790" data-hauteur="110"
+    data-reperes="777,449,225,54 ; 817,543,185,60 ; 936,643,66,38>870,700 ; 936,728,66,38>870,790 ; 410,840,540,130">
+    <figcaption>
+      <div class="titre-fig">Paramètres › Sécurité · mode gestion</div>
+      <ol class="legende une">
+        <li><span class="ui">Définir un code</span> : 4 à 6 chiffres. Ensuite, ce bouton sert à le changer ou le retirer.</li>
+        <li><b>Rester déverrouillé</b> : durée sans activité avant le retour en consultation.</li>
+        <li><b>Verrouiller à la fermeture</b> : l'application redémarre toujours en consultation.</li>
+        <li><b>Code pour clôturer avec des manquants</b>.</li>
+        <li>La liste des <b>actions protégées</b> par le code.</li>
+      </ol>
+    </figcaption>
+  </figure>
   <div class="encadre danger">
     <span class="titre">Code oublié</span>
     <p>Fermez l'application, ouvrez le fichier <code>%LOCALAPPDATA%\Asprenaut\parametres.json</code> avec le Bloc-notes,
@@ -313,6 +374,19 @@
   <p>La plupart des pistolets tapent le code puis la touche Entrée. Ceux qui n'envoient pas Entrée fonctionnent aussi :
     l'application reconnaît la frappe très rapide du pistolet et valide seule après un court instant. À la main, il faut
     taper le code puis appuyer sur Entrée.</p>
+
+  <figure class="ecran" data-image="captures/17-parametres.png" data-taille="1782x1107" data-cadre="1058,270,680,790" data-hauteur="110"
+    data-reperes="1107,426,553,64 ; 1614,577,66,38>1560,640 ; 1614,662,66,38>1560,725 ; 1480,853,199,53">
+    <figcaption>
+      <div class="titre-fig">Paramètres › Pistolet scanner</div>
+      <ol class="legende une">
+        <li><b>Tester le pistolet</b> : cliquez dans le champ et scannez une étiquette, le code lu s'affiche.</li>
+        <li><b>Sons de confirmation</b> après chaque scan.</li>
+        <li><b>Garder le champ de scan actif</b> : pas besoin de cliquer avant de scanner.</li>
+        <li><b>Lecture des médailles</b> : comment le code est lu dans une étiquette (voir ci-dessous).</li>
+      </ol>
+    </figcaption>
+  </figure>
   <div class="encadre attention">
     <span class="titre">Le code lu est faux (lettres changées, « & » à la place de « 1 »…)</span>
     <p>Le pistolet est réglé en clavier américain (QWERTY) alors que le PC est en AZERTY. Scannez la carte de réglage
@@ -357,6 +431,24 @@
     <tr><td><b>Nitrox</b></td><td>Pour les blocs et détendeurs. Au départ d'une sortie nominative, seul un adhérent certifié nitrox peut le prendre.</td></tr>
   </table>
 
+  <figure class="ecran" data-image="captures/13-ajout-equipement.png" data-taille="2132x1107" data-cadre="600,40,930,1060" data-hauteur="120"
+    data-reperes="648,166,836,77 ; 648,296,402,62 ; 1082,296,402,62 ; 648,410,836,62 ; 648,640,402,62 ; 1082,640,402,62 ; 648,755,402,62 ; 648,843,836,93 ; 1361,999,123,61">
+    <figcaption>
+      <div class="titre-fig">Inventaire › Ajouter un équipement (ici un bloc)</div>
+      <ol class="legende">
+        <li>La <b>catégorie</b> : elle change les champs proposés (un détendeur a ses étages, octopus, mano…).</li>
+        <li>Le <b>code</b> de l'étiquette, proposé à la suite du dernier.</li>
+        <li>Le <b>nom</b>, identique pour les équipements du même modèle.</li>
+        <li><b>Marque, modèle</b>, puis taille et n° de série.</li>
+        <li><b>Dernière révision</b> : la prochaine est calculée.</li>
+        <li><b>Prochaine TIV</b> (blocs).</li>
+        <li><b>Prochaine requalification</b> (blocs).</li>
+        <li>Case <b>Nitrox</b> (blocs et détendeurs).</li>
+        <li><span class="ui">Ajouter</span> enregistre la fiche.</li>
+      </ol>
+    </figcaption>
+  </figure>
+
   <h3>Catégories</h3>
   <p>Dans la fiche, la liste des catégories permet d'en <b>créer</b> une nouvelle (nom, pictogramme, couleur) et de
     <b>supprimer</b> celles qui ne servent à rien. Une catégorie utilisée par un équipement ne peut pas être supprimée.</p>
@@ -372,6 +464,21 @@
   <h3>Importer l'inventaire depuis Excel</h3>
   <p><span class="chemin">Inventaire › Importer Excel</span> (code demandé). Pratique pour reprendre un registre existant
     ou saisir beaucoup de matériel d'un coup.</p>
+
+  <figure class="ecran" data-image="captures/10b-inventaire-corbeille.png" data-taille="2132x1107" data-cadre="360,50,1772,1020"
+    data-reperes="1137,77,208,62 ; 1360,77,180,62 ; 1555,77,219,62 ; 1789,77,293,62 ; 2008,733,50,140>2090,660 ; 1160,733,125,135>1100,660">
+    <figcaption>
+      <div class="titre-fig">Les boutons de l'Inventaire (ici filtré sur « BLOC »)</div>
+      <ol class="legende">
+        <li><span class="ui">Modèle Excel</span> : le classeur vide à remplir.</li>
+        <li><span class="ui">Fiches EPI</span> : reprend l'historique des fiches de suivi.</li>
+        <li><span class="ui">Importer Excel</span> : lit le classeur rempli.</li>
+        <li><span class="ui">Ajouter un équipement</span> : une fiche à la main.</li>
+        <li>La <b>corbeille rouge</b> : seulement pour un équipement jamais utilisé.</li>
+        <li>« <b>0 utilisation</b> » : ces deux blocs ne sont jamais sortis.</li>
+      </ol>
+    </figcaption>
+  </figure>
   <ol class="etapes">
     <li><span class="ui">Modèle Excel</span> enregistre un classeur vide avec les bonnes colonnes, des listes déroulantes et
       un mode d'emploi. Un export CSV de l'inventaire peut aussi être réimporté tel quel.</li>
@@ -436,6 +543,23 @@
   </table>
   <p>On ne supprime pas un membre : on le <b>désactive</b>. Il n'est plus proposé mais reste dans l'historique.</p>
 
+  <figure class="ecran" data-image="captures/14b-adherent-fiche.png" data-taille="1782x1337" data-cadre="360,40,1400,1270" data-hauteur="130"
+    data-reperes="380,204,510,65 ; 869,90,288,62 ; 1172,90,278,62 ; 1465,90,267,62 ; 380,383,856,45 ; 1192,468,539,140 ; 1221,954,481,62 ; 1221,1028,481,62">
+    <figcaption>
+      <div class="titre-fig">Membres › Adhérents, avec la fiche d'un adhérent à droite</div>
+      <ol class="legende">
+        <li>Les onglets <b>Adhérents</b>, <b>Enseignants</b>, <b>Classes</b>.</li>
+        <li><span class="ui">Modèle Excel à remplir</span>.</li>
+        <li><span class="ui">Importer la liste Excel</span>.</li>
+        <li><span class="ui">Ajouter un adhérent</span> à la main.</li>
+        <li>Les <b>filtres</b> : matériel dehors, non rendu, nitrox, CACI à renouveler, désactivés.</li>
+        <li>La <b>fiche</b> de l'adhérent cliqué : formation, licence, matériel.</li>
+        <li><span class="ui">Modifier</span> et <span class="ui">Désactiver</span>.</li>
+        <li><span class="ui">Passer en enseignant</span>.</li>
+      </ol>
+    </figcaption>
+  </figure>
+
   <h3>Un adhérent devient enseignant (ou l'inverse)</h3>
   <p>Sur la fiche d'un adhérent, <span class="ui">Passer en enseignant</span> ; sur celle d'un enseignant,
     <span class="ui">Passer en adhérent</span> (code demandé, confirmation). L'application ouvre la nouvelle fiche, de
@@ -446,6 +570,19 @@
     <li>l'ancienne fiche est désactivée : son historique, ses sorties et le matériel qu'il a encore restent visibles.
       Un adhérent qui n'a jamais pris de matériel en sortie est retiré, puisqu'il n'a pas d'historique.</li>
   </ul>
+
+  <figure class="ecran" data-image="captures/15-membres-enseignants.png" data-taille="1782x1337" data-cadre="360,40,1400,700" data-hauteur="80"
+    data-reperes="556,183,184,55 ; 1447,77,285,62 ; 586,351,167,55 ; 1192,455,540,285">
+    <figcaption>
+      <div class="titre-fig">Membres › Enseignants</div>
+      <ol class="legende">
+        <li>L'onglet <b>Enseignants</b>.</li>
+        <li><span class="ui">Ajouter un enseignant</span>.</li>
+        <li>Le filtre <b>Inspecteurs TIV</b>.</li>
+        <li>La <b>fiche</b> de l'enseignant ; <span class="ui">Passer en adhérent</span> est tout en bas (faites défiler).</li>
+      </ol>
+    </figcaption>
+  </figure>
 
   <h3>Importer les adhérents depuis Excel</h3>
   <ol class="etapes">
@@ -600,6 +737,21 @@
   </ol>
   <p>L'aperçu de droite résume la sortie. Cliquez sur <span class="ui">Créer et scanner le matériel</span>.</p>
 
+  <figure class="ecran" data-image="captures/05-nouvelle-sortie.png" data-taille="1782x1107" data-cadre="360,60,1422,1010"
+    data-reperes="405,349,880,105 ; 405,610,428,190 ; 855,610,428,190 ; 405,849,880,62 ; 1357,307,374,255 ; 1357,727,375,70">
+    <figcaption>
+      <div class="titre-fig">Sorties › Nouvelle sortie</div>
+      <ol class="legende">
+        <li>Le <b>type</b>, avec ses utilisations par sortie.</li>
+        <li>La <b>date</b> et ses raccourcis (aujourd'hui, demain, week-end).</li>
+        <li>Le <b>lieu</b> : les derniers lieux sont proposés.</li>
+        <li>L'<b>intitulé</b>, proposé automatiquement (« AUTO ») ; on peut le changer.</li>
+        <li>L'<b>aperçu</b> : ce qui manque s'affiche en rouge. Le responsable se choisit plus bas (section 3).</li>
+        <li><span class="ui">Créer et scanner le matériel</span>.</li>
+      </ol>
+    </figcaption>
+  </figure>
+
   <h3>2. Scanner le départ</h3>
   <p>Scannez chaque équipement. Il s'ajoute à la liste avec un bip. Pas besoin de cliquer dans le champ : il reste prêt.</p>
   <ul>
@@ -612,11 +764,53 @@
   <p>Quand tout est scanné : <span class="ui">Valider le départ</span>. On peut encore ajouter du matériel ensuite.
     Les boutons <span class="ui">Modifier la sortie</span> et <span class="ui">Supprimer</span> (sortie vide) sont en haut à droite.</p>
 
+  <figure class="ecran" data-image="captures/06-depart.png" data-taille="1782x1107" data-cadre="360,50,1400,1040"
+    data-reperes="483,762,549,69 ; 380,977,755,94 ; 1192,474,510,285 ; 1645,485,50,250>1740,800 ; 1192,974,512,70 ; 1491,71,241,55">
+    <figcaption>
+      <div class="titre-fig">Départ du matériel : quatre équipements déjà scannés</div>
+      <ol class="legende">
+        <li>Le <b>champ de scan</b> : il reste prêt, il suffit de scanner.</li>
+        <li>Le <b>message</b> du dernier scan (vert = ajouté).</li>
+        <li>Le <b>matériel de la sortie</b>, avec les puces par catégorie au-dessus.</li>
+        <li>La croix <b>Retirer</b> une erreur de scan.</li>
+        <li><span class="ui">Valider le départ</span> quand tout est scanné.</li>
+        <li><span class="ui">Modifier la sortie</span> (date, lieu, responsable…).</li>
+      </ol>
+    </figcaption>
+  </figure>
+
   <h3>3. Scanner le retour</h3>
   <p>Sur l'écran Sorties, carte de la sortie › <span class="ui">Scanner le retour</span>. Scannez chaque équipement rendu :
     il passe dans la colonne « Rendu ». Un équipement d'une autre sortie scanné ici est proposé au retour dans sa sortie.</p>
   <p>S'il y a un souci avec un équipement (fuite, sangle cassée), cliquez sur <span class="ui">Signaler un problème</span>
     tout de suite (chapitre 13).</p>
+
+  <figure class="ecran" data-image="captures/04-sorties-encours.png" data-taille="1782x1337" data-cadre="360,900,1400,437" data-hauteur="60"
+    data-reperes="637,1137,365,59 ; 1264,1137,412,59">
+    <figcaption>
+      <div class="titre-fig">Les cartes des sorties en cours, sur l'écran Sorties</div>
+      <ol class="legende">
+        <li><span class="ui">Scanner le retour</span> d'une sortie partie.</li>
+        <li><span class="ui">Continuer le départ</span> d'une sortie encore en préparation.</li>
+      </ol>
+    </figcaption>
+  </figure>
+
+  <figure class="ecran" data-image="captures/08-retour.png" data-taille="1782x1107" data-cadre="360,50,1400,1040"
+    data-reperes="420,604,431,69 ; 380,719,331,94 ; 727,734,165,65 ; 920,428,394,642 ; 1336,428,394,642 ; 1646,519,55,55>1740,470 ; 560,856,307,60">
+    <figcaption>
+      <div class="titre-fig">Retour du matériel : quatre équipements rendus, quatre encore à rendre</div>
+      <ol class="legende">
+        <li>Le <b>champ de scan</b> du retour.</li>
+        <li>Le <b>message</b> du dernier rendu.</li>
+        <li><span class="ui">Signaler</span> un problème sur cet équipement.</li>
+        <li><b>À rendre</b> : ce qui est encore dehors.</li>
+        <li><b>Rendu</b> : ce qui est revenu, avec l'heure.</li>
+        <li>Le <b>drapeau</b> d'une ligne : signaler un problème sur cet équipement-là.</li>
+        <li><span class="ui">Clôturer la sortie</span> ; le texte dessous dit combien seraient notés manquants.</li>
+      </ol>
+    </figcaption>
+  </figure>
 
   <h3>4. Clôturer</h3>
   <p><span class="ui">Clôturer la sortie</span>. Si tout est rendu, c'est fini. S'il reste du matériel dehors, l'application
@@ -640,6 +834,21 @@
   </ol>
   <p>Tant qu'un équipement attend son adhérent, le scan suivant et la validation du départ sont refusés.
     <span class="ui">Annuler ce scan</span> retire l'équipement en attente.</p>
+
+  <figure class="ecran" data-image="captures/07-nominatif.png" data-taille="1782x1107" data-cadre="360,50,1400,1040"
+    data-reperes="980,230,233,32 ; 380,317,756,401 ; 417,496,681,64 ; 927,655,180,45 ; 1192,542,510,64 ; 1192,974,512,70">
+    <figcaption>
+      <div class="titre-fig">Sortie nominative : le détendeur A06 vient d'être scanné</div>
+      <ol class="legende">
+        <li>Le badge <b>« Nom obligatoire à chaque scan »</b>.</li>
+        <li>Le panneau <b>« À qui est ce détendeur ? »</b>, à la place de la zone de scan.</li>
+        <li>La <b>recherche</b> d'un adhérent : quelques lettres, flèches, Entrée.</li>
+        <li><span class="ui">Annuler ce scan</span>.</li>
+        <li>L'équipement « <b>À attribuer</b> » dans la liste.</li>
+        <li>La validation reste <b>bloquée</b> tant qu'il n'a pas d'adhérent.</li>
+      </ol>
+    </figcaption>
+  </figure>
   <h3>Refus possibles</h3>
   <ul>
     <li>Adhérent désactivé.</li>
@@ -660,6 +869,21 @@
     normalement. Depuis une sortie clôturée (ouverte d'un clic depuis l'onglet Clôturées), on peut aussi le scanner ou cliquer
     <span class="ui">Marquer rendu</span> sur sa ligne (code gestionnaire demandé).</p>
 
+  <figure class="ecran" data-image="captures/02-cloturees.png" data-taille="1782x1337" data-cadre="360,50,1400,790" data-hauteur="100"
+    data-reperes="402,285,692,66 ; 1110,285,585,61 ; 402,378,481,42 ; 1259,372,450,45 ; 1408,622,130,30 ; 1594,610,121,51">
+    <figcaption>
+      <div class="titre-fig">Sorties › Clôturées</div>
+      <ol class="legende">
+        <li>La <b>recherche</b> : intitulé, lieu ou responsable.</li>
+        <li>La <b>période</b> et le <b>responsable</b>.</li>
+        <li>Les puces par <b>type</b> de sortie.</li>
+        <li><b>Manquants</b> : seulement les sorties avec du matériel non rendu.</li>
+        <li>Le <b>bilan</b> de la sortie : ici, un manquant.</li>
+        <li><span class="ui">Détail ›</span> ouvre la sortie (scanner un manquant, « Marquer rendu »).</li>
+      </ol>
+    </figcaption>
+  </figure>
+
   <h3>Signaler un problème</h3>
   <p>Au retour (bouton <span class="ui">Signaler un problème</span> ou drapeau sur la ligne) ou depuis l'inventaire (drapeau de la colonne Actions) :</p>
   <ol class="etapes">
@@ -671,6 +895,18 @@
       </ul>
     </li>
   </ol>
+  <figure class="ecran" data-image="captures/09-signalement.png" data-taille="1782x1107" data-cadre="566,105,650,890" data-hauteur="115"
+    data-reperes="601,322,580,235 ; 601,627,580,95 ; 601,775,580,64 ; 945,902,236,62">
+    <figcaption>
+      <div class="titre-fig">La fenêtre « Problème sur A05 »</div>
+      <ol class="legende une">
+        <li>La <b>cause</b> : les tuiles dépendent de la catégorie (ici, détendeurs).</li>
+        <li>La <b>gravité</b> : <b>À surveiller</b> ou <b>Hors service</b>.</li>
+        <li>Une <b>précision</b>, facultative.</li>
+        <li><span class="ui">Signaler le problème</span>.</li>
+      </ol>
+    </figcaption>
+  </figure>
   <p>Le problème apparaît en tête de la colonne « À prévoir » des Révisions. La prochaine intervention enregistrée le ferme
     et, si c'est lui qui avait mis l'équipement hors service, le remet en service.</p>
 </section>
@@ -688,6 +924,24 @@
     <tr><td><b>4 · Chez le prestataire</b></td><td>En réparation à l'extérieur ; en rouge si la date de retour prévue est passée. <span class="ui">Retour du prestataire</span>.</td></tr>
     <tr><td><b>5 · Fait</b></td><td>Les interventions des 30 derniers jours. <span class="ui">Archiver tout</span> pour faire le ménage (rien n'est supprimé).</td></tr>
   </table>
+
+  <figure class="ecran" data-image="captures/16-revisions.png" data-taille="2132x1107" data-cadre="360,50,1772,1020"
+    data-reperes="380,185,724,42 ; 1728,178,353,64 ; 1559,77,203,62 ; 1777,77,305,62 ; 380,418,1670,70 ; 655,432,37,55>720,520 ; 396,550,290,365 ; 410,784,262,117>760,850 ; 733,545,290,70>1080,660">
+    <figcaption>
+      <div class="titre-fig">Révisions : un détendeur signalé et des blocs à prévoir</div>
+      <ol class="legende">
+        <li>Les <b>familles</b> : signalé, TIV, requalification, détendeurs…</li>
+        <li><b>Scannez un équipement</b> pour ajouter une intervention.</li>
+        <li><span class="ui">Registre PDF</span> des contrôles.</li>
+        <li><span class="ui">Ajouter une intervention</span>.</li>
+        <li>Les <b>5 colonnes</b>, de gauche à droite.</li>
+        <li>L'<b>œil</b> replie une colonne.</li>
+        <li>Une <b>carte</b> : problème signalé, précision, lieu.</li>
+        <li>Les <b>actions</b> de la carte.</li>
+        <li>La prochaine <b>séance TIV</b> (clic pour la modifier).</li>
+      </ol>
+    </figcaption>
+  </figure>
   <h3>Enregistrer une intervention</h3>
   <p>Date, nature, intervenant (inspecteur obligatoire pour une TIV), résultat et description :</p>
   <ul>
@@ -723,14 +977,65 @@
   <p>Colonne <b>Actions</b> : fiche de suivi EPI, signaler un problème, modifier, et la corbeille pour un équipement jamais
     utilisé (chapitre 6). <span class="ui">Exporter CSV</span> exporte les lignes affichées.</p>
 
+  <figure class="ecran" data-image="captures/11-inventaire-filtres.png" data-taille="2132x1107" data-cadre="360,50,1772,1020"
+    data-reperes="380,178,1697,66 ; 380,260,1175,67 ; 1568,260,163,67 ; 1744,263,338,61 ; 486,345,936,46 ; 380,412,1700,232 ; 380,672,320,28 ; 460,815,165,25>560,900 ; 1170,850,115,20>1230,920 ; 1878,812,160,50>1820,920">
+    <figcaption>
+      <div class="titre-fig">Inventaire, avec le panneau des filtres ouvert</div>
+      <ol class="legende">
+        <li>Les <b>catégories</b> et leur nombre d'équipements.</li>
+        <li>La <b>recherche</b> (on peut aussi scanner).</li>
+        <li><span class="ui">Filtres</span> ouvre ou ferme le panneau.</li>
+        <li><b>Trier par</b>.</li>
+        <li>Les <b>raccourcis</b> : un clic pour les cas courants.</li>
+        <li>Le <b>panneau des filtres</b> : cochez une ou plusieurs valeurs.</li>
+        <li>Le <b>nombre</b> d'équipements affichés.</li>
+        <li>Le <b>nom souligné</b> ouvre la fiche de suivi EPI.</li>
+        <li><b>Voir les sorties</b> de cet équipement.</li>
+        <li>Les <b>actions</b> : fiche EPI, signaler, modifier.</li>
+      </ol>
+    </figcaption>
+  </figure>
+
   <h3>Fiche de suivi EPI</h3>
   <p>Clic sur le nom d'un équipement (ou double-clic, ou Entrée). La fiche réunit ses composants (premier étage, deuxième
     étage, octopus, manomètre), toutes ses interventions, ses problèmes signalés, et s'imprime en PDF avec
     <span class="ui">Imprimer la fiche</span>.</p>
 
+  <figure class="ecran" data-image="captures/12-fiche-epi.png" data-taille="2132x1107" data-cadre="360,60,1772,950" data-hauteur="110"
+    data-reperes="380,133,1695,205 ; 1802,205,241,60 ; 380,450,1695,290 ; 1794,371,269,69 ; 380,860,1695,128 ; 1758,780,305,69">
+    <figcaption>
+      <div class="titre-fig">Fiche de suivi EPI du détendeur A03</div>
+      <ol class="legende">
+        <li>L'<b>en-tête</b> : où il est, son compteur, sa prochaine révision.</li>
+        <li><span class="ui">Imprimer la fiche</span> en PDF.</li>
+        <li>Ses <b>composants</b> (ici le premier étage).</li>
+        <li><span class="ui">+ Ajouter un composant</span>.</li>
+        <li>Toutes ses <b>interventions</b>, problèmes signalés compris.</li>
+        <li><span class="ui">Ajouter une intervention</span>.</li>
+      </ol>
+    </figcaption>
+  </figure>
+
   <h3>Manuels</h3>
   <p>Ouvrez une notice, cliquez sur une section du sommaire pour y aller, imprimez une partie ou tout. Les bénévoles
     peuvent les consulter sans code.</p>
+
+  <figure class="ecran" data-image="captures/21-manuels.png" data-taille="1782x1107" data-cadre="360,50,1400,1040"
+    data-reperes="380,185,474,42 ; 382,235,474,157 ; 1020,250,245,60 ; 1488,250,220,60 ; 930,345,300,560 ; 1300,355,392,550 ; 930,1000,800,70 ; 1429,77,302,62">
+    <figcaption>
+      <div class="titre-fig">Manuels : la notice des détendeurs Aqua Lung</div>
+      <ol class="legende">
+        <li>Les <b>catégories</b> de notices.</li>
+        <li>Une <b>notice</b> : marque, modèles, pages, équipements liés.</li>
+        <li>Page <b>précédente / suivante</b>.</li>
+        <li><b>Modifier</b>, <b>retirer</b>, <b>plein écran</b>, <b>imprimer</b>.</li>
+        <li>Le <b>sommaire</b> : un clic va à la page.</li>
+        <li>La <b>page</b> du PDF.</li>
+        <li>Les <b>équipements liés</b> (même marque et catégorie).</li>
+        <li><span class="ui">Ajouter un manuel (PDF)</span>.</li>
+      </ol>
+    </figcaption>
+  </figure>
 </section>
 
 <!-- ============ 16 ============ -->
@@ -739,6 +1044,19 @@
   <h3>Historique</h3>
   <p>Le journal, jour par jour, de tous les départs, retours, contrôles et modifications. Période : 7 jours, 30 jours,
     saison (depuis le 1er septembre) ou tout. Cliquez sur un code pour voir la vie de l'équipement. Le journal s'exporte en CSV.</p>
+
+  <figure class="ecran" data-image="captures/19-historique.png" data-taille="1782x1107" data-cadre="360,50,1400,1040" data-hauteur="110"
+    data-reperes="1203,77,294,61 ; 1524,77,208,62 ; 380,178,973,55 ; 1245,270,470,240">
+    <figcaption>
+      <div class="titre-fig">Historique</div>
+      <ol class="legende">
+        <li>La <b>période</b>.</li>
+        <li><span class="ui">Exporter CSV</span>.</li>
+        <li>Les <b>types d'événements</b> : départs, retours, révisions, manquants…</li>
+        <li>La <b>vie d'un équipement</b> : tapez ou scannez son code.</li>
+      </ol>
+    </figcaption>
+  </figure>
 
   <h3>Bilan de saison</h3>
   <p>Saison en cours ou précédente (du 1er septembre au 31 août). L'écran montre :</p>
@@ -749,7 +1067,18 @@
     <li>le matériel <b>peu sorti</b> (moins de 3 sorties) ;</li>
     <li>les contrôles faits par famille.</li>
   </ul>
-  <p>Le bouton d'export crée un PDF prêt à présenter à l'assemblée générale.</p>
+  <p>Le bouton <span class="ui">Rapport PDF pour l'AG</span> crée un PDF prêt à présenter à l'assemblée générale.</p>
+
+  <figure class="ecran" data-image="captures/20-bilan.png" data-taille="1782x1107" data-cadre="360,50,1400,1040" data-hauteur="110"
+    data-reperes="385,171,435,65 ; 1446,77,286,62">
+    <figcaption>
+      <div class="titre-fig">Bilan de saison</div>
+      <ol class="legende">
+        <li>La <b>saison</b> : précédente ou en cours.</li>
+        <li><span class="ui">Rapport PDF pour l'AG</span>.</li>
+      </ol>
+    </figcaption>
+  </figure>
   <div class="encadre">
     <span class="titre">Comment l'enregistrer en PDF</span>
     <p>Les documents passent par l'imprimante « Microsoft Print to PDF », présente sur tous les Windows 10 et 11.
@@ -801,5 +1130,53 @@
   </table>
 </section>
 
+<script>
+/* Dessine chaque capture annotée.
+   <figure class="ecran" data-image="captures/x.png" data-taille="1782x1107" data-cadre="x,y,l,h" data-reperes="x,y,l,h ; x,y,l,h>bx,by ; …">
+   Coordonnées en pixels de la capture. Chaque repère entoure une zone ; son numéro (1, 2…) est placé sur le coin
+   haut droit de la zone, ou en bx,by avec une flèche vers la zone. Le numéro correspond à la légende. */
+(function () {
+  const ns = 'http://www.w3.org/2000/svg';
+  const el = (nom, attrs, parent) => { const e = document.createElementNS(ns, nom); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+  let id = 0;
+  document.querySelectorAll('figure.ecran').forEach(fig => {
+    const [W, H] = fig.dataset.taille.split('x').map(Number);
+    const [cx, cy, cw, ch] = (fig.dataset.cadre || `0,0,${W},${H}`).split(',').map(Number);
+    const s = Math.max(cw, ch * 1.3) / 1300;            // repères de même taille à l'impression, quel que soit le cadrage
+    const couleur = getComputedStyle(document.documentElement).getPropertyValue('--repere').trim() || '#ff2e88';
+    const svg = el('svg', { viewBox: `${cx} ${cy} ${cw} ${ch}`, role: 'img' });
+    const hauteurMax = Number(fig.dataset.hauteur || 125);  // en mm
+    svg.style.width = `min(100%, ${(hauteurMax * cw / ch).toFixed(1)}mm)`;
+    const defs = el('defs', {}, svg);
+    const fl = 'fleche' + (++id);
+    const m = el('marker', { id: fl, viewBox: '0 0 10 10', refX: 7, refY: 5, markerWidth: 4, markerHeight: 4, orient: 'auto-start-reverse' }, defs);
+    el('path', { d: 'M0,0 L10,5 L0,10 z', fill: couleur }, m);
+    el('image', { href: fig.dataset.image, x: 0, y: 0, width: W, height: H }, svg);
+    const calque = el('g', {}, svg), badges = el('g', {}, svg);
+    (fig.dataset.reperes || '').split(';').map(t => t.trim()).filter(Boolean).forEach((t, i) => {
+      const [zone, badge] = t.split('>');
+      const [x, y, w, h] = zone.split(',').map(Number);
+      const r = 21 * s, marge = 5 * s;
+      const rect = { x: x - marge, y: y - marge, w: w + 2 * marge, h: h + 2 * marge };
+      el('rect', { x: rect.x, y: rect.y, width: rect.w, height: rect.h, rx: 10 * s, fill: 'none', stroke: 'rgba(0,0,0,.45)', 'stroke-width': 9 * s }, calque);
+      el('rect', { x: rect.x, y: rect.y, width: rect.w, height: rect.h, rx: 10 * s, fill: 'rgba(255,46,136,.10)', stroke: couleur, 'stroke-width': 4.5 * s }, calque);
+      let bx = rect.x + rect.w, by = rect.y;  // coin haut droit : les libellés sont à gauche
+      if (badge) {
+        [bx, by] = badge.split(',').map(Number);
+        const px = Math.min(Math.max(bx, rect.x), rect.x + rect.w), py = Math.min(Math.max(by, rect.y), rect.y + rect.h);
+        const d = Math.hypot(px - bx, py - by) || 1, ux = (px - bx) / d, uy = (py - by) / d;
+        const x1 = bx + ux * r, y1 = by + uy * r, x2 = px - ux * 4 * s, y2 = py - uy * 4 * s;
+        el('line', { x1, y1, x2, y2, stroke: 'rgba(0,0,0,.45)', 'stroke-width': 9 * s, 'stroke-linecap': 'round' }, calque);
+        el('line', { x1, y1, x2, y2, stroke: couleur, 'stroke-width': 5 * s, 'stroke-linecap': 'round', 'marker-end': `url(#${fl})` }, calque);
+      }
+      el('circle', { cx: bx, cy: by, r: r + 3 * s, fill: '#fff' }, badges);
+      el('circle', { cx: bx, cy: by, r, fill: couleur }, badges);
+      const n = el('text', { x: bx, y: by + 9 * s, 'text-anchor': 'middle', 'font-size': 26 * s, 'font-weight': 700, fill: '#fff', 'font-family': 'Segoe UI, Arial, sans-serif' }, badges);
+      n.textContent = String(i + 1);
+    });
+    fig.insertBefore(svg, fig.firstChild);
+  });
+})();
+</script>
 </body>
 </html>
