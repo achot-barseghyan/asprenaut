@@ -65,6 +65,7 @@ public sealed class ServiceHistorique(
         [ActionsJournal.AdherentCree] = (TypeEvenement.Autre, "Adhérent ajouté"),
         [ActionsJournal.AdherentModifie] = (TypeEvenement.Autre, "Adhérent modifié"),
         [ActionsJournal.AdherentsImportes] = (TypeEvenement.Autre, "Liste des adhérents importée"),
+        [ActionsJournal.InventaireImporte] = (TypeEvenement.Materiel, "Inventaire importé"),
         ["DonneesDemo"] = (TypeEvenement.Autre, "Données de démonstration"),
     };
 

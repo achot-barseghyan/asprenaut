@@ -42,6 +42,12 @@ public sealed class EcranInventaire : EcranBase
         ajouter.Click += (_, _) => Executer(AjouterEquipementAsync);
         var exporter = new BoutonArrondi("Exporter CSV", StyleBouton.Secondaire, Icones.Telecharger);
         exporter.Click += (_, _) => Executer(ExporterAsync);
+        var importer = new BoutonArrondi("Importer Excel", StyleBouton.Secondaire, Icones.Document);
+        _garde.Lier(importer, ActionProtegee.Materiel);
+        importer.Click += (_, _) => Executer(ImporterAsync);
+        var modele = new BoutonArrondi("Modèle Excel", StyleBouton.Secondaire, Icones.Telecharger);
+        modele.AccessibleDescription = "Fichier Excel vide à remplir avec le matériel du club, puis à importer";
+        modele.Click += (_, _) => Executer(EnregistrerModeleAsync); // Libre : ne change aucune donnée.
 
         _recherche.Margin = new Padding(0, 0, 0, 20);
         _recherche.Champ.TextChanged += (_, _) =>
@@ -141,7 +147,7 @@ public sealed class EcranInventaire : EcranBase
         carteGrille.Controls.Add(_grille);
 
         Controls.Add(Ui.Colonne(
-            (Ui.Entete(Ui.Pile(Ui.Titre(Titre), Ui.SousTitre("Tout le matériel du club, son état et sa prochaine révision.")), ajouter, exporter), SizeType.AutoSize, 0),
+            (Ui.Entete(Ui.Pile(Ui.Titre(Titre), Ui.SousTitre("Tout le matériel du club, son état et sa prochaine révision.")), ajouter, importer, modele, exporter), SizeType.AutoSize, 0),
             (_categories, SizeType.Absolute, 76 + 20),
             (_recherche, SizeType.Absolute, 54 + 20),
             (carteGrille, SizeType.Percent, 100)));
@@ -272,6 +278,66 @@ public sealed class EcranInventaire : EcranBase
         if (await Fichiers.EnregistrerCsvAsync(FindForm(), "Exporter l'inventaire", _inventaire.NomFichierExport(), _inventaire.ExporterCsv(_lignes)))
         {
             Dialogues.Information(FindForm(), $"Inventaire exporté : {Libelles.Pluriel(_lignes.Count, "équipement")}.");
+        }
+    }
+
+    /// <summary>« Modèle Excel » : classeur vide aux colonnes de l'import, à remplir puis à importer.</summary>
+    private async Task EnregistrerModeleAsync()
+    {
+        var c = Theme.LogoFonce; // Couleur de l'en-tête : celle du logo (fixe dans les deux thèmes).
+        var noms = (await _inventaire.ListerCategoriesAsync()).Select(x => x.Nom).ToList();
+        var colonnes = ServiceInventaire.ColonnesModeleInventaire(noms).Select(m => new ColonneClasseur(
+            m.EnTete, m.Obligatoire ? $"Obligatoire. {m.Aide}" : m.Aide, m.Largeur, m.Choix)).ToList();
+        await Fichiers.EnregistrerXlsxAsync(FindForm(), "Enregistrer le modèle de l'inventaire",
+            ServiceInventaire.NomFichierModeleInventaire(_reglages.Actuels.NomClub),
+            chemin => EcrivainTableur.EcrireModele(chemin, "Inventaire", colonnes, ServiceInventaire.ModeEmploiModeleInventaire, $"{c.R:X2}{c.G:X2}{c.B:X2}"));
+    }
+
+    /// <summary>« Importer Excel » : fichier .xlsx ou .csv (le modèle rempli, ou un export de l'inventaire).</summary>
+    private async Task ImporterAsync()
+    {
+        if (!_garde.Exiger(FindForm(), ActionProtegee.Materiel, "Importer l'inventaire"))
+        {
+            return;
+        }
+
+        using var dialogue = new OpenFileDialog
+        {
+            Title = "Importer l'inventaire",
+            Filter = LecteurTableur.Filtre,
+            CheckFileExists = true,
+        };
+        if (dialogue.ShowDialog(FindForm()) != DialogResult.OK)
+        {
+            return;
+        }
+
+        IReadOnlyList<IReadOnlyList<string>> tableau;
+        try
+        {
+            var chemin = dialogue.FileName;
+            tableau = await Task.Run(() => LecteurTableur.Lire(chemin));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidDataException or System.Xml.XmlException)
+        {
+            Dialogues.Erreur(FindForm(), "Ce fichier n'a pas pu être lu. Enregistrez l'inventaire en .xlsx ou en .csv, puis réessayez.");
+            return;
+        }
+
+        var resultat = await _inventaire.ImporterAsync(tableau);
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        if (resultat.Reussi)
+        {
+            Dialogues.Information(FindForm(), resultat.Message);
+            await ChargerAsync(null);
+        }
+        else
+        {
+            Dialogues.Erreur(FindForm(), resultat.Message);
         }
     }
 

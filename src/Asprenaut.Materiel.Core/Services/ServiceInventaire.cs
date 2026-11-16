@@ -6,7 +6,7 @@ using Asprenaut.Materiel.Core.Saisie;
 namespace Asprenaut.Materiel.Core.Services;
 
 /// <summary>Inventaire : consultation, création, modification et export des équipements.</summary>
-public sealed class ServiceInventaire(
+public sealed partial class ServiceInventaire(
     IEquipementRepository equipements,
     ICategorieRepository categories,
     IJournalRepository journal,
@@ -111,7 +111,7 @@ public sealed class ServiceInventaire(
 
         if (changements.Count == 0)
         {
-            return ResultatOperation.Ok("Rien n'a changé.", actuel.Id);
+            return ResultatOperation.Ok(RienNaChange, actuel.Id);
         }
 
         var ancienCode = actuel.Code;
@@ -752,7 +752,14 @@ public sealed class ServiceInventaire(
     /// Crée un équipement (depuis l'inventaire, ou après le scan d'un code inconnu). Code unique et nettoyé,
     /// nom et catégorie obligatoires ; la requalification ne concerne que les blocs.
     /// </summary>
-    public async Task<ResultatOperation> CreerAsync(Equipement nouveau, DateOnly? derniereRevision = null, CancellationToken ct = default)
+    public Task<ResultatOperation> CreerAsync(Equipement nouveau, DateOnly? derniereRevision = null, CancellationToken ct = default) =>
+        CreerAsync(nouveau, derniereRevision, datesPasseesAcceptees: false, ct);
+
+    /// <summary>
+    /// Création ; <paramref name="datesPasseesAcceptees"/> (import d'un registre existant) : une TIV ou une requalification
+    /// déjà dépassée est un état réel, gardé comme à la modification.
+    /// </summary>
+    private async Task<ResultatOperation> CreerAsync(Equipement nouveau, DateOnly? derniereRevision, bool datesPasseesAcceptees, CancellationToken ct)
     {
         if (gestion?.Exiger(ActionProtegee.Materiel) is { Reussi: false } refus)
         {
@@ -789,7 +796,7 @@ public sealed class ServiceInventaire(
         }
 
         var aujourdHui = horloge.AujourdHui;
-        if ((revisionAEnregistrer is null && nouveau.DateProchaineRevision < aujourdHui) || nouveau.DateRequalification < aujourdHui)
+        if (!datesPasseesAcceptees && ((revisionAEnregistrer is null && nouveau.DateProchaineRevision < aujourdHui) || nouveau.DateRequalification < aujourdHui))
         {
             return ResultatOperation.Echec("Une date de prochain contrôle est déjà passée. Vérifiez-la.");
         }

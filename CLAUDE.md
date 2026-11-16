@@ -512,6 +512,15 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     Le nom du club s'affiche en haut du menu (une ligne, « … » si trop long, nom entier en bulle) : `ServiceReglages.ClubChange`
     → `MainForm.RefaireMenu`.
 
+42. Import Excel de l'inventaire (`ServiceInventaire.ImporterAsync`, `Services/ServiceInventaireImport.cs`, `ImportInventaireTests`,
+    action protégée Matériel) : boutons « Importer Excel » (lié) et « Modèle Excel » (libre) de l'Inventaire ; fichier .xlsx ou .csv
+    lu par `LecteurTableur`. En-tête = première ligne avec « Code » ; colonnes de l'export CSV (un export se réimporte) et variantes
+    (`EnTetesImport`). Code connu → `ModifierAsync` avec les seules cases remplies (« Rien n'a changé » = inchangé) ; nouveau →
+    `CreerAsync` (nom et catégorie obligatoires, échéances passées acceptées). Catégorie reconnue sans majuscules, accents ni « s »
+    final, sinon créée. Dernière révision : comme dans la fiche (contrôle + prochaine calculée). Ligne ignorée et citée (5 au plus)
+    si code manquant ou en double, date / D.S / Nitrox / montage illisible, ou refus du service. Rien n'est supprimé ; état non importé.
+    Journal `InventaireImporte`. Modèle : `ColonnesModeleInventaire(categories)`, `NomFichierModeleInventaire`, `ModeEmploiModeleInventaire`.
+
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
 à côté de la base d'essai : les essais ne touchent jamais les réglages réels. Préfixe des étiquettes : `CodeScanne.Nettoyer(brut, prefixe)`.

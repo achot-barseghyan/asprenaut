@@ -55,4 +55,5 @@ public static class ActionsJournal
     public const string AdherentCree = "AdherentCree";
     public const string AdherentModifie = "AdherentModifie";
     public const string AdherentsImportes = "AdherentsImportes";
+    public const string InventaireImporte = "InventaireImporte";
 }
