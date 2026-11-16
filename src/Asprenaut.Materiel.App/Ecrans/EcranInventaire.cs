@@ -12,6 +12,7 @@ namespace Asprenaut.Materiel.App.Ecrans;
 public sealed class EcranInventaire : EcranBase
 {
     private readonly ServiceInventaire _inventaire;
+    private readonly ServiceRevisions _revisions;
     private readonly INavigation _navigation;
     private readonly ServiceReglages _reglages;
     private readonly ServiceCompteur _compteur;
@@ -28,11 +29,12 @@ public sealed class EcranInventaire : EcranBase
     private IReadOnlyDictionary<long, Signalement> _problemes = new Dictionary<long, Signalement>();
 
     public EcranInventaire(ServiceInventaire inventaire, INavigation navigation, ServiceReglages reglages, ServiceCompteur compteur, GardeGestion garde,
-        ServiceSignalements signalements)
+        ServiceSignalements signalements, ServiceRevisions revisions)
     {
         _garde = garde;
         _signalements = signalements;
         _inventaire = inventaire;
+        _revisions = revisions;
         _navigation = navigation;
         _compteur = compteur;
         _reglages = reglages;
@@ -45,6 +47,10 @@ public sealed class EcranInventaire : EcranBase
         var importer = new BoutonArrondi("Importer Excel", StyleBouton.Secondaire, Icones.Document);
         _garde.Lier(importer, ActionProtegee.Materiel);
         importer.Click += (_, _) => Executer(ImporterAsync);
+        var fiches = new BoutonArrondi("Fiches EPI", StyleBouton.Secondaire, Icones.Document);
+        fiches.AccessibleDescription = "Importer l'historique des interventions depuis le classeur Excel des fiches de suivi EPI (un onglet par équipement)";
+        _garde.Lier(fiches, ActionProtegee.Revisions);
+        fiches.Click += (_, _) => Executer(ImporterFichesEpiAsync);
         var modele = new BoutonArrondi("Modèle Excel", StyleBouton.Secondaire, Icones.Telecharger);
         modele.AccessibleDescription = "Fichier Excel vide à remplir avec le matériel du club, puis à importer";
         modele.Click += (_, _) => Executer(EnregistrerModeleAsync); // Libre : ne change aucune donnée.
@@ -153,7 +159,7 @@ public sealed class EcranInventaire : EcranBase
         carteGrille.Controls.Add(_grille);
 
         Controls.Add(Ui.Colonne(
-            (Ui.Entete(Ui.Pile(Ui.Titre(Titre), Ui.SousTitre("Tout le matériel du club, son état et sa prochaine révision.")), ajouter, importer, modele, exporter), SizeType.AutoSize, 0),
+            (Ui.Entete(Ui.Pile(Ui.Titre(Titre), Ui.SousTitre("Tout le matériel du club, son état et sa prochaine révision.")), ajouter, importer, fiches, modele, exporter), SizeType.AutoSize, 0),
             (_categories, SizeType.Absolute, 76 + 20),
             (_recherche, SizeType.Absolute, 54 + 20),
             (carteGrille, SizeType.Percent, 100)));
@@ -340,6 +346,56 @@ public sealed class EcranInventaire : EcranBase
         {
             Dialogues.Information(FindForm(), resultat.Message);
             await ChargerAsync(null);
+        }
+        else
+        {
+            Dialogues.Erreur(FindForm(), resultat.Message);
+        }
+    }
+
+    /// <summary>
+    /// « Fiches EPI » : classeur Excel des fiches de suivi (un onglet par équipement, nommé par son code) ; les interventions
+    /// de chaque composant rejoignent l'historique de l'équipement (fiche de suivi EPI).
+    /// </summary>
+    private async Task ImporterFichesEpiAsync()
+    {
+        if (!_garde.Exiger(FindForm(), ActionProtegee.Revisions, "Importer les fiches EPI"))
+        {
+            return;
+        }
+
+        using var dialogue = new OpenFileDialog
+        {
+            Title = "Importer les fiches de suivi EPI",
+            Filter = LecteurTableur.FiltreClasseur,
+            CheckFileExists = true,
+        };
+        if (dialogue.ShowDialog(FindForm()) != DialogResult.OK)
+        {
+            return;
+        }
+
+        IReadOnlyList<FeuilleTableur> feuilles;
+        try
+        {
+            var chemin = dialogue.FileName;
+            feuilles = await Task.Run(() => LecteurTableur.LireFeuilles(chemin));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidDataException or System.Xml.XmlException)
+        {
+            Dialogues.Erreur(FindForm(), "Ce classeur n'a pas pu être lu. Enregistrez-le en .xlsx ou .xlsm, puis réessayez.");
+            return;
+        }
+
+        var resultat = await _revisions.ImporterFichesEpiAsync(feuilles);
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        if (resultat.Reussi)
+        {
+            Dialogues.Information(FindForm(), resultat.Message);
         }
         else
         {

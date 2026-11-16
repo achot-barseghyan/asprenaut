@@ -60,4 +60,5 @@ public static class ActionsJournal
     public const string MoniteurDevenuAdherent = "MoniteurDevenuAdherent";
     public const string InventaireImporte = "InventaireImporte";
     public const string UtilisationsReprises = "UtilisationsReprises";
+    public const string FichesEpiImportees = "FichesEpiImportees";
 }

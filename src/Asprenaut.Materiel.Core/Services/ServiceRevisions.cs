@@ -9,7 +9,7 @@ namespace Asprenaut.Materiel.Core.Services;
 /// Révisions : échéancier des contrôles (TIV, requalification, révision), enregistrement d'un contrôle,
 /// passages en atelier et séances TIV. Délais pris dans <see cref="Reglages"/>.
 /// </summary>
-public sealed class ServiceRevisions(
+public sealed partial class ServiceRevisions(
     IEquipementRepository equipements,
     ICategorieRepository categories,
     ISortieRepository sorties,

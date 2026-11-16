@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Text;
 using System.Xml.Linq;
+using Asprenaut.Materiel.Core.Services;
 
 namespace Asprenaut.Materiel.App.Infrastructure;
 
@@ -15,7 +16,7 @@ public static class LecteurTableur
     public static IReadOnlyList<IReadOnlyList<string>> Lire(string chemin)
     {
         using var flux = new FileStream(chemin, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        return Path.GetExtension(chemin).Equals(".xlsx", StringComparison.OrdinalIgnoreCase) ? LireXlsx(flux) : LireCsv(flux);
+        return Path.GetExtension(chemin).ToLowerInvariant() is ".xlsx" or ".xlsm" ? LireXlsx(flux) : LireCsv(flux);
     }
 
     // ---------------------------------------------------------------- CSV
@@ -104,6 +105,57 @@ public static class LecteurTableur
     public static IReadOnlyList<IReadOnlyList<string>> LireXlsx(Stream flux)
     {
         using var zip = new ZipArchive(flux, ZipArchiveMode.Read, leaveOpen: true);
+        var partages = TextesPartages(zip);
+
+        var entreeFeuille = zip.GetEntry(CheminPremiereFeuille(zip)) ?? zip.Entries.First(e => e.FullName.StartsWith("xl/worksheets/", StringComparison.OrdinalIgnoreCase) && e.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase));
+        return LireFeuille(entreeFeuille, partages);
+    }
+
+    public const string FiltreClasseur = "Classeur Excel (*.xlsx;*.xlsm)|*.xlsx;*.xlsm";
+
+    /// <summary>
+    /// Toutes les feuilles d'un classeur .xlsx ou .xlsm (avec macros : elles ne sont pas lues), dans l'ordre des onglets.
+    /// Le fichier peut rester ouvert dans Excel.
+    /// </summary>
+    public static IReadOnlyList<FeuilleTableur> LireFeuilles(string chemin)
+    {
+        using var flux = new FileStream(chemin, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var zip = new ZipArchive(flux, ZipArchiveMode.Read);
+        var partages = TextesPartages(zip);
+        XDocument classeur, rels;
+        using (var s = zip.GetEntry("xl/workbook.xml")?.Open() ?? throw new InvalidDataException("Classeur sans workbook.xml."))
+        {
+            classeur = XDocument.Load(s);
+        }
+
+        using (var s = zip.GetEntry("xl/_rels/workbook.xml.rels")?.Open() ?? throw new InvalidDataException("Classeur sans relations."))
+        {
+            rels = XDocument.Load(s);
+        }
+
+        var cibles = rels.Descendants(RelationsPaquet + "Relationship")
+            .ToDictionary(r => (string?)r.Attribute("Id") ?? "", r => (string?)r.Attribute("Target") ?? "");
+        var feuilles = new List<FeuilleTableur>();
+        foreach (var sheet in classeur.Descendants(Feuille + "sheet"))
+        {
+            var id = (string?)sheet.Attribute(Relations + "id") ?? "";
+            if (!cibles.TryGetValue(id, out var cible))
+            {
+                continue;
+            }
+
+            var chemin2 = cible.StartsWith('/') ? cible.TrimStart('/') : $"xl/{cible}";
+            if (zip.GetEntry(chemin2) is { } entree)
+            {
+                feuilles.Add(new FeuilleTableur((string?)sheet.Attribute("name") ?? "", LireFeuille(entree, partages)));
+            }
+        }
+
+        return feuilles;
+    }
+
+    private static List<string> TextesPartages(ZipArchive zip)
+    {
         var partages = new List<string>();
         if (zip.GetEntry("xl/sharedStrings.xml") is { } entreeTextes)
         {
@@ -111,7 +163,11 @@ public static class LecteurTableur
             partages.AddRange(XDocument.Load(s).Descendants(Feuille + "si").Select(si => string.Concat(si.Descendants(Feuille + "t").Select(t => t.Value))));
         }
 
-        var entreeFeuille = zip.GetEntry(CheminPremiereFeuille(zip)) ?? zip.Entries.First(e => e.FullName.StartsWith("xl/worksheets/", StringComparison.OrdinalIgnoreCase) && e.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase));
+        return partages;
+    }
+
+    private static IReadOnlyList<IReadOnlyList<string>> LireFeuille(ZipArchiveEntry entreeFeuille, List<string> partages)
+    {
         XDocument doc;
         using (var s = entreeFeuille.Open())
         {

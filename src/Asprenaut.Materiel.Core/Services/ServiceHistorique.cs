@@ -70,6 +70,7 @@ public sealed class ServiceHistorique(
         [ActionsJournal.AdherentsImportes] = (TypeEvenement.Autre, "Liste des adhérents importée"),
         [ActionsJournal.InventaireImporte] = (TypeEvenement.Materiel, "Inventaire importé"),
         [ActionsJournal.UtilisationsReprises] = (TypeEvenement.Materiel, "Compteur d'utilisation repris"),
+        [ActionsJournal.FichesEpiImportees] = (TypeEvenement.Revision, "Fiches EPI importées"),
         ["DonneesDemo"] = (TypeEvenement.Autre, "Données de démonstration"),
     };
 

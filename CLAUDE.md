@@ -549,6 +549,18 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     (aucune ligne sortie_equipement) : il est supprimé (`IAdherentRepository.SupprimerSiJamaisSortiAsync`, re-vérifié en SQL,
     journal détaché). Un moniteur n'est jamais supprimé. Journal `AdherentDevenuMoniteur` / `MoniteurDevenuAdherent`.
 
+45. Import des fiches de suivi EPI (`ServiceRevisions.ImporterFichesEpiAsync`, `Services/ServiceRevisionsImport.cs`, `ImportFichesEpiTests`,
+    action protégée Révisions) : bouton « Fiches EPI » de l'Inventaire, classeur .xlsx / .xlsm du club (« INVENTAIRE.xlsm ») lu onglet
+    par onglet (`LecteurTableur.LireFeuilles` → `FeuilleTableur`). Un onglet = un équipement, d'après son nom : code identique
+    (espaces et majuscules ignorés), sinon aux zéros près s'il n'y en a qu'un (« A2 » → A02, « E 42 » → E42 ; « A1 » et « A01 » sont
+    deux détendeurs). Ligne d'en-tête « Nom de l'intervenant | Nature de l'intervention | date », une fois par composant : le
+    libellé écrit plus haut dans la colonne donne le composant (détendeur : Premier étage, Deuxième étage, Octopus ; autres
+    catégories : équipement complet). Une ligne = un contrôle (type `TypesPour(catégorie)[0]`, conforme, « à surveiller » si écrit,
+    nature et intervenant tels quels). Dates : numéro de série Excel ou jj/mm/aaaa ; illisible, vide ou future → celle de la même
+    ligne d'un autre tableau si elle est unique, sinon ligne ignorée et citée. Historique seulement : ni échéance, ni état, ni
+    révision en cours, ni signalement ne changent. Déjà présente (équipement, composant, date, nature, intervenant) → pas
+    recopiée : le classeur se réimporte. Onglets sans tableau ignorés, onglets sans équipement cités. Journal `FichesEpiImportees`.
+
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
 à côté de la base d'essai : les essais ne touchent jamais les réglages réels. Préfixe des étiquettes : `CodeScanne.Nettoyer(brut, prefixe)`.
