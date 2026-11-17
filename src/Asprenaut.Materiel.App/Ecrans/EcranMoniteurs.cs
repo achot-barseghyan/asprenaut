@@ -81,7 +81,7 @@ public sealed class EcranMoniteurs : EcranBase
         _relier.AccessibleDescription = "Enseignants dont la fiche d'adhérent n'a pas pu être retrouvée sans hésitation : choisissez la bonne";
         _importer.Click += (_, _) => Executer(ImporterAsync);
         _modele.Click += (_, _) => Executer(EnregistrerModeleAsync); // Libre : ne change aucune donnée.
-        _modele.AccessibleDescription = "Fichier Excel vide à donner au club pour noter les nouveaux adhérents, puis à importer";
+        _modele.AccessibleDescription = "Fichier Excel vide, ou avec la liste actuelle des adhérents, à remplir puis à importer";
 
         _onglets.AccessibleName = "Membres";
         _onglets.Margin = new Padding(0, 0, 0, 22);
@@ -1103,16 +1103,56 @@ public sealed class EcranMoniteurs : EcranBase
         }
     }
 
-    /// <summary>« Modèle Excel à remplir » : classeur vide aux colonnes de l'import, à donner au club puis à réimporter.</summary>
+    /// <summary>
+    /// « Modèle Excel à remplir » : choix entre la liste actuelle des adhérents (à corriger puis réimporter : chaque ligne
+    /// retrouve sa fiche par son « N° fiche ») et un classeur vide, aux colonnes de l'import.
+    /// </summary>
     private async Task EnregistrerModeleAsync()
     {
+        const string AvecListe = "liste", Vide = "vide";
+        var lignes = await _adherents.LignesModeleAsync();
+        var choix = new ListeChoix { AccessibleName = "Contenu du fichier Excel", Margin = new Padding(0, 0, 0, 4) };
+        choix.Afficher(
+        [
+            new ElementChoix(AvecListe, "≡", false, "Avec la liste actuelle des adhérents",
+                $"{Libelles.Pluriel(lignes.Count, "adhérent actif", "adhérents actifs")} à corriger ou compléter, puis à réimporter"),
+            new ElementChoix(Vide, "+", false, "Modèle vide", "Seulement les titres des colonnes, pour noter de nouveaux adhérents"),
+        ], "");
+        choix.Choisir(lignes.Count > 0 ? AvecListe : Vide);
+        choix.Height = (2 * 58) + 8 + 4;
+
+        string? retenu = null;
+        using (var fenetre = new FenetreFormulaire("Fichier Excel des adhérents", "Enregistrer", () =>
+        {
+            retenu = choix.Choix?.Cle;
+            return Task.FromResult(retenu is null ? ResultatOperation.Echec("Choisissez le contenu du fichier.") : ResultatOperation.Ok(""));
+        }, largeur: 560, marge: 24))
+        {
+            fenetre.EnTete("Que doit contenir le fichier ?", icone: Icones.Telecharger);
+            var explication = Ui.Libelle("À l'import, chaque personne est reconnue (N° fiche, licence, puis nom et prénom) : sa fiche est mise à jour, jamais créée en double.",
+                Theme.Police(9.75f), Theme.TexteSecondaireClair);
+            explication.MaximumSize = new Size(500, 0);
+            explication.Margin = new Padding(0, 0, 0, 14);
+            fenetre.Ajouter(explication);
+            fenetre.Ajouter(choix);
+            fenetre.Shown += (_, _) => choix.Focus();
+            if (fenetre.ShowDialog(FindForm()) != DialogResult.OK || retenu is null)
+            {
+                return;
+            }
+        }
+
+        var avecListe = retenu == AvecListe;
         // Couleur de l'en-tête : celle du logo du club (fixe dans les deux thèmes).
         var c = Theme.LogoFonce;
         var formations = (await _adherents.ListerFormationsAsync()).Select(f => f.Nom).ToList();
-        var colonnes = ServiceAdherents.ColonnesModele(formations).Select(m => new Infrastructure.ColonneClasseur(
+        var colonnes = ServiceAdherents.ColonnesModele(formations, avecListe).Select(m => new Infrastructure.ColonneClasseur(
             m.EnTete, m.Obligatoire ? $"Obligatoire. {m.Aide}" : m.Aide, m.Largeur, m.Choix)).ToList();
-        await Infrastructure.Fichiers.EnregistrerXlsxAsync(FindForm(), "Enregistrer le modèle des adhérents", ServiceAdherents.NomFichierModele(_reglages.NomClub),
-            chemin => Infrastructure.EcrivainTableur.EcrireModele(chemin, "Adhérents", colonnes, ServiceAdherents.ModeEmploiModele, $"{c.R:X2}{c.G:X2}{c.B:X2}"));
+        await Infrastructure.Fichiers.EnregistrerXlsxAsync(FindForm(),
+            avecListe ? "Enregistrer la liste des adhérents" : "Enregistrer le modèle des adhérents",
+            ServiceAdherents.NomFichierModele(_reglages.NomClub, avecListe ? _adherents.AujourdHui : null),
+            chemin => Infrastructure.EcrivainTableur.EcrireModele(chemin, "Adhérents", colonnes, ServiceAdherents.ModeEmploiModele(avecListe), $"{c.R:X2}{c.G:X2}{c.B:X2}",
+                avecListe ? lignes : null));
     }
 
     private async Task ImporterAsync()

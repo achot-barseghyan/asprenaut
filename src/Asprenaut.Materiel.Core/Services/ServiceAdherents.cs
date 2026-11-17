@@ -931,7 +931,8 @@ public sealed class ServiceAdherents(
     /// <param name="Nitrox">Colonne « Nitrox » (oui / non) : null si le fichier ne l'a pas (le statut n'est alors pas changé).</param>
     /// <param name="Caci">Colonne « CACI valable jusqu'au » : null si absente, vide ou illisible (le CACI n'est alors pas changé).</param>
     /// <param name="CaciIllisible">Case CACI remplie mais pas une date (signalé dans le message de l'import).</param>
-    public sealed record LigneImport(int Numero, Adherent? Adherent, string? Erreur, bool? Nitrox = null, DateOnly? Caci = null, bool CaciIllisible = false);
+    /// <param name="Fiche">Colonne « N° fiche » du modèle prérempli : id de l'adhérent dans l'application (null si absente ou vide).</param>
+    public sealed record LigneImport(int Numero, Adherent? Adherent, string? Erreur, bool? Nitrox = null, DateOnly? Caci = null, bool CaciIllisible = false, long? Fiche = null);
 
     // En-têtes reconnus (sans accents ni majuscules), dans l'ordre : nom, prénom, formation, licence, téléphone, nitrox, CACI,
     // niveau obtenu (le brevet, pas la formation en cours), autres brevets (PA40, RIFAP : séparés par « ; » ou « , »).
@@ -947,7 +948,11 @@ public sealed class ServiceAdherents(
             "certificat medical", "date certificat medical", "fin certificat medical"],
         ["niveau obtenu", "niveaux obtenus", "brevet", "brevet obtenu", "dernier niveau", "dernier niveau obtenu", "niveau atteint"],
         ["autres brevets", "autre brevet", "brevets", "autres niveaux", "qualifications", "specialites"],
+        ["n fiche", "no fiche", "numero de fiche", "fiche", "n fiche (ne pas modifier)"],
     ];
+
+    /// <summary>En-tête de la colonne qui relie une ligne du modèle prérempli à sa fiche (id de l'adhérent).</summary>
+    public const string EnTeteFiche = "N° fiche";
 
     /// <summary>Une colonne du modèle Excel à remplir par le club : en-tête (reconnu par l'import), aide, largeur, obligatoire.</summary>
     public sealed record ColonneModele(string EnTete, string Aide, int Largeur, bool Obligatoire, IReadOnlyList<string>? Choix = null);
@@ -956,37 +961,87 @@ public sealed class ServiceAdherents(
     /// Colonnes du modèle « Nouveaux adhérents » (bouton « Modèle Excel ») : exactement celles que <see cref="LireTableau"/>
     /// reconnaît, dans le même ordre. Niveau : liste des niveaux du club ; Nitrox : liste Oui / Non.
     /// </summary>
-    public static IReadOnlyList<ColonneModele> ColonnesModele(IReadOnlyList<string> niveaux) =>
-    [
-        new("Nom", "Nom de famille", 22, true),
-        new("Prénom", "Prénom", 18, true),
-        new("Niveau obtenu", "Dernier niveau de plongée obtenu (Débutant, Niveau 1…) : choisissez dans la liste (flèche de la case)", 16, false, BrevetsObtenus),
-        new("Formation en cours", "Classe suivie (ex. Niveau 2 = prépare le niveau 2) : choisissez dans la liste (flèche de la case)", 20, false, niveaux),
-        new("Licence", "Numéro de licence FFESSM (sert à reconnaître l'adhérent à l'import suivant)", 18, false),
-        new("Téléphone", "Ex. : 06 12 34 56 78", 18, false),
-        new("Nitrox", "Oui si certifié nitrox, sinon Non", 12, false, ["Oui", "Non"]),
-        new("CACI valable jusqu'au", "Dernier jour de validité du certificat (jj/mm/aaaa). Vide : CACI inchangé", 20, false),
-        new("Autres brevets", "Ex. : PA40; RIFAP (séparés par « ; »). Ajoutés à ceux déjà notés", 24, false),
-    ];
+    public static IReadOnlyList<ColonneModele> ColonnesModele(IReadOnlyList<string> niveaux, bool avecListe = false)
+    {
+        List<ColonneModele> colonnes =
+        [
+            new("Nom", "Nom de famille", 22, true),
+            new("Prénom", "Prénom", 18, true),
+            new("Niveau obtenu", "Dernier niveau de plongée obtenu (Débutant, Niveau 1…) : choisissez dans la liste (flèche de la case)", 16, false, BrevetsObtenus),
+            new("Formation en cours", "Classe suivie (ex. Niveau 2 = prépare le niveau 2) : choisissez dans la liste (flèche de la case)", 20, false, niveaux),
+            new("Licence", "Numéro de licence FFESSM (sert à reconnaître l'adhérent à l'import suivant)", 18, false),
+            new("Téléphone", "Ex. : 06 12 34 56 78", 18, false),
+            new("Nitrox", "Oui si certifié nitrox, sinon Non", 12, false, ["Oui", "Non"]),
+            new("CACI valable jusqu'au", "Dernier jour de validité du certificat (jj/mm/aaaa). Vide : CACI inchangé", 20, false),
+            new("Autres brevets", "Ex. : PA40; RIFAP (séparés par « ; »). Ajoutés à ceux déjà notés", 24, false),
+        ];
+        if (avecListe)
+        {
+            colonnes.Add(new(EnTeteFiche, "Ne pas modifier : relie la ligne à la fiche de l'adhérent dans l'application. Laissez vide pour un nouvel adhérent", 10, false));
+        }
 
-    /// <summary>Nom proposé pour le modèle : « Adhérents à remplir - Asprenaut.xlsx ».</summary>
-    public static string NomFichierModele(string? nomClub) =>
-        $"Adhérents à remplir - {(string.IsNullOrWhiteSpace(nomClub) ? "club" : nomClub.Trim())}.xlsx";
+        return colonnes;
+    }
 
-    /// <summary>Mode d'emploi écrit dans la seconde feuille du modèle (une ligne par paragraphe).</summary>
-    public static IReadOnlyList<string> ModeEmploiModele { get; } =
-    [
-        "Comment remplir ce fichier",
-        "1. Une ligne par adhérent, dans la feuille « Adhérents », à partir de la ligne 2.",
-        "2. Nom et Prénom sont obligatoires. Les autres colonnes peuvent rester vides.",
-        "3. Ne changez pas la première ligne (les titres des colonnes) : l'application s'en sert pour lire le fichier.",
-        "4. Licence : si elle est remplie, l'adhérent est reconnu à l'import suivant et mis à jour au lieu d'être ajouté en double.",
-        "5. Niveau obtenu, Formation en cours et Nitrox : choisissez dans la liste (flèche à droite de la case). Le niveau obtenu est le dernier brevet (Niveau 1) ; la formation est la classe suivie (Niveau 2 = prépare le niveau 2). Ne tapez pas d'autre formation : elle serait ignorée. Vide = inchangé.",
-        "6. CACI valable jusqu'au : date de fin du certificat, au format jj/mm/aaaa (ex. 15/09/2027). Passée cette date, l'adhérent ne sort plus de matériel. Vide = inchangé.",
-        "7. Autres brevets : PA40, RIFAP, Initiateur… séparés par « ; ». Ils s'ajoutent à ceux déjà notés ; « Nitrox » coche la certification nitrox.",
-        "8. Enregistrez en .xlsx et rapportez le fichier au responsable matériel : Membres › Adhérents › Importer la liste Excel.",
-        "Personne n'est retiré par l'import : les adhérents absents du fichier restent dans l'application.",
-    ];
+    /// <summary>Nom proposé : « Adhérents à remplir - Asprenaut.xlsx » (vide) ou « Liste des adhérents - Asprenaut - 2026-11-17.xlsx ».</summary>
+    public static string NomFichierModele(string? nomClub, DateOnly? listeDu = null)
+    {
+        var club = string.IsNullOrWhiteSpace(nomClub) ? "club" : nomClub.Trim();
+        return listeDu is { } jour
+            ? $"Liste des adhérents - {club} - {jour.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.xlsx"
+            : $"Adhérents à remplir - {club}.xlsx";
+    }
+
+    /// <summary>Mode d'emploi écrit dans la seconde feuille du modèle (une ligne par paragraphe) : vide ou prérempli.</summary>
+    public static IReadOnlyList<string> ModeEmploiModele(bool avecListe = false) => avecListe
+        ?
+        [
+            "Comment mettre à jour cette liste",
+            "1. La feuille « Adhérents » contient les adhérents actifs de l'application : corrigez-les directement (nouveau niveau, nouvelle formation, CACI renouvelé, téléphone…).",
+            "2. Un nouvel adhérent : ajoutez une ligne en bas, sans rien mettre dans la colonne « N° fiche ».",
+            "3. Ne touchez pas à la colonne « N° fiche » ni à la première ligne (les titres) : c'est ainsi que chaque ligne retrouve sa fiche, sans doublon.",
+            "4. Chaque personne est aussi reconnue par sa licence, puis par son nom et son prénom : ne copiez pas une même personne sur deux lignes.",
+            "5. Niveau obtenu, Formation en cours et Nitrox : choisissez dans la liste (flèche à droite de la case). Le niveau obtenu est le dernier brevet (Niveau 1) ; la formation est la classe suivie (Niveau 2 = prépare le niveau 2).",
+            "6. CACI valable jusqu'au : date de fin du certificat, au format jj/mm/aaaa (ex. 15/09/2027).",
+            "7. Une case vidée ne vide pas la fiche (l'ancienne valeur est gardée). Les autres brevets s'ajoutent à ceux déjà notés.",
+            "8. Enregistrez en .xlsx, puis dans l'application : Membres › Adhérents › Importer la liste Excel.",
+            "Personne n'est supprimé par l'import : retirer une ligne ne retire pas l'adhérent (le désactiver depuis sa fiche).",
+        ]
+        :
+        [
+            "Comment remplir ce fichier",
+            "1. Une ligne par adhérent, dans la feuille « Adhérents », à partir de la ligne 2.",
+            "2. Nom et Prénom sont obligatoires. Les autres colonnes peuvent rester vides.",
+            "3. Ne changez pas la première ligne (les titres des colonnes) : l'application s'en sert pour lire le fichier.",
+            "4. Licence : si elle est remplie, l'adhérent est reconnu à l'import suivant et mis à jour au lieu d'être ajouté en double.",
+            "5. Niveau obtenu, Formation en cours et Nitrox : choisissez dans la liste (flèche à droite de la case). Le niveau obtenu est le dernier brevet (Niveau 1) ; la formation est la classe suivie (Niveau 2 = prépare le niveau 2). Ne tapez pas d'autre formation : elle serait ignorée. Vide = inchangé.",
+            "6. CACI valable jusqu'au : date de fin du certificat, au format jj/mm/aaaa (ex. 15/09/2027). Passée cette date, l'adhérent ne sort plus de matériel. Vide = inchangé.",
+            "7. Autres brevets : PA40, RIFAP, Initiateur… séparés par « ; ». Ils s'ajoutent à ceux déjà notés ; « Nitrox » coche la certification nitrox.",
+            "8. Enregistrez en .xlsx et rapportez le fichier au responsable matériel : Membres › Adhérents › Importer la liste Excel.",
+            "Personne n'est retiré par l'import : les adhérents absents du fichier restent dans l'application.",
+        ];
+
+    /// <summary>
+    /// Lignes du modèle prérempli (sans l'en-tête), dans l'ordre de <see cref="ColonnesModele"/> avec la liste : les adhérents
+    /// actifs, par nom. Le « N° fiche » permet de retrouver chaque ligne à l'import, même si le nom ou la licence a été corrigé.
+    /// </summary>
+    public async Task<IReadOnlyList<IReadOnlyList<string>>> LignesModeleAsync(CancellationToken ct = default) =>
+        (await adherents.ListerAsync(actifsSeulement: true, ct))
+            .OrderBy(a => a.Nom, StringComparer.CurrentCultureIgnoreCase).ThenBy(a => a.Prenom, StringComparer.CurrentCultureIgnoreCase)
+            .Select(a => (IReadOnlyList<string>)
+            [
+                a.Nom,
+                a.Prenom,
+                a.NiveauObtenu ?? "",
+                a.Niveau ?? "",
+                a.Licence ?? "",
+                a.Telephone ?? "",
+                a.Nitrox ? "Oui" : "Non",
+                a.Caci && a.CaciExpiration is { } fin ? fin.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : "",
+                a.AutresBrevets ?? "",
+                a.Id.ToString(CultureInfo.InvariantCulture),
+            ])
+            .ToList();
 
     /// <summary>
     /// Lit le tableau (feuille Excel ou CSV déjà découpé en cellules) : la première ligne qui contient « Nom » et « Prénom »
@@ -1045,17 +1100,19 @@ public sealed class ServiceAdherents(
             var caci = string.IsNullOrWhiteSpace(celluleCaci) ? null : LireDate(celluleCaci);
             a.Caci = caci is not null;
             a.CaciExpiration = caci;
+            var fiche = long.TryParse(Cellule(ligne, colonnes[9]), NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) && id > 0 ? id : (long?)null;
             resultat.Add(Normaliser(a, []) is { } erreur
                 ? new LigneImport(i + 1, null, erreur.Message)
-                : new LigneImport(i + 1, a, null, nitrox, caci, !string.IsNullOrWhiteSpace(celluleCaci) && caci is null));
+                : new LigneImport(i + 1, a, null, nitrox, caci, !string.IsNullOrWhiteSpace(celluleCaci) && caci is null, fiche));
         }
 
         return resultat;
     }
 
     /// <summary>
-    /// Importe la liste du club : un adhérent de même licence est mis à jour (et redevient actif), un adhérent sans licence
-    /// est retrouvé par son nom et son prénom ; les autres sont ajoutés. Personne n'est supprimé ni rendu inactif.
+    /// Importe la liste du club : chaque ligne retrouve sa fiche (<see cref="Retrouver"/> : N° fiche, licence, nom et prénom),
+    /// mise à jour (et de nouveau active) ; les autres sont ajoutés. Une personne n'est traitée qu'une fois : une deuxième ligne
+    /// pour elle est ignorée « en double ». Personne n'est supprimé ni rendu inactif.
     /// </summary>
     public async Task<ResultatOperation> ImporterAsync(IReadOnlyList<IReadOnlyList<string>> tableau, CancellationToken ct = default)
     {
@@ -1074,10 +1131,13 @@ public sealed class ServiceAdherents(
         var formations = await ListerFormationsAsync(ct: ct);
         int ajoutes = 0, misAJour = 0;
         var ignorees = lues.Where(l => l.Adherent is null).Select(l => l.Numero).ToList();
-        var licencesVues = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var enDouble = new List<int>();
+        var licencesVues = new HashSet<string>(StringComparer.Ordinal);
+        var traites = new HashSet<long>(); // Fiches déjà ajoutées ou mises à jour par ce fichier : une deuxième ligne = la même personne en double.
+        var licencesDuFichier = lues.Where(l => l.Adherent is not null).Select(l => CleLicence(l.Adherent!.Licence)).OfType<string>().ToHashSet(StringComparer.Ordinal);
         var niveauxInconnus = new List<int>();
         var cacisIllisibles = lues.Where(l => l.CaciIllisible).Select(l => l.Numero).ToList();
-        foreach (var lu in lues.Where(l => l.Adherent is not null).Select(l => (l.Numero, Adherent: l.Adherent!, l.Nitrox, l.Caci)))
+        foreach (var lu in lues.Where(l => l.Adherent is not null).Select(l => (l.Numero, Adherent: l.Adherent!, l.Nitrox, l.Caci, l.Fiche)))
         {
             var nouveau = lu.Adherent;
 
@@ -1094,20 +1154,24 @@ public sealed class ServiceAdherents(
                 }
             }
 
-            if (nouveau.Licence is { } licence && !licencesVues.Add(licence))
+            if (CleLicence(nouveau.Licence) is { } licence && !licencesVues.Add(licence))
             {
-                ignorees.Add(lu.Numero); // Même licence deux fois dans le fichier : la première ligne compte.
+                enDouble.Add(lu.Numero); // Même licence deux fois dans le fichier : la première ligne compte.
                 continue;
             }
 
-            var existant = nouveau.Licence is { } l
-                ? existants.FirstOrDefault(a => string.Equals(a.Licence, l, StringComparison.OrdinalIgnoreCase))
-                  ?? existants.FirstOrDefault(a => a.Licence is null && MemePersonne(a, nouveau))
-                : existants.FirstOrDefault(a => MemePersonne(a, nouveau));
+            var existant = Retrouver(nouveau, lu.Fiche, existants, traites, licencesDuFichier);
+            if (existant is not null && !traites.Add(existant.Id))
+            {
+                enDouble.Add(lu.Numero); // Personne déjà traitée par une ligne précédente : jamais deux fiches pour elle.
+                continue;
+            }
+
             if (existant is null)
             {
                 nouveau.Id = await adherents.AjouterAsync(nouveau, ct);
                 existants.Add(nouveau);
+                traites.Add(nouveau.Id);
                 ajoutes++;
                 continue;
             }
@@ -1144,6 +1208,11 @@ public sealed class ServiceAdherents(
         if (ignorees.Count > 0)
         {
             message += $", {Libelles.Pluriel(ignorees.Count, "ligne ignorée", "lignes ignorées")} (ligne{(ignorees.Count > 1 ? "s" : "")} {string.Join(", ", ignorees.Order().Take(10))}{(ignorees.Count > 10 ? "…" : "")})";
+        }
+
+        if (enDouble.Count > 0)
+        {
+            message += $", {Libelles.Pluriel(enDouble.Count, "ligne en double ignorée", "lignes en double ignorées")} (ligne{(enDouble.Count > 1 ? "s" : "")} {string.Join(", ", enDouble.Order().Take(10))}{(enDouble.Count > 10 ? "…" : "")})";
         }
 
         if (niveauxInconnus.Count > 0)
@@ -1193,6 +1262,48 @@ public sealed class ServiceAdherents(
 
     private static bool MemePersonne(Adherent a, Adherent b) =>
         Simplifier(a.Nom) == Simplifier(b.Nom) && Simplifier(a.Prenom) == Simplifier(b.Prenom);
+
+    /// <summary>Licence comparée sans majuscules, espaces, tirets ni points : « a-12 345678 » = « A12345678 » ; null si vide.</summary>
+    public static string? CleLicence(string? licence)
+    {
+        var cle = new string((licence ?? "").Where(char.IsLetterOrDigit).Select(char.ToUpperInvariant).ToArray());
+        return cle.Length == 0 ? null : cle;
+    }
+
+    /// <summary>
+    /// La fiche d'une ligne du fichier, dans cet ordre : son « N° fiche » (modèle prérempli) si le nom, le prénom ou la licence
+    /// concorde encore (une ligne recopiée sur une autre personne n'écrase pas sa fiche) ; sa licence ; son nom et son prénom
+    /// (une fiche sans licence, ou la seule homonyme dont la licence n'est pas dans le fichier : licence corrigée).
+    /// Null : nouvel adhérent.
+    /// </summary>
+    private static Adherent? Retrouver(Adherent ligne, long? fiche, IReadOnlyList<Adherent> existants, IReadOnlySet<long> traites, IReadOnlySet<string> licencesDuFichier)
+    {
+        var licence = CleLicence(ligne.Licence);
+        if (fiche is { } id && existants.FirstOrDefault(a => a.Id == id) is { } parFiche
+            && (licence is not null && CleLicence(parFiche.Licence) == licence
+                || Simplifier(parFiche.Nom) == Simplifier(ligne.Nom)
+                || Simplifier(parFiche.Prenom) == Simplifier(ligne.Prenom)))
+        {
+            return parFiche;
+        }
+
+        if (licence is not null && existants.FirstOrDefault(a => CleLicence(a.Licence) == licence) is { } parLicence)
+        {
+            return parLicence;
+        }
+
+        // Homonymes : les fiches pas encore traitées d'abord, les actives avant les désactivées.
+        var memeNom = existants.Where(a => MemePersonne(a, ligne)).OrderBy(a => traites.Contains(a.Id)).ThenBy(a => !a.Actif).ToList();
+        if (licence is null)
+        {
+            return memeNom.FirstOrDefault();
+        }
+
+        return memeNom.FirstOrDefault(a => CleLicence(a.Licence) is null)
+            ?? (memeNom.Count(a => !licencesDuFichier.Contains(CleLicence(a.Licence)!)) == 1
+                ? memeNom.First(a => !licencesDuFichier.Contains(CleLicence(a.Licence)!))
+                : null);
+    }
 
     /// <summary>Minuscules sans accents ni espaces doublés : « Léa  DUBOIS » → « lea dubois ».</summary>
     public static string Simplifier(string texte)

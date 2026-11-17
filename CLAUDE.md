@@ -393,7 +393,12 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     dehors / Non rendu ; fiche (matériel en ce moment, non rendu, dernières sorties nominatives, Modifier) ; ajouter et importer
     demandent le code (action Moniteurs). Import (`ImporterAsync`, `LireTableau`) : en-tête « Nom » + « Prénom » (Niveau, Licence,
     Téléphone facultatifs), mise à jour par licence (sinon nom + prénom), ajout des autres, personne retiré ; fichier .xlsx ou .csv
-    lu par `Infrastructure/LecteurTableur` (zip XML, sans bibliothèque). « Modèle Excel à remplir » (libre, onglet Adhérents) : classeur vide écrit par `Infrastructure/EcrivainTableur` (zip XML, sans bibliothèque ; en-têtes `ServiceAdherents.ColonnesModele(niveaux)` = ceux de l'import, listes Niveau et Nitrox rangées dans une feuille cachée « Listes », première ligne figée, cases au format texte, bulle d'aide par colonne, liste Oui / Non pour Nitrox, feuille « Mode d'emploi » `ModeEmploiModele`), à donner au club puis à réimporter ; nom `NomFichierModele`. Export : `adherents.csv`, colonne Adhérent du matériel des sorties.
+    lu par `Infrastructure/LecteurTableur` (zip XML, sans bibliothèque). « Modèle Excel à remplir » (libre, onglet Adhérents) : classeur vide écrit par `Infrastructure/EcrivainTableur` (zip XML, sans bibliothèque ; en-têtes `ServiceAdherents.ColonnesModele(niveaux)` = ceux de l'import, listes Niveau et Nitrox rangées dans une feuille cachée « Listes », première ligne figée, cases au format texte, bulle d'aide par colonne, liste Oui / Non pour Nitrox, feuille « Mode d'emploi » `ModeEmploiModele(avecListe)`), à donner au club puis à réimporter ; nom `NomFichierModele`.
+    Le bouton propose « Avec la liste actuelle des adhérents » (adhérents actifs, `LignesModeleAsync`, + colonne `EnTeteFiche`
+    « N° fiche » = id) ou « Modèle vide » (`ImportListeAdherentsTests`). Rapprochement à l'import (`Retrouver`) : N° fiche si nom,
+    prénom ou licence concorde encore ; licence (`CleLicence` : sans majuscules, espaces, tirets) ; nom + prénom (fiche sans licence,
+    ou seule homonyme dont la licence n'est pas dans le fichier : licence corrigée). Une fiche n'est traitée qu'une fois : ligne
+    suivante « en double ignorée ». Case vide = inchangé. Export : `adherents.csv`, colonne Adhérent du matériel des sorties.
 
 31. Nitrox et adhérents désactivés (migration 015) : case « Nitrox » de la fiche des blocs et des détendeurs seulement
     (`ServiceInventaire.PeutEtreNitrox`, vidée pour les autres catégories, journal « nitrox » / « plus nitrox ») ; « Certifié nitrox »

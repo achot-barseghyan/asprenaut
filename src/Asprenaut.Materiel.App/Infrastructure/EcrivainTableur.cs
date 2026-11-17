@@ -29,14 +29,19 @@ public static class EcrivainTableur
     private const int StyleTitre = 3;
     private const int StyleParagraphe = 4;
 
-    /// <summary>Écrit le modèle dans <paramref name="chemin"/> (remplacé s'il existe). <paramref name="couleurEnTete"/> : « 0F5F86 ».</summary>
-    public static void EcrireModele(string chemin, string nomFeuille, IReadOnlyList<ColonneClasseur> colonnes, IReadOnlyList<string> modeEmploi, string couleurEnTete)
+    /// <summary>
+    /// Écrit le modèle dans <paramref name="chemin"/> (remplacé s'il existe). <paramref name="couleurEnTete"/> : « 0F5F86 ».
+    /// <paramref name="lignes"/> : lignes déjà remplies sous l'en-tête (modèle prérempli), dans l'ordre des colonnes.
+    /// </summary>
+    public static void EcrireModele(string chemin, string nomFeuille, IReadOnlyList<ColonneClasseur> colonnes, IReadOnlyList<string> modeEmploi, string couleurEnTete,
+        IReadOnlyList<IReadOnlyList<string>>? lignes = null)
     {
         using var flux = File.Create(chemin);
-        EcrireModele(flux, nomFeuille, colonnes, modeEmploi, couleurEnTete);
+        EcrireModele(flux, nomFeuille, colonnes, modeEmploi, couleurEnTete, lignes);
     }
 
-    public static void EcrireModele(Stream flux, string nomFeuille, IReadOnlyList<ColonneClasseur> colonnes, IReadOnlyList<string> modeEmploi, string couleurEnTete)
+    public static void EcrireModele(Stream flux, string nomFeuille, IReadOnlyList<ColonneClasseur> colonnes, IReadOnlyList<string> modeEmploi, string couleurEnTete,
+        IReadOnlyList<IReadOnlyList<string>>? lignes = null)
     {
         using var zip = new ZipArchive(flux, ZipArchiveMode.Create, leaveOpen: true);
         Ecrire(zip, "[Content_Types].xml", new XElement(Types + "Types",
@@ -60,7 +65,7 @@ public static class EcrivainTableur
             ("rId3", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles", "styles.xml"),
             ("rId4", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet", "worksheets/sheet3.xml")));
         Ecrire(zip, "xl/styles.xml", Styles(couleurEnTete));
-        Ecrire(zip, "xl/worksheets/sheet1.xml", FeuilleSaisie(colonnes));
+        Ecrire(zip, "xl/worksheets/sheet1.xml", FeuilleSaisie(colonnes, lignes ?? []));
         Ecrire(zip, "xl/worksheets/sheet2.xml", FeuilleModeEmploi(modeEmploi));
         Ecrire(zip, "xl/worksheets/sheet3.xml", FeuilleListes(colonnes));
     }
@@ -131,12 +136,13 @@ public static class EcrivainTableur
             alignement is null ? null : new XAttribute("applyAlignment", 1),
             alignement);
 
-    private static XElement FeuilleSaisie(IReadOnlyList<ColonneClasseur> colonnes)
+    private static XElement FeuilleSaisie(IReadOnlyList<ColonneClasseur> colonnes, IReadOnlyList<IReadOnlyList<string>> lignes)
     {
         var derniere = Lettre(colonnes.Count - 1);
+        var fin = Math.Max(LignesSaisie, lignes.Count + 200) + 1; // Place pour ajouter des lignes sous une liste préremplie.
         var validations = colonnes.Select((c, i) =>
         {
-            var plage = $"{Lettre(i)}2:{Lettre(i)}{LignesSaisie + 1}";
+            var plage = $"{Lettre(i)}2:{Lettre(i)}{fin}";
             var aide = c.Aide.Length > 250 ? c.Aide[..250] : c.Aide;
             return c.Choix is { Count: > 0 } choix
                 ? new XElement(Ns + "dataValidation",
@@ -150,7 +156,7 @@ public static class EcrivainTableur
         }).ToList();
 
         return new XElement(Ns + "worksheet", new XAttribute(XNamespace.Xmlns + "r", R),
-            new XElement(Ns + "dimension", new XAttribute("ref", $"A1:{derniere}1")),
+            new XElement(Ns + "dimension", new XAttribute("ref", $"A1:{derniere}{lignes.Count + 1}")),
             new XElement(Ns + "sheetViews", new XElement(Ns + "sheetView", new XAttribute("tabSelected", 1), new XAttribute("workbookViewId", 0),
                 new XElement(Ns + "pane", new XAttribute("ySplit", 1), new XAttribute("topLeftCell", "A2"), new XAttribute("activePane", "bottomLeft"), new XAttribute("state", "frozen")),
                 new XElement(Ns + "selection", new XAttribute("pane", "bottomLeft"), new XAttribute("activeCell", "A2"), new XAttribute("sqref", "A2")))),
@@ -159,7 +165,9 @@ public static class EcrivainTableur
                 new XAttribute("min", i + 1), new XAttribute("max", i + 1), new XAttribute("width", c.Largeur), new XAttribute("style", StyleTexte), new XAttribute("customWidth", 1)))),
             new XElement(Ns + "sheetData",
                 new XElement(Ns + "row", new XAttribute("r", 1), new XAttribute("ht", 24), new XAttribute("customHeight", 1),
-                    colonnes.Select((c, i) => Texte($"{Lettre(i)}1", c.EnTete, StyleEnTete)))),
+                    colonnes.Select((c, i) => Texte($"{Lettre(i)}1", c.EnTete, StyleEnTete))),
+                lignes.Select((ligne, n) => new XElement(Ns + "row", new XAttribute("r", n + 2),
+                    ligne.Take(colonnes.Count).Select((valeur, i) => string.IsNullOrEmpty(valeur) ? null : Texte($"{Lettre(i)}{n + 2}", valeur, StyleTexte))))),
             new XElement(Ns + "dataValidations", new XAttribute("count", validations.Count), validations));
     }
 
