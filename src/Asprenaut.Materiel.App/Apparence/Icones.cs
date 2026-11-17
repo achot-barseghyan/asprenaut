@@ -84,6 +84,7 @@ public static class Icones
     public const string Imprimante = "M7 9V3h10v6M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v7H7z";
     public const string PleinEcran = "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5";
     public const string Livre = "M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM19 19v2H6M8 7h7M8 11h5";
+    public const string Diplome = "M3 9l9-5 9 5-9 5zM7 11v5c3 2 7 2 10 0v-5";
     public const string Moins = "M5 12h14";
     public const string Telephone = "M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2";
     public const string Document = "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5";

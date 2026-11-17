@@ -93,15 +93,84 @@ public sealed class ServiceAdherents(
         return abrege.Success ? niveaux.FirstOrDefault(n => Cle(n) == $"niveau{abrege.Groups[2].Value}") : null;
     }
 
-    /// <summary>Niveaux de plongée proposés en puces pour le niveau obtenu ; un autre niveau peut être tapé (PA40, Guide de palanquée).</summary>
+    /// <summary>Niveaux de plongée (brevets 1 à 4) ; avec <see cref="Debutant"/>, les seuls brevets obtenus possibles.</summary>
     public static IReadOnlyList<string> NiveauxPlongee { get; } = ["Niveau 1", "Niveau 2", "Niveau 3", "Niveau 4"];
 
+    /// <summary>Brevet obtenu « aucun » : débutant (étape 0 de l'échelle des brevets).</summary>
+    public const string Debutant = "Débutant";
+
+    /// <summary>Échelle des brevets obtenus, de 0 (débutant) à 4 : l'indice est le niveau.</summary>
+    public static IReadOnlyList<string> BrevetsObtenus { get; } = [Debutant, .. NiveauxPlongee];
+
+    /// <summary>Autres brevets proposés en puces dans la fiche (« Autres brevets ») ; un autre peut être tapé.</summary>
+    public static IReadOnlyList<string> AutresBrevetsProposes { get; } = ["PA40", "PE40", "Nitrox", "RIFAP", "Initiateur"];
+
     /// <summary>
-    /// Niveau obtenu nettoyé : un niveau proposé écrit autrement (« N2 », « niv 2 ») devient « Niveau 2 », un autre niveau est
-    /// gardé tel quel (espaces retirés), vide → null.
+    /// Niveau obtenu nettoyé : un niveau écrit autrement (« N2 », « niv 2 ») devient « Niveau 2 », « aucun », « N0 » →
+    /// « Débutant » ; un autre brevet est gardé tel quel (espaces retirés : il ira dans les autres brevets), vide → null.
     /// </summary>
-    public static string? NiveauObtenuReconnu(string? saisie) =>
-        Vide(saisie) is { } texte ? NiveauReconnu(texte, NiveauxPlongee) ?? texte : null;
+    public static string? NiveauObtenuReconnu(string? saisie)
+    {
+        if (Vide(saisie) is not { } texte)
+        {
+            return null;
+        }
+
+        var cle = new string(Simplifier(texte).Where(char.IsLetterOrDigit).ToArray());
+        return cle is "debutant" or "aucun" or "n0" or "niveau0" or "niv0" ? Debutant : NiveauReconnu(texte, NiveauxPlongee) ?? texte;
+    }
+
+    /// <summary>Niveau du brevet obtenu : 0 (débutant) à 4, ou null (non renseigné ou autre brevet).</summary>
+    public static int? IndiceBrevet(string? niveauObtenu) =>
+        NiveauObtenuReconnu(niveauObtenu) is { } n && BrevetsObtenus.ToList().IndexOf(n) is var i and >= 0 ? i : null;
+
+    /// <summary>
+    /// Classe qui prépare le brevet suivant (« Niveau 3 » pour un niveau 2), parmi <paramref name="formations"/> ; null au
+    /// niveau 4, sans brevet, ou si le club n'a pas cette classe.
+    /// </summary>
+    public static Moniteur? ClasseSuivante(int? brevet, IReadOnlyList<Moniteur> formations) =>
+        brevet is >= 0 and < 4 && NiveauReconnu(NiveauxPlongee[brevet.Value], formations.Select(f => f.Nom).ToList()) is { } nom
+            ? formations.FirstOrDefault(f => f.Nom == nom)
+            : null;
+
+    /// <summary>
+    /// Brevet déduit de la classe suivie (« Niveau 2 » → niveau 1, « Niveau 1 » → débutant) quand il n'est pas renseigné ;
+    /// null pour une autre classe (Autonome).
+    /// </summary>
+    public static int? BrevetDeduit(string? classe) =>
+        NiveauReconnu(classe, NiveauxPlongee) is { } n ? NiveauxPlongee.ToList().IndexOf(n) : null;
+
+    /// <summary>
+    /// Résumé de la section « Niveau et formation » : « Niveau 2 · prépare le N3 », « Débutant », « Niveau 1 · suit Autonome »,
+    /// « Non renseigné ».
+    /// </summary>
+    public static string ResumeNiveau(int? brevet, string? classe)
+    {
+        var obtenu = brevet is { } b ? BrevetsObtenus[b] : null;
+        var formation = classe is null ? null
+            : BrevetDeduit(classe) is { } prepare && prepare == (brevet ?? -1) ? $"prépare le N{prepare + 1}"
+            : $"suit {classe}";
+        return string.Join(" · ", new[] { obtenu, formation }.Where(t => t is not null)) is { Length: > 0 } texte ? texte : "Non renseigné";
+    }
+
+    /// <summary>Autres brevets enregistrés (« PA40; RIFAP ») → liste ; null ou vide → aucune.</summary>
+    public static IReadOnlyList<string> ListeBrevets(string? autresBrevets) =>
+        (autresBrevets ?? "").Split([';', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    /// <summary>Liste des autres brevets → texte enregistré (« PA40; RIFAP »), null si vide.</summary>
+    public static string? JoindreBrevets(IEnumerable<string> brevets) =>
+        string.Join("; ", brevets.Select(b => b.Trim()).Where(b => b.Length > 0)) is { Length: > 0 } texte ? texte : null;
+
+    /// <summary>Un brevet tapé : espaces resserrés, écriture des brevets proposés reprise (« pa 40 » → « PA40 », « rifap » → « RIFAP »).</summary>
+    public static string BrevetReconnu(string saisie)
+    {
+        var texte = string.Join(' ', saisie.Replace(";", " ", StringComparison.Ordinal).Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        static string Cle(string s) => new(Simplifier(s).Where(char.IsLetterOrDigit).ToArray());
+        return AutresBrevetsProposes.FirstOrDefault(p => Cle(p) == Cle(texte)) ?? texte;
+    }
+
+    /// <summary>Le brevet nitrox, qui est la certification <see cref="Adherent.Nitrox"/> et non un autre brevet.</summary>
+    public static bool EstNitrox(string brevet) => new string(Simplifier(brevet).Where(char.IsLetterOrDigit).ToArray()) is "nitrox" or "plongeurnitrox";
 
     /// <summary>Majuscule au début de chaque mot (« jean-pierre le goff » → « Jean-Pierre Le Goff ») ; le reste est gardé tel quel.</summary>
     public static string MajusculesMots(string texte)
@@ -789,6 +858,39 @@ public sealed class ServiceAdherents(
         a.Prenom = (a.Prenom ?? "").Trim();
         a.Niveau = Vide(a.Niveau);
         a.NiveauObtenu = NiveauObtenuReconnu(a.NiveauObtenu);
+
+        // Brevet obtenu hors de l'échelle Débutant… Niveau 4 (« PA40 ») : rangé dans les autres brevets. Nitrox : la certification.
+        var brevets = ListeBrevets(a.AutresBrevets).ToList();
+        if (a.NiveauObtenu is { } obtenu && !BrevetsObtenus.Contains(obtenu))
+        {
+            brevets.Insert(0, obtenu);
+            a.NiveauObtenu = null;
+        }
+
+        var autres = new List<string>();
+        foreach (var brevet in brevets.Select(BrevetReconnu).Where(b => b.Length > 0))
+        {
+            if (EstNitrox(brevet))
+            {
+                a.Nitrox = true;
+            }
+            else if (!autres.Contains(brevet, StringComparer.CurrentCultureIgnoreCase))
+            {
+                autres.Add(brevet);
+            }
+        }
+
+        if (autres.Any(b => b.Length > Adherent.LongueurMaxBrevet))
+        {
+            return ResultatOperation.Echec($"Brevet trop long ({Adherent.LongueurMaxBrevet} caractères au plus).");
+        }
+
+        if (autres.Count > Adherent.NombreMaxBrevets)
+        {
+            return ResultatOperation.Echec($"{Adherent.NombreMaxBrevets} autres brevets au plus.");
+        }
+
+        a.AutresBrevets = JoindreBrevets(autres);
         a.Licence = Vide(a.Licence)?.ToUpper(Libelles.Culture);
         a.Telephone = Vide(a.Telephone);
         if (a.Nom.Length == 0 || a.Prenom.Length == 0)
@@ -832,7 +934,7 @@ public sealed class ServiceAdherents(
     public sealed record LigneImport(int Numero, Adherent? Adherent, string? Erreur, bool? Nitrox = null, DateOnly? Caci = null, bool CaciIllisible = false);
 
     // En-têtes reconnus (sans accents ni majuscules), dans l'ordre : nom, prénom, formation, licence, téléphone, nitrox, CACI,
-    // niveau obtenu (le brevet, pas la formation en cours).
+    // niveau obtenu (le brevet, pas la formation en cours), autres brevets (PA40, RIFAP : séparés par « ; » ou « , »).
     private static readonly string[][] EnTetes =
     [
         ["nom", "nom de famille", "nom adherent"],
@@ -844,6 +946,7 @@ public sealed class ServiceAdherents(
         ["caci valable jusqu'au", "caci valable jusqu au", "caci", "caci jusqu'au", "date caci", "fin caci", "fin du caci", "expiration caci", "validite caci",
             "certificat medical", "date certificat medical", "fin certificat medical"],
         ["niveau obtenu", "niveaux obtenus", "brevet", "brevet obtenu", "dernier niveau", "dernier niveau obtenu", "niveau atteint"],
+        ["autres brevets", "autre brevet", "brevets", "autres niveaux", "qualifications", "specialites"],
     ];
 
     /// <summary>Une colonne du modèle Excel à remplir par le club : en-tête (reconnu par l'import), aide, largeur, obligatoire.</summary>
@@ -857,12 +960,13 @@ public sealed class ServiceAdherents(
     [
         new("Nom", "Nom de famille", 22, true),
         new("Prénom", "Prénom", 18, true),
-        new("Niveau obtenu", "Dernier niveau de plongée obtenu (ex. Niveau 1) : choisissez dans la liste (flèche de la case)", 16, false, NiveauxPlongee),
+        new("Niveau obtenu", "Dernier niveau de plongée obtenu (Débutant, Niveau 1…) : choisissez dans la liste (flèche de la case)", 16, false, BrevetsObtenus),
         new("Formation en cours", "Classe suivie (ex. Niveau 2 = prépare le niveau 2) : choisissez dans la liste (flèche de la case)", 20, false, niveaux),
         new("Licence", "Numéro de licence FFESSM (sert à reconnaître l'adhérent à l'import suivant)", 18, false),
         new("Téléphone", "Ex. : 06 12 34 56 78", 18, false),
         new("Nitrox", "Oui si certifié nitrox, sinon Non", 12, false, ["Oui", "Non"]),
         new("CACI valable jusqu'au", "Dernier jour de validité du certificat (jj/mm/aaaa). Vide : CACI inchangé", 20, false),
+        new("Autres brevets", "Ex. : PA40; RIFAP (séparés par « ; »). Ajoutés à ceux déjà notés", 24, false),
     ];
 
     /// <summary>Nom proposé pour le modèle : « Adhérents à remplir - Asprenaut.xlsx ».</summary>
@@ -879,7 +983,8 @@ public sealed class ServiceAdherents(
         "4. Licence : si elle est remplie, l'adhérent est reconnu à l'import suivant et mis à jour au lieu d'être ajouté en double.",
         "5. Niveau obtenu, Formation en cours et Nitrox : choisissez dans la liste (flèche à droite de la case). Le niveau obtenu est le dernier brevet (Niveau 1) ; la formation est la classe suivie (Niveau 2 = prépare le niveau 2). Ne tapez pas d'autre formation : elle serait ignorée. Vide = inchangé.",
         "6. CACI valable jusqu'au : date de fin du certificat, au format jj/mm/aaaa (ex. 15/09/2027). Passée cette date, l'adhérent ne sort plus de matériel. Vide = inchangé.",
-        "7. Enregistrez en .xlsx et rapportez le fichier au responsable matériel : Membres › Adhérents › Importer la liste Excel.",
+        "7. Autres brevets : PA40, RIFAP, Initiateur… séparés par « ; ». Ils s'ajoutent à ceux déjà notés ; « Nitrox » coche la certification nitrox.",
+        "8. Enregistrez en .xlsx et rapportez le fichier au responsable matériel : Membres › Adhérents › Importer la liste Excel.",
         "Personne n'est retiré par l'import : les adhérents absents du fichier restent dans l'application.",
     ];
 
@@ -928,6 +1033,7 @@ public sealed class ServiceAdherents(
                 Licence = Cellule(ligne, colonnes[3]),
                 Telephone = Cellule(ligne, colonnes[4]),
                 NiveauObtenu = Cellule(ligne, colonnes[7]), // Nettoyé (« N1 » → « Niveau 1 ») par Normaliser.
+                AutresBrevets = Cellule(ligne, colonnes[8])?.Replace(',', ';'),
             };
             // Cellule vide (colonne présente, ex. le modèle à remplir) : statut inchangé, comme une colonne absente.
             var celluleNitrox = colonnes[5] >= 0 ? Cellule(ligne, colonnes[5]) : null;
@@ -1017,7 +1123,11 @@ public sealed class ServiceAdherents(
             existant.Licence = nouveau.Licence ?? existant.Licence;
             existant.NiveauObtenu = nouveau.NiveauObtenu ?? existant.NiveauObtenu;
             existant.Telephone = nouveau.Telephone ?? existant.Telephone;
-            existant.Nitrox = lu.Nitrox ?? existant.Nitrox;
+
+            // Autres brevets ajoutés à ceux qu'il avait (aucun n'est retiré) ; « Nitrox » parmi eux = certifié nitrox.
+            existant.AutresBrevets = JoindreBrevets(ListeBrevets(existant.AutresBrevets).Concat(ListeBrevets(nouveau.AutresBrevets))
+                .Distinct(StringComparer.CurrentCultureIgnoreCase).Take(Adherent.NombreMaxBrevets));
+            existant.Nitrox = lu.Nitrox ?? (existant.Nitrox || nouveau.Nitrox);
             if (lu.Caci is { } finCaci)
             {
                 existant.Caci = true;

@@ -344,6 +344,6 @@ public class AdherentsTests
         Assert.True(r2.Reussi, r2.Message);
         Assert.Equal("Niveau 4", _ctx.Db.Adherents.Single(a => a.Nom == "Petit").Niveau);
         var noms = (await _ctx.Adherents.ListerFormationsAsync()).Select(f => f.Nom).ToList();
-        Assert.Equal(noms, ServiceAdherents.ColonnesModele(noms)[2].Choix);
+        Assert.Equal(noms, ServiceAdherents.ColonnesModele(noms)[3].Choix);
     }
 }

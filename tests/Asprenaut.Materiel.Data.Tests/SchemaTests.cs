@@ -37,9 +37,9 @@ public class SchemaTests : IAsyncLifetime
     }
 
     [Fact]
-    public void Scripts_001_a_031_sont_embarques()
+    public void Scripts_001_a_032_sont_embarques()
     {
-        Assert.Equal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31], GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
+        Assert.Equal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32], GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
     }
 
     // 029 : un adhérent relié à sa fiche d'enseignant ; les adhérents existants restent sans lien (rapprochés par l'application).
@@ -115,6 +115,37 @@ public class SchemaTests : IAsyncLifetime
         a.NiveauObtenu = "Niveau 2";
         await depot.MettreAJourAsync(a);
         Assert.Equal("Niveau 2", (await depot.ObtenirAsync(a.Id))!.NiveauObtenu);
+    }
+
+    // 032 : un brevet obtenu hors de l'échelle Débutant… Niveau 4 passe dans les autres brevets ; autres brevets écrits et relus.
+    [Fact]
+    public async Task La_migration_032_range_les_autres_brevets()
+    {
+        var fabrique = new Connexion.FabriqueConnexion(Path.Combine(_base.Dossier, "avant-032.db"));
+        var migrations = new GestionnaireMigrations(fabrique);
+        Assert.Equal(31, await migrations.AppliquerAsync(jusqua: 31));
+        await using (var cx = await fabrique.OuvrirAsync())
+        {
+            await cx.ExecuteAsync("""
+                INSERT INTO adherent (nom, prenom, niveau_obtenu, actif) VALUES
+                    ('Martin', 'Julie', 'Niveau 2', 1), ('Petit', 'Hugo', 'PA40', 1), ('Blanc', 'Léa', NULL, 1);
+                """);
+        }
+
+        await migrations.AppliquerAsync();
+        await using (var cx = await fabrique.OuvrirAsync())
+        {
+            var lignes = (await cx.QueryAsync<(string, string?, string?)>("SELECT prenom, niveau_obtenu, autres_brevets FROM adherent ORDER BY prenom;")).ToList();
+            Assert.Equal([("Hugo", null, "PA40"), ("Julie", "Niveau 2", null), ("Léa", null, null)], lignes);
+        }
+
+        var depot = new AdherentRepository(fabrique);
+        var a = new Core.Modeles.Adherent { Nom = "Durand", Prenom = "Paul", NiveauObtenu = "Débutant", AutresBrevets = "PA40; RIFAP" };
+        await depot.AjouterAsync(a);
+        Assert.Equal(("Débutant", "PA40; RIFAP"), ((await depot.ObtenirAsync(a.Id))!.NiveauObtenu, (await depot.ObtenirAsync(a.Id))!.AutresBrevets));
+        a.AutresBrevets = null;
+        await depot.MettreAJourAsync(a);
+        Assert.Null((await depot.ObtenirAsync(a.Id))!.AutresBrevets);
     }
 
     // 021 : le niveau texte de l'adhérent devient sa classe (formation en cours) ; une classe manquante est créée.

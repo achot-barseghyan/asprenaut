@@ -411,10 +411,21 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     Plus de liste « Niveaux des adhérents » dans Paramètres. Import : colonne « Formation en cours » (aussi « Niveau », « Classe »,
     « Groupe »), inconnue laissée vide (l'ancienne gardée) et comptée ; modèle Excel : liste des classes. Export : colonne « Formation en cours ».
     Niveau obtenu (migration 031, `EnseignantsAdherentsTests`) : le dernier brevet, à côté de la formation (`Adherent.NiveauObtenu`,
-    puces `ServiceAdherents.NiveauxPlongee` Niveau 1… 4 ou autre niveau tapé, 30 car. ; `NiveauObtenuReconnu` : « N1 » → « Niveau 1 »).
+    échelle `ServiceAdherents.BrevetsObtenus` = « Débutant » (aucun brevet) puis Niveau 1… 4, `IndiceBrevet` 0 à 4 ; `NiveauObtenuReconnu` :
+    « N1 » → « Niveau 1 », « aucun » / « N0 » → « Débutant »). Autres brevets (migration 032, `Adherent.AutresBrevets` « PA40; RIFAP »,
+    `ListeBrevets` / `JoindreBrevets`, `BrevetReconnu` reprend l'écriture des `AutresBrevetsProposes` PA40, PE40, Nitrox, RIFAP, Initiateur ;
+    30 car., 10 au plus, sans doublon) : à l'enregistrement, un niveau obtenu hors échelle y est rangé et « Nitrox » coche `Adherent.Nitrox`
+    (jamais gardé dans la liste). Formation = `ClasseSuivante(brevet, formations)` (classe « Niveau N+1 ») ; brevet vide déduit de la
+    classe (`BrevetDeduit`) ; résumé `ResumeNiveau` (« Niveau 2 · prépare le N3 »).
     Import : colonne « Niveau obtenu » (aussi « Brevet », « Dernier niveau »… ; « Brevet » n'est plus la formation), vide = inchangé ;
-    modèle Excel et export adherents.csv : colonne « Niveau obtenu ». Carte : pastilles « N1 » puis « PRÉPARE N2 ».
-    Formulaire (maquette « Ajouter un adhérent ») : sections 1 Identité, 2 Niveau et formation (niveau obtenu, puis puces des classes),
+    colonne « Autres brevets » (« ; » ou « , »), ajoutés à ceux déjà notés ; modèle Excel et export adherents.csv : colonnes « Niveau obtenu »
+    et « Autres brevets ». Carte : pastilles « N1 » (« DÉBUTANT ») puis « PRÉPARE N2 » ; fiche : autres brevets dans la ligne de qualité.
+    Formulaire (maquette « Ajouter un adhérent ») : sections 1 Identité, 2 Niveau et formation (maquette « Niveau et formation » :
+    BREVET OBTENU = `Controles/NiveauFormation.EchelleBrevets` (5 pastilles reliées par une piste, passées cochées, préparée en pointillé
+    doré « en formation », « Effacer »), EN FORMATION = `CarteAutorisation` dorée (`Titre`, `Disponible` : « Prépare le Niveau 3 » ;
+    brevet changé → la classe suit, une autre classe (Autonome) est gardée ; « Pas de classe « Niveau 3 » » si le club ne l'a pas),
+    AUTRES BREVETS = `ChoixBrevets` (puces × / puces pointillées +, champ « Autre brevet… », Entrée ajoute ; Nitrox lié à l'interrupteur
+    « Certifié nitrox »)),
     3 Rôles au club (Enseignant et son niveau d'encadrement, Inspecteur TIV à part), 4 Autorisations matériel ; en-tête qui montre initiales, nom
     et étiquettes pendant la saisie ; `MajusculesMots`, `FormaterTelephone`, `Initiales`, `EtatCaciSaisi` → pastille « Expire dans 17 j »,
     « Délivré aujourd'hui (+1 an) ».
@@ -677,11 +688,12 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   fiches existantes fait par l'application au démarrage (règle 44).
   030 : inspecteur TIV indépendant du rôle d'enseignant (règle 44) : la case TIV des enseignants déjà inactifs est retirée.
   031 : adherent.niveau_obtenu (dernier niveau obtenu, null = non renseigné ; règle 31).
+  032 : adherent.autres_brevets (« PA40; RIFAP », null = aucun) ; un niveau_obtenu hors Débutant / Niveau 1 à 4 y est déplacé.
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/032_xxx.sql`, sans jamais modifier un script déjà livré
+- Nouvelle migration : ajouter `Migrations/033_xxx.sql`, sans jamais modifier un script déjà livré
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.

@@ -10,7 +10,7 @@ public sealed class AdherentRepository(FabriqueConnexion fabrique) : IAdherentRe
 {
     // Formation en cours : le nom vient de la classe liée (migration 021) ; adherent.niveau seulement s'il n'y en a pas.
     // Fiche d'enseignant reliée (migration 029) : rôle actif, niveau d'encadrement, inspecteur TIV.
-    private const string Colonnes = "a.id, a.nom, a.prenom, a.classe_id, COALESCE(c.nom, a.niveau) AS niveau, a.licence, a.telephone, a.actif, a.nitrox, a.caci, a.caci_expiration, a.niveau_obtenu, " +
+    private const string Colonnes = "a.id, a.nom, a.prenom, a.classe_id, COALESCE(c.nom, a.niveau) AS niveau, a.licence, a.telephone, a.actif, a.nitrox, a.caci, a.caci_expiration, a.niveau_obtenu, a.autres_brevets, " +
         "a.moniteur_id, COALESCE(m.actif, 0) AS enseignant, m.niveau AS niveau_encadrement, COALESCE(m.inspecteur_tiv, 0) AS inspecteur_tiv";
 
     private const string Source = "adherent a LEFT JOIN moniteur c ON c.id = a.classe_id LEFT JOIN moniteur m ON m.id = a.moniteur_id";
@@ -36,8 +36,8 @@ public sealed class AdherentRepository(FabriqueConnexion fabrique) : IAdherentRe
         await using var cx = await fabrique.OuvrirAsync(ct);
         adherent.Id = await cx.ExecuteScalarAsync<long>(new CommandDefinition(
             """
-            INSERT INTO adherent (nom, prenom, classe_id, niveau, licence, telephone, actif, nitrox, caci, caci_expiration, niveau_obtenu)
-            VALUES (@Nom, @Prenom, @ClasseId, @Niveau, @Licence, @Telephone, @Actif, @Nitrox, @Caci, @CaciExpiration, @NiveauObtenu) RETURNING id;
+            INSERT INTO adherent (nom, prenom, classe_id, niveau, licence, telephone, actif, nitrox, caci, caci_expiration, niveau_obtenu, autres_brevets)
+            VALUES (@Nom, @Prenom, @ClasseId, @Niveau, @Licence, @Telephone, @Actif, @Nitrox, @Caci, @CaciExpiration, @NiveauObtenu, @AutresBrevets) RETURNING id;
             """,
             Parametres(adherent), cancellationToken: ct));
         return adherent.Id;
@@ -48,7 +48,7 @@ public sealed class AdherentRepository(FabriqueConnexion fabrique) : IAdherentRe
         await using var cx = await fabrique.OuvrirAsync(ct);
         await cx.ExecuteAsync(new CommandDefinition(
             """
-            UPDATE adherent SET nom = @Nom, prenom = @Prenom, classe_id = @ClasseId, niveau = @Niveau, licence = @Licence, telephone = @Telephone, actif = @Actif, nitrox = @Nitrox, caci = @Caci, caci_expiration = @CaciExpiration, niveau_obtenu = @NiveauObtenu
+            UPDATE adherent SET nom = @Nom, prenom = @Prenom, classe_id = @ClasseId, niveau = @Niveau, licence = @Licence, telephone = @Telephone, actif = @Actif, nitrox = @Nitrox, caci = @Caci, caci_expiration = @CaciExpiration, niveau_obtenu = @NiveauObtenu, autres_brevets = @AutresBrevets
             WHERE id = @Id;
             """,
             Parametres(adherent), cancellationToken: ct));
@@ -133,5 +133,6 @@ public sealed class AdherentRepository(FabriqueConnexion fabrique) : IAdherentRe
         Caci = a.Caci ? 1 : 0,
         CaciExpiration = FormatIso.Ecrire(a.CaciExpiration),
         a.NiveauObtenu,
+        a.AutresBrevets,
     };
 }

@@ -493,6 +493,7 @@ public sealed class EcranMoniteurs : EcranBase
         var qualite = string.Join(" · ", new[]
         {
             role, a.InspecteurTiv ? "inspecteur TIV" : null, a.NiveauObtenu, a.Niveau is { } formation ? $"prépare {formation}" : null,
+            ServiceAdherents.ListeBrevets(a.AutresBrevets) is { Count: > 0 } autres ? string.Join(", ", autres) : null,
             a.Nitrox ? "certifié nitrox" : null, a.Actif ? null : "désactivé",
         }.Where(p => !string.IsNullOrWhiteSpace(p)));
         var textes = Ui.Pile(nom, Ui.Libelle(qualite, Theme.Police(9.75f), a.Enseignant ? Theme.Encadrement : Theme.TexteSecondaireClair));
@@ -738,22 +739,17 @@ public sealed class EcranMoniteurs : EcranBase
 
         var prenom = new ChampSaisie { Valeur = a?.Prenom ?? "", TexteIndicatif = "Ex. Camille" };
         var nom = new ChampSaisie { Valeur = a?.Nom ?? "", TexteIndicatif = "Ex. Martin" };
-        // Formation en cours : puces des classes du club (Membres › Classes) ; sa classe reste proposée si elle a été désactivée.
+        // Maquette « Niveau et formation » : brevet obtenu sur l'échelle Aucun… N4 (déduit de la classe suivie s'il n'est pas
+        // renseigné : « Niveau 2 » → N1), interrupteur « En formation » = la classe qui prépare le brevet suivant (une autre
+        // classe déjà suivie, Autonome, est gardée tant qu'on ne coupe pas), autres brevets en puces (Nitrox = certifié nitrox).
         var formations = await _adherents.ListerFormationsAsync(a?.ClasseId);
-        var niveau = new ChoixPuces { AccessibleName = "Formation en cours", Margin = new Padding(0, 0, 0, 10) };
-        niveau.Groupe("Classe", formations.Select(f => (f.Nom, f.Actif ? f.Nom : $"{f.Nom} (désactivée)")));
-        niveau.Valeur = formations.FirstOrDefault(f => f.Id == a?.ClasseId)?.Nom;
-
-        // Niveau obtenu : puce (Niveau 1… 4) ou un autre niveau tapé (PA40, Guide de palanquée) ; l'un efface l'autre.
-        var obtenuPropose = ServiceAdherents.NiveauxPlongee.FirstOrDefault(n => n == a?.NiveauObtenu);
-        var obtenu = new ChoixPuces { AccessibleName = "Niveau obtenu", Margin = new Padding(0, 0, 0, 8) };
-        obtenu.Groupe("Obtenu", ServiceAdherents.NiveauxPlongee.Select(n => (n, n)));
-        obtenu.Valeur = obtenuPropose;
-        var autreObtenu = new ChampSaisie { Valeur = obtenuPropose is null ? a?.NiveauObtenu ?? "" : "", TexteIndicatif = "Ex. PA40", Size = new Size(200, Theme.HauteurCliquable) };
-        autreObtenu.Champ.AccessibleName = "Autre niveau obtenu";
-        autreObtenu.Champ.MaxLength = Adherent.LongueurMaxNiveau;
-        autreObtenu.Margin = Padding.Empty;
-        string? NiveauObtenu() => obtenu.Valeur ?? (autreObtenu.Valeur.Trim() is { Length: > 0 } o ? o : null);
+        var classe = formations.FirstOrDefault(f => f.Id == a?.ClasseId);
+        var echelle = new EchelleBrevets { Margin = new Padding(0, 4, 0, 18) };
+        echelle.Valeur = ServiceAdherents.IndiceBrevet(a?.NiveauObtenu) ?? ServiceAdherents.BrevetDeduit(classe?.Nom);
+        var formation = new Interrupteur("En formation") { Checked = classe is not null };
+        var brevets = new ChoixBrevets(ServiceAdherents.AutresBrevetsProposes) { Margin = new Padding(0, 0, 0, 12) };
+        brevets.Brevets = [.. (a?.Nitrox == true ? ["Nitrox"] : Array.Empty<string>()), .. ServiceAdherents.ListeBrevets(a?.AutresBrevets)];
+        Moniteur? Suivante() => ServiceAdherents.ClasseSuivante(echelle.Valeur, formations);
 
         var licence = new ChampSaisie { Valeur = a?.Licence ?? "", TexteIndicatif = "A-12-345678", Icone = Icones.CarteLicence };
         var telephone = new ChampSaisie { Valeur = a?.Telephone ?? "", TexteIndicatif = "06 12 34 56 78", Icone = Icones.Telephone };
@@ -800,9 +796,10 @@ public sealed class EcranMoniteurs : EcranBase
                 Id = a?.Id ?? 0,
                 Prenom = prenom.Valeur,
                 Nom = nom.Valeur,
-                ClasseId = formations.FirstOrDefault(f => f.Nom == niveau.Valeur)?.Id,
-                Niveau = niveau.Valeur,
-                NiveauObtenu = NiveauObtenu(),
+                ClasseId = classe?.Id,
+                Niveau = classe?.Nom,
+                NiveauObtenu = echelle.Valeur is { } brevet ? ServiceAdherents.BrevetsObtenus[brevet] : null,
+                AutresBrevets = ServiceAdherents.JoindreBrevets(brevets.Brevets),
                 Licence = licence.Valeur,
                 Telephone = telephone.Valeur,
                 Actif = actif.Checked,
@@ -832,26 +829,37 @@ public sealed class EcranMoniteurs : EcranBase
         identite.DeuxChamps("Téléphone", telephone, "N° de licence", licence);
         fenetre.Ajouter(identite);
 
-        // Niveau et formation : le niveau déjà obtenu (brevet), puis la classe suivie (formation en cours).
+        // Niveau et formation (maquette) : BREVET OBTENU (échelle, « Effacer »), EN FORMATION (carte dorée), AUTRES BREVETS.
         var sectionNiveau = new SectionFormulaire(2, "Niveau et formation");
-        sectionNiveau.Ajouter(obtenu);
-        var libelleAutreObtenu = Ui.Libelle("Autre niveau :", Theme.Police(9f), Theme.TexteSecondaire);
-        libelleAutreObtenu.Margin = new Padding(0, 13, 10, 0);
-        var ligneAutreObtenu = sectionNiveau.Ajouter(Ui.Rangee(true, libelleAutreObtenu, autreObtenu));
-        ligneAutreObtenu.Margin = new Padding(0, 0, 0, 6);
-        var aideObtenu = sectionNiveau.Ajouter(Ui.Libelle("Le dernier niveau qu'il a obtenu (son brevet). Touche à nouveau une puce pour la retirer.",
-            Theme.Police(9f), Theme.TexteSecondaire));
-        aideObtenu.Margin = new Padding(0, 0, 0, 16);
-        if (formations.Count > 0)
+        Label Intertitre(string texte)
         {
-            sectionNiveau.Ajouter(niveau);
+            var libelle = Ui.Libelle(texte.ToUpper(Libelles.Culture), Theme.PoliceGrasse(8.25f), Theme.TexteSecondaire);
+            libelle.Anchor = AnchorStyles.Left;
+            libelle.Margin = Padding.Empty;
+            return libelle;
         }
 
-        var aideNiveau = sectionNiveau.Ajouter(Ui.Libelle(formations.Count > 0
-                ? "La classe qu'il suit : « Niveau 2 » = il prépare le niveau 2. Touche à nouveau une classe pour la retirer."
-                : "Formation en cours : aucune classe ; créez-les dans Membres › Classes (Niveau 1, Niveau 2… Autonome).",
-            Theme.Police(9f), Theme.TexteSecondaire));
-        aideNiveau.Margin = new Padding(0, 0, 0, 12);
+        var effacer = new BoutonArrondi("Effacer", StyleBouton.Lien) { Anchor = AnchorStyles.Right, Margin = Padding.Empty };
+        effacer.Click += (_, _) => echelle.Valeur = null;
+        var enteteBrevet = new TableLayoutPanel { ColumnCount = 2, RowCount = 1, Height = Theme.HauteurCliquable, Margin = new Padding(0, 0, 0, 6), BackColor = Color.Transparent };
+        enteteBrevet.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        enteteBrevet.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        enteteBrevet.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        enteteBrevet.Controls.Add(Intertitre("Brevet obtenu"), 0, 0);
+        enteteBrevet.Controls.Add(effacer, 1, 0);
+        sectionNiveau.Ajouter(enteteBrevet);
+        sectionNiveau.Ajouter(echelle);
+
+        var titreFormation = sectionNiveau.Ajouter(Intertitre("En formation"));
+        titreFormation.Margin = new Padding(0, 0, 0, 10);
+        var carteFormation = sectionNiveau.Ajouter(new CarteAutorisation(new TuileIcone(Icones.Diplome, null, Theme.Avertissement), "", "", formation, Theme.Avertissement));
+        carteFormation.Margin = new Padding(0, 0, 0, 18);
+
+        var facultatif = Ui.Libelle("· facultatif", Theme.Police(8.25f), Theme.TexteSecondaire);
+        facultatif.Margin = new Padding(6, 0, 0, 0);
+        var titreBrevets = sectionNiveau.Ajouter(Ui.Rangee(true, Intertitre("Autres brevets"), facultatif));
+        titreBrevets.Margin = new Padding(0, 0, 0, 10);
+        sectionNiveau.Ajouter(brevets);
         fenetre.Ajouter(sectionNiveau);
 
         // Rôles au club : enseignant (niveau d'encadrement sous la carte) et, à part, inspecteur TIV.
@@ -936,11 +944,25 @@ public sealed class EcranMoniteurs : EcranBase
                 _ => Theme.TexteSecondaire,
             };
 
-            var niveauObtenu = NiveauObtenu();
-            sectionNiveau.TexteDroite = niveauObtenu is null && niveau.Valeur is null ? "non renseignés"
-                : string.Join(" · ", new[] { niveauObtenu, niveau.Valeur is { } prepare ? $"prépare {prepare}" : null }.Where(t => t is not null));
-            sectionNiveau.CouleurDroite = niveauObtenu is null && niveau.Valeur is null ? Theme.TexteSecondaire : Theme.AccentClair;
-            autreObtenu.CouleurBordure = obtenu.Valeur is null && niveauObtenu is not null ? Theme.AccentClair : null;
+            var brevet = echelle.Valeur;
+            var niveauObtenu = brevet is { } b ? ServiceAdherents.BrevetsObtenus[b] : null;
+            var suivante = Suivante();
+            var prepare = classe is not null && classe.Id == suivante?.Id;
+            sectionNiveau.TexteDroite = ServiceAdherents.ResumeNiveau(brevet, classe?.Nom);
+            sectionNiveau.CouleurDroite = brevet is null && classe is null ? Theme.TexteSecondaire : Theme.AccentClair;
+            effacer.Visible = brevet is not null;
+            echelle.EnFormation = prepare;
+            carteFormation.Disponible = classe is not null || suivante is not null;
+            var prochain = brevet is >= 0 and < 4 ? ServiceAdherents.NiveauxPlongee[brevet.Value] : null;
+            (carteFormation.Titre, carteFormation.Description) = (classe, suivante) switch
+            {
+                ({ } c, _) when prepare => ($"Prépare le {c.Nom}", $"Suit la classe {c.Nom} cette saison."),
+                ({ } c, _) => ($"Suit la classe {c.Nom}", "Coupez pour retirer cette classe."),
+                (null, { } s) => ($"Prépare le {s.Nom}", "Ne suit pas de formation cette saison."),
+                _ when brevet is null => ("Choisissez d'abord le brevet obtenu", "Pas de classe à suivre."),
+                _ when prochain is null => ("Niveau maximum atteint", "Pas de classe à suivre."),
+                _ => ($"Pas de classe « {prochain} »", "Créez-la dans Membres › Classes pour la proposer ici."),
+            };
             var niveauEnc = NiveauEncadrement();
             carteEnseignant.DessousVisible = enseignant.Checked;
             carteEnseignant.Description = enseignant.Checked
@@ -979,9 +1001,9 @@ public sealed class EcranMoniteurs : EcranBase
                 etiquettes.Add((niveauObtenu, Theme.TexteSecondaireClair));
             }
 
-            if (niveau.Valeur is { } nv)
+            if (classe is { } nv)
             {
-                etiquettes.Add(($"Prépare {nv}", Theme.AccentClair));
+                etiquettes.Add(($"Prépare {nv.Nom}", Theme.AccentClair));
             }
 
             if (nitrox.Checked)
@@ -1013,25 +1035,41 @@ public sealed class EcranMoniteurs : EcranBase
                 telephone.Champ.SelectionStart = forme.Length;
             }
         };
-        niveau.ValeurChangee += (_, _) => Afficher();
-        obtenu.ValeurChangee += (_, _) =>
+        // Brevet changé : la formation suit (classe du brevet suivant) ; une autre classe (Autonome) est gardée.
+        var majFormation = false;
+        echelle.ValeurChangee += (_, _) =>
         {
-            if (obtenu.Valeur is not null)
+            if (formation.Checked && (classe is null || ServiceAdherents.BrevetDeduit(classe.Nom) is not null))
             {
-                autreObtenu.Valeur = "";
+                classe = Suivante();
+                majFormation = true;
+                formation.Checked = classe is not null;
+                majFormation = false;
             }
 
             Afficher();
         };
-        autreObtenu.Champ.TextChanged += (_, _) =>
+        formation.CheckedChanged += (_, _) =>
         {
-            if (autreObtenu.Valeur.Trim().Length > 0)
+            if (!majFormation)
             {
-                obtenu.Valeur = null;
+                classe = formation.Checked ? Suivante() : null;
+                if (formation.Checked && classe is null)
+                {
+                    formation.Checked = false;
+                }
             }
 
             Afficher();
         };
+
+        // « Nitrox » des autres brevets = l'interrupteur « Certifié nitrox » des autorisations.
+        brevets.BrevetsChanges += (_, _) =>
+        {
+            nitrox.Checked = brevets.Contient("Nitrox");
+            Afficher();
+        };
+        nitrox.CheckedChanged += (_, _) => brevets.Definir("Nitrox", nitrox.Checked);
         enseignant.CheckedChanged += (_, _) => Afficher();
         tiv.CheckedChanged += (_, _) => Afficher();
         niveauxEncadrement.ValeurChangee += (_, _) =>
@@ -1803,7 +1841,7 @@ public sealed class EcranMoniteurs : EcranBase
             // Niveau obtenu (N1), puis la classe suivie (« PRÉPARE N2 »).
             if (!string.IsNullOrWhiteSpace(a.NiveauObtenu))
             {
-                px = Pastille(g, ServiceMoniteurs.AbregeDe(a.NiveauObtenu), px, py, Theme.TexteSecondaireClair);
+                px = Pastille(g, a.NiveauObtenu == ServiceAdherents.Debutant ? "DÉBUTANT" : ServiceMoniteurs.AbregeDe(a.NiveauObtenu), px, py, Theme.TexteSecondaireClair);
             }
 
             if (!string.IsNullOrWhiteSpace(a.Niveau))

@@ -11,6 +11,8 @@ public sealed class Adherent
     public const int LongueurMaxNiveau = 30;
     public const int LongueurMaxLicence = 30;
     public const int LongueurMaxTelephone = 30;
+    public const int LongueurMaxBrevet = 30;
+    public const int NombreMaxBrevets = 10;
 
     public long Id { get; set; }
     public string Nom { get; set; } = "";
@@ -26,10 +28,17 @@ public sealed class Adherent
     public string? Niveau { get; set; }
 
     /// <summary>
-    /// Niveau de plongée déjà obtenu (adherent.niveau_obtenu, migration 031) : « Niveau 1 »… ou un autre niveau tapé (PA40),
-    /// ou null. Celui qui prépare le niveau 2 (<see cref="Niveau"/>) a obtenu le niveau 1.
+    /// Brevet obtenu (adherent.niveau_obtenu, migration 031) : « Débutant » (aucun brevet), « Niveau 1 »… « Niveau 4 », ou null
+    /// (non renseigné). Celui qui prépare le niveau 2 (<see cref="Niveau"/>) a obtenu le niveau 1. Un autre brevet (PA40) va
+    /// dans <see cref="AutresBrevets"/> (migration 032).
     /// </summary>
     public string? NiveauObtenu { get; set; }
+
+    /// <summary>
+    /// Autres brevets (adherent.autres_brevets, migration 032) : « PA40; RIFAP », séparés par « ; », ou null. Le nitrox n'y est
+    /// pas : c'est <see cref="Nitrox"/>. Lus et écrits par <see cref="Services.ServiceAdherents.ListeBrevets"/> / <c>JoindreBrevets</c>.
+    /// </summary>
+    public string? AutresBrevets { get; set; }
 
     /// <summary>Numéro de licence FFESSM (unique s'il est renseigné), ou null.</summary>
     public string? Licence { get; set; }

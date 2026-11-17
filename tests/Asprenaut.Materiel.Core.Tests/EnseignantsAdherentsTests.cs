@@ -421,13 +421,88 @@ public class EnseignantsAdherentsTests
 
         Assert.True(r.Reussi, r.Message);
         var adherents = _ctx.Db.Adherents.ToDictionary(a => a.Prenom);
-        Assert.Equal(("Niveau 1", "Guide de palanquée"), (adherents["Julie"].NiveauObtenu, adherents["Hugo"].NiveauObtenu));
+        Assert.Equal("Niveau 1", adherents["Julie"].NiveauObtenu);
         Assert.Null(adherents["Julie"].Niveau); // « Brevet » n'est pas la formation en cours.
+
+        // Hors de l'échelle Débutant… Niveau 4 : rangé dans les autres brevets.
+        Assert.Equal((null, "Guide de palanquée"), (adherents["Hugo"].NiveauObtenu, adherents["Hugo"].AutresBrevets));
 
         // Case vide : niveau inchangé.
         Assert.True((await _ctx.Adherents.ImporterAsync([["Nom", "Prénom", "Niveau obtenu"], ["Martin", "Julie", ""]])).Reussi);
         Assert.Equal("Niveau 1", _ctx.Db.Adherents.Single(a => a.Prenom == "Julie").NiveauObtenu);
         Assert.Contains(ServiceAdherents.ColonnesModele([]), c => c.EnTete == "Niveau obtenu");
+    }
+
+    // ---------------------------------------------------------------- Niveau et formation, autres brevets (migration 032)
+
+    [Theory]
+    [InlineData("aucun", 0)]
+    [InlineData("Débutant", 0)]
+    [InlineData("N0", 0)]
+    [InlineData("n3", 3)]
+    [InlineData("Niveau 4", 4)]
+    [InlineData("PA40", null)]
+    [InlineData(null, null)]
+    public void Le_brevet_obtenu_se_place_sur_l_echelle(string? saisie, int? attendu) =>
+        Assert.Equal(attendu, ServiceAdherents.IndiceBrevet(saisie));
+
+    [Fact]
+    public void La_formation_est_la_classe_du_brevet_suivant()
+    {
+        var classes = _ctx.AjouterClasses("Niveau 1", "Niveau 3", "Autonome");
+
+        Assert.Equal("Niveau 1", ServiceAdherents.ClasseSuivante(0, classes)?.Nom);
+        Assert.Equal("Niveau 3", ServiceAdherents.ClasseSuivante(2, classes)?.Nom);
+        Assert.Null(ServiceAdherents.ClasseSuivante(1, classes)); // Pas de classe « Niveau 2 ».
+        Assert.Null(ServiceAdherents.ClasseSuivante(4, classes)); // Niveau maximum.
+        Assert.Null(ServiceAdherents.ClasseSuivante(null, classes));
+
+        // Brevet non renseigné : déduit de la classe suivie.
+        Assert.Equal((0, 2, (int?)null), (ServiceAdherents.BrevetDeduit("Niveau 1"), ServiceAdherents.BrevetDeduit("N3"), ServiceAdherents.BrevetDeduit("Autonome")));
+
+        Assert.Equal("Niveau 2 · prépare le N3", ServiceAdherents.ResumeNiveau(2, "Niveau 3"));
+        Assert.Equal("Débutant", ServiceAdherents.ResumeNiveau(0, null));
+        Assert.Equal("Niveau 1 · suit Autonome", ServiceAdherents.ResumeNiveau(1, "Autonome"));
+        Assert.Equal("Non renseigné", ServiceAdherents.ResumeNiveau(null, null));
+    }
+
+    [Fact]
+    public async Task Les_autres_brevets_sont_nettoyes_et_nitrox_coche_la_certification()
+    {
+        var r = await _ctx.Adherents.EnregistrerAsync(new Adherent
+        {
+            Prenom = "Julie", Nom = "Martin", NiveauObtenu = "aucun", AutresBrevets = "pa 40; rifap;PA40; Nitrox ;Plongée sous glace",
+        });
+
+        Assert.True(r.Reussi, r.Message);
+        var julie = (await _ctx.DepotAdherents.ObtenirAsync(r.Id!.Value))!;
+        Assert.Equal((ServiceAdherents.Debutant, "PA40; RIFAP; Plongée sous glace", true), (julie.NiveauObtenu, julie.AutresBrevets, julie.Nitrox));
+        Assert.Equal(["PA40", "RIFAP", "Plongée sous glace"], ServiceAdherents.ListeBrevets(julie.AutresBrevets));
+
+        // Un ancien brevet hors échelle (« PA40 » dans le niveau obtenu) rejoint les autres brevets.
+        julie.NiveauObtenu = "Guide de palanquée";
+        Assert.True((await _ctx.Adherents.EnregistrerAsync(julie)).Reussi);
+        julie = (await _ctx.DepotAdherents.ObtenirAsync(julie.Id))!;
+        Assert.Equal((null, "Guide de palanquée; PA40; RIFAP; Plongée sous glace"), (julie.NiveauObtenu, julie.AutresBrevets));
+
+        // Trop long, trop nombreux : refusés.
+        Assert.False((await _ctx.Adherents.EnregistrerAsync(new Adherent { Prenom = "Paul", Nom = "Long", AutresBrevets = new string('x', 31) })).Reussi);
+        Assert.False((await _ctx.Adherents.EnregistrerAsync(new Adherent
+        {
+            Prenom = "Paul", Nom = "Long", AutresBrevets = string.Join(";", Enumerable.Range(1, Adherent.NombreMaxBrevets + 1).Select(i => $"B{i}")),
+        })).Reussi);
+    }
+
+    [Fact]
+    public async Task L_import_ajoute_les_autres_brevets_sans_en_retirer()
+    {
+        Assert.True((await _ctx.Adherents.ImporterAsync([["Nom", "Prénom", "Autres brevets"], ["Martin", "Julie", "PA40, RIFAP"]])).Reussi);
+        Assert.Equal("PA40; RIFAP", _ctx.Db.Adherents.Single(a => a.Prenom == "Julie").AutresBrevets);
+
+        Assert.True((await _ctx.Adherents.ImporterAsync([["Nom", "Prénom", "Autres brevets"], ["Martin", "Julie", "rifap; Nitrox; Initiateur"]])).Reussi);
+        var julie = _ctx.Db.Adherents.Single(a => a.Prenom == "Julie");
+        Assert.Equal(("PA40; RIFAP; Initiateur", true), (julie.AutresBrevets, julie.Nitrox));
+        Assert.Contains(ServiceAdherents.ColonnesModele([]), c => c.EnTete == "Autres brevets");
     }
 
     // ---------------------------------------------------------------- Départ : l'enseignant prend du matériel

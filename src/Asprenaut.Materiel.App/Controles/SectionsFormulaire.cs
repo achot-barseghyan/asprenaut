@@ -806,24 +806,31 @@ public sealed class TuileIcone : ControleDessine
         TabStop = false; // Décoratif : un Control prend le focus par défaut (Tab s'y arrêtait).
     }
 
+    /// <summary>Tuile grisée (carte indisponible).</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool Estompee { get => _estompee; set => Invalider(ref _estompee, value); }
+
+    private bool _estompee;
+
     protected override void Peindre(Graphics g)
     {
         var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
+        var couleur = _estompee ? Theme.TexteSecondaire : _couleur;
         using (var chemin = Dessin.Arrondi(r, E(10)))
         {
-            using var fond = new SolidBrush(Theme.Teinte(_couleur, 0.16f));
+            using var fond = new SolidBrush(Theme.Teinte(couleur, 0.16f));
             g.FillPath(fond, chemin);
-            using var stylo = new Pen(Theme.Teinte(_couleur, 0.45f), E(1));
+            using var stylo = new Pen(Theme.Teinte(couleur, 0.45f), E(1));
             g.DrawPath(stylo, chemin);
         }
 
         if (_icone is not null)
         {
-            Icones.Dessiner(g, _icone, RectangleF.Inflate(r, -Width * 0.27f, -Height * 0.27f), _couleur);
+            Icones.Dessiner(g, _icone, RectangleF.Inflate(r, -Width * 0.27f, -Height * 0.27f), couleur);
         }
         else if (_texte is not null)
         {
-            Dessin.Texte(g, _texte, Theme.PoliceGrasse(10.5f), new Rectangle(0, 0, Width, Height), _couleur, centre: true);
+            Dessin.Texte(g, _texte, Theme.PoliceGrasse(10.5f), new Rectangle(0, 0, Width, Height), couleur, centre: true);
         }
     }
 }
@@ -854,7 +861,7 @@ public sealed class CarteAutorisation : Carte
         AutoSize = true;
         AutoSizeMode = AutoSizeMode.GrowAndShrink;
 
-        var libelle = Ui.Libelle(titre, Theme.PoliceTitre(10.5f));
+        var libelle = _titre = Ui.Libelle(titre, Theme.PoliceTitre(10.5f));
         libelle.Margin = new Padding(0, 0, 0, 2);
         _description.Text = description;
         _description.Margin = Padding.Empty;
@@ -885,9 +892,17 @@ public sealed class CarteAutorisation : Carte
 
         foreach (var c in new Control[] { this, _table, textes, libelle, _description, tuile })
         {
-            c.Click += (_, _) => interrupteur.Checked = !interrupteur.Checked;
+            c.Click += (_, _) =>
+            {
+                if (_disponible)
+                {
+                    interrupteur.Checked = !interrupteur.Checked;
+                }
+            };
             c.Cursor = Cursors.Hand;
         }
+
+        _tuile = tuile;
 
         _table.SizeChanged += (_, _) => Parent?.PerformLayout(this, nameof(Height));
         AppliquerEtat();
@@ -899,6 +914,45 @@ public sealed class CarteAutorisation : Carte
         BackColor = Interrupteur.Checked ? Theme.Sur(ChampSaisie.FondChamp, _couleur, 0.07f) : ChampSaisie.FondChamp;
         CouleurBordure = Interrupteur.Checked ? Theme.Sur(ChampSaisie.FondChamp, _couleur, 0.5f) : Theme.Bordure;
         Invalidate(true);
+    }
+
+    private readonly Label _titre;
+    private readonly TuileIcone? _tuile;
+    private bool _disponible = true;
+
+    /// <summary>Titre de la carte (peut changer avec la saisie : « Prépare le Niveau 3 »).</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public string Titre
+    {
+        get => _titre.Text;
+        set => _titre.Text = value;
+    }
+
+    /// <summary>
+    /// Faux : rien à choisir (« Choisis d'abord le brevet obtenu ») ; interrupteur coupé et grisé, textes estompés, clic sans effet.
+    /// </summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool Disponible
+    {
+        get => _disponible;
+        set
+        {
+            if (_disponible == value)
+            {
+                return;
+            }
+
+            _disponible = value;
+            Interrupteur.Enabled = value;
+            _titre.ForeColor = value ? Theme.Texte : Theme.TexteSecondaire;
+            if (_tuile is not null)
+            {
+                _tuile.Estompee = !value;
+            }
+
+            Cursor = value ? Cursors.Hand : Cursors.Default;
+            Invalidate(true);
+        }
     }
 
     /// <summary>Interrupteur de la carte.</summary>
