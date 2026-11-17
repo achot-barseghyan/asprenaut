@@ -398,7 +398,9 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     « N° fiche » = id) ou « Modèle vide » (`ImportListeAdherentsTests`). Rapprochement à l'import (`Retrouver`) : N° fiche si nom,
     prénom ou licence concorde encore ; licence (`CleLicence` : sans majuscules, espaces, tirets) ; nom + prénom (fiche sans licence,
     ou seule homonyme dont la licence n'est pas dans le fichier : licence corrigée). Une fiche n'est traitée qu'une fois : ligne
-    suivante « en double ignorée ». Case vide = inchangé. Export : `adherents.csv`, colonne Adhérent du matériel des sorties.
+    suivante « en double ignorée ». Case vide = inchangé. Colonnes « Enseignant » (Oui / Non) et « Niveau d'encadrement » (E1… MF2,
+    `NiveauPropose`) : `RolesImportAsync` → mêmes rôles que la fiche (Oui = enseignant, Non = plus enseignant, fiche et TIV gardés ;
+    niveau seul = Oui ; vide = inchangé ; refus de `VerifierRolesAsync` = rôle inchangé, ligne citée). Export : `adherents.csv`, colonne Adhérent du matériel des sorties.
 
 31. Nitrox et adhérents désactivés (migration 015) : case « Nitrox » de la fiche des blocs et des détendeurs seulement
     (`ServiceInventaire.PeutEtreNitrox`, vidée pour les autres catégories, journal « nitrox » / « plus nitrox ») ; « Certifié nitrox »

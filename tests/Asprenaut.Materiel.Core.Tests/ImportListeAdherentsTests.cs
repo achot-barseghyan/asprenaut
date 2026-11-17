@@ -113,6 +113,47 @@ public class ImportListeAdherentsTests
     }
 
     [Fact]
+    public async Task La_colonne_enseignant_donne_ou_retire_le_role_sans_toucher_a_l_inspecteur_tiv()
+    {
+        var lea = await AdherentAsync("Léa", "Dubois");
+        var r = await _ctx.Adherents.EnregistrerAsync(new Adherent { Prenom = "Paul", Nom = "Bernard" }, new RolesAdherent(true, "E2", InspecteurTiv: true));
+        var paul = (await _ctx.DepotAdherents.ObtenirAsync(r.Id!.Value))!;
+
+        var tableau = await ListeExporteeAsync();
+        Assert.Equal(("Oui", "E2"), (tableau[1][Colonne(tableau, "Enseignant")], tableau[1][Colonne(tableau, "Niveau d'encadrement")])); // Bernard avant Dubois.
+        Assert.Equal(("Non", ""), (tableau[2][Colonne(tableau, "Enseignant")], tableau[2][Colonne(tableau, "Niveau d'encadrement")]));
+
+        // Léa devient enseignante E1 ; Paul n'est plus enseignant ; Hugo arrive avec seulement un niveau d'encadrement (= enseignant).
+        tableau[2][Colonne(tableau, "Enseignant")] = "Oui";
+        tableau[2][Colonne(tableau, "Niveau d'encadrement")] = "e1";
+        tableau[1][Colonne(tableau, "Enseignant")] = "Non";
+        var hugo = Enumerable.Repeat("", tableau[0].Count).ToList();
+        (hugo[0], hugo[1], hugo[Colonne(tableau, "Niveau d'encadrement")]) = ("Petit", "Hugo", "MF1");
+        tableau.Add(hugo);
+
+        Assert.True((await _ctx.Adherents.ImporterAsync(tableau.Select(l => (IReadOnlyList<string>)l).ToList())).Reussi);
+
+        var leaLue = (await _ctx.DepotAdherents.ObtenirAsync(lea.Id))!;
+        Assert.Equal((true, "E1"), (leaLue.Enseignant, leaLue.NiveauEncadrement));
+        var paulLu = (await _ctx.DepotAdherents.ObtenirAsync(paul.Id))!;
+        Assert.Equal((paul.MoniteurId, false, true), (paulLu.MoniteurId, paulLu.Enseignant, paulLu.InspecteurTiv)); // Fiche gardée, TIV aussi.
+        var hugoLu = _ctx.Db.Adherents.Single(a => a.Prenom == "Hugo");
+        Assert.Equal((true, "MF1"), ((await _ctx.DepotAdherents.ObtenirAsync(hugoLu.Id))!.Enseignant, (await _ctx.DepotAdherents.ObtenirAsync(hugoLu.Id))!.NiveauEncadrement));
+        Assert.Contains(await _ctx.Moniteurs.ListerActifsAsync(GenreResponsable.Moniteur), m => m.Nom == "Dubois" && m.Prenom == "Léa");
+    }
+
+    [Fact]
+    public async Task Une_case_enseignant_vide_ne_change_pas_le_role()
+    {
+        var r = await _ctx.Adherents.EnregistrerAsync(new Adherent { Prenom = "Paul", Nom = "Bernard" }, new RolesAdherent(true, "E3"));
+
+        Assert.True((await _ctx.Adherents.ImporterAsync([["Nom", "Prénom", "Enseignant", "Niveau d'encadrement"], ["Bernard", "Paul", "", ""]])).Reussi);
+
+        var paul = (await _ctx.DepotAdherents.ObtenirAsync(r.Id!.Value))!;
+        Assert.Equal((true, "E3"), (paul.Enseignant, paul.NiveauEncadrement));
+    }
+
+    [Fact]
     public async Task La_liste_exportee_ne_contient_que_les_adherents_actifs()
     {
         await AdherentAsync("Julie", "Martin");

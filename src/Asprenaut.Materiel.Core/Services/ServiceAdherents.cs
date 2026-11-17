@@ -932,7 +932,10 @@ public sealed class ServiceAdherents(
     /// <param name="Caci">Colonne « CACI valable jusqu'au » : null si absente, vide ou illisible (le CACI n'est alors pas changé).</param>
     /// <param name="CaciIllisible">Case CACI remplie mais pas une date (signalé dans le message de l'import).</param>
     /// <param name="Fiche">Colonne « N° fiche » du modèle prérempli : id de l'adhérent dans l'application (null si absente ou vide).</param>
-    public sealed record LigneImport(int Numero, Adherent? Adherent, string? Erreur, bool? Nitrox = null, DateOnly? Caci = null, bool CaciIllisible = false, long? Fiche = null);
+    /// <param name="Enseignant">Colonne « Enseignant » (oui / non) : null si absente ou vide (rôle inchangé) ; un niveau d'encadrement rempli vaut « oui ».</param>
+    /// <param name="NiveauEncadrement">Colonne « Niveau d'encadrement » (« e2 » → « E2 ») : null si absente ou vide (niveau inchangé).</param>
+    public sealed record LigneImport(int Numero, Adherent? Adherent, string? Erreur, bool? Nitrox = null, DateOnly? Caci = null, bool CaciIllisible = false, long? Fiche = null,
+        bool? Enseignant = null, string? NiveauEncadrement = null);
 
     // En-têtes reconnus (sans accents ni majuscules), dans l'ordre : nom, prénom, formation, licence, téléphone, nitrox, CACI,
     // niveau obtenu (le brevet, pas la formation en cours), autres brevets (PA40, RIFAP : séparés par « ; » ou « , »).
@@ -949,6 +952,8 @@ public sealed class ServiceAdherents(
         ["niveau obtenu", "niveaux obtenus", "brevet", "brevet obtenu", "dernier niveau", "dernier niveau obtenu", "niveau atteint"],
         ["autres brevets", "autre brevet", "brevets", "autres niveaux", "qualifications", "specialites"],
         ["n fiche", "no fiche", "numero de fiche", "fiche", "n fiche (ne pas modifier)"],
+        ["enseignant", "encadrant", "est enseignant", "moniteur"],
+        ["niveau d'encadrement", "niveau d encadrement", "encadrement", "niveau enseignant", "niveau d'enseignant"],
     ];
 
     /// <summary>En-tête de la colonne qui relie une ligne du modèle prérempli à sa fiche (id de l'adhérent).</summary>
@@ -974,6 +979,9 @@ public sealed class ServiceAdherents(
             new("Nitrox", "Oui si certifié nitrox, sinon Non", 12, false, ["Oui", "Non"]),
             new("CACI valable jusqu'au", "Dernier jour de validité du certificat (jj/mm/aaaa). Vide : CACI inchangé", 20, false),
             new("Autres brevets", "Ex. : PA40; RIFAP (séparés par « ; »). Ajoutés à ceux déjà notés", 24, false),
+            new("Enseignant", "Oui : enseignant, responsable des sorties. Non : n'est plus enseignant. Vide : inchangé", 13, false, ["Oui", "Non"]),
+            new("Niveau d'encadrement", "Pour un enseignant : E1, E2, E3, E4, MF1, MF2 (choisissez dans la liste). Vide : inchangé", 20, false,
+                ServiceMoniteurs.NiveauxEncadrement.Select(n => n.Code).ToList()),
         ];
         if (avecListe)
         {
@@ -1003,8 +1011,9 @@ public sealed class ServiceAdherents(
             "4. Chaque personne est aussi reconnue par sa licence, puis par son nom et son prénom : ne copiez pas une même personne sur deux lignes.",
             "5. Niveau obtenu, Formation en cours et Nitrox : choisissez dans la liste (flèche à droite de la case). Le niveau obtenu est le dernier brevet (Niveau 1) ; la formation est la classe suivie (Niveau 2 = prépare le niveau 2).",
             "6. CACI valable jusqu'au : date de fin du certificat, au format jj/mm/aaaa (ex. 15/09/2027).",
-            "7. Une case vidée ne vide pas la fiche (l'ancienne valeur est gardée). Les autres brevets s'ajoutent à ceux déjà notés.",
-            "8. Enregistrez en .xlsx, puis dans l'application : Membres › Adhérents › Importer la liste Excel.",
+            "7. Enseignant : Oui ou Non dans la liste (Oui = responsable des sorties), avec son niveau d'encadrement (E1… MF2). Passer à Non ne supprime rien : ses sorties restent à son nom.",
+            "8. Une case vidée ne vide pas la fiche (l'ancienne valeur est gardée). Les autres brevets s'ajoutent à ceux déjà notés.",
+            "9. Enregistrez en .xlsx, puis dans l'application : Membres › Adhérents › Importer la liste Excel.",
             "Personne n'est supprimé par l'import : retirer une ligne ne retire pas l'adhérent (le désactiver depuis sa fiche).",
         ]
         :
@@ -1017,7 +1026,8 @@ public sealed class ServiceAdherents(
             "5. Niveau obtenu, Formation en cours et Nitrox : choisissez dans la liste (flèche à droite de la case). Le niveau obtenu est le dernier brevet (Niveau 1) ; la formation est la classe suivie (Niveau 2 = prépare le niveau 2). Ne tapez pas d'autre formation : elle serait ignorée. Vide = inchangé.",
             "6. CACI valable jusqu'au : date de fin du certificat, au format jj/mm/aaaa (ex. 15/09/2027). Passée cette date, l'adhérent ne sort plus de matériel. Vide = inchangé.",
             "7. Autres brevets : PA40, RIFAP, Initiateur… séparés par « ; ». Ils s'ajoutent à ceux déjà notés ; « Nitrox » coche la certification nitrox.",
-            "8. Enregistrez en .xlsx et rapportez le fichier au responsable matériel : Membres › Adhérents › Importer la liste Excel.",
+            "8. Enseignant : Oui dans la liste pour un enseignant (responsable des sorties), avec son niveau d'encadrement (E1… MF2). Vide = inchangé.",
+            "9. Enregistrez en .xlsx et rapportez le fichier au responsable matériel : Membres › Adhérents › Importer la liste Excel.",
             "Personne n'est retiré par l'import : les adhérents absents du fichier restent dans l'application.",
         ];
 
@@ -1039,6 +1049,8 @@ public sealed class ServiceAdherents(
                 a.Nitrox ? "Oui" : "Non",
                 a.Caci && a.CaciExpiration is { } fin ? fin.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : "",
                 a.AutresBrevets ?? "",
+                a.Enseignant ? "Oui" : "Non",
+                a.Enseignant ? a.NiveauEncadrement ?? "" : "",
                 a.Id.ToString(CultureInfo.InvariantCulture),
             ])
             .ToList();
@@ -1101,9 +1113,14 @@ public sealed class ServiceAdherents(
             a.Caci = caci is not null;
             a.CaciExpiration = caci;
             var fiche = long.TryParse(Cellule(ligne, colonnes[9]), NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) && id > 0 ? id : (long?)null;
+
+            // Enseignant : oui / non, vide = inchangé ; un niveau d'encadrement rempli sans réponse vaut « oui ».
+            var niveauEncadrement = Vide(Cellule(ligne, colonnes[11])) is { } n ? ServiceMoniteurs.NiveauPropose(n) ?? n : null;
+            var celluleEnseignant = Cellule(ligne, colonnes[10]);
+            var enseignant = !string.IsNullOrWhiteSpace(celluleEnseignant) ? OuiNon(celluleEnseignant) : niveauEncadrement is not null ? true : (bool?)null;
             resultat.Add(Normaliser(a, []) is { } erreur
                 ? new LigneImport(i + 1, null, erreur.Message)
-                : new LigneImport(i + 1, a, null, nitrox, caci, !string.IsNullOrWhiteSpace(celluleCaci) && caci is null, fiche));
+                : new LigneImport(i + 1, a, null, nitrox, caci, !string.IsNullOrWhiteSpace(celluleCaci) && caci is null, fiche, enseignant, niveauEncadrement));
         }
 
         return resultat;
@@ -1136,8 +1153,9 @@ public sealed class ServiceAdherents(
         var traites = new HashSet<long>(); // Fiches déjà ajoutées ou mises à jour par ce fichier : une deuxième ligne = la même personne en double.
         var licencesDuFichier = lues.Where(l => l.Adherent is not null).Select(l => CleLicence(l.Adherent!.Licence)).OfType<string>().ToHashSet(StringComparer.Ordinal);
         var niveauxInconnus = new List<int>();
+        var rolesRefuses = new List<int>();
         var cacisIllisibles = lues.Where(l => l.CaciIllisible).Select(l => l.Numero).ToList();
-        foreach (var lu in lues.Where(l => l.Adherent is not null).Select(l => (l.Numero, Adherent: l.Adherent!, l.Nitrox, l.Caci, l.Fiche)))
+        foreach (var lu in lues.Where(l => l.Adherent is not null).Select(l => (l.Numero, Adherent: l.Adherent!, l.Nitrox, l.Caci, l.Fiche, l.Enseignant, l.NiveauEncadrement)))
         {
             var nouveau = lu.Adherent;
 
@@ -1169,7 +1187,14 @@ public sealed class ServiceAdherents(
 
             if (existant is null)
             {
+                var rolesNouveau = await RolesImportAsync(nouveau, null, lu.Enseignant, lu.NiveauEncadrement, ct);
+                if (rolesNouveau.Refus)
+                {
+                    rolesRefuses.Add(lu.Numero);
+                }
+
                 nouveau.Id = await adherents.AjouterAsync(nouveau, ct);
+                await AppliquerRolesAsync(nouveau, rolesNouveau.Roles, null, ct);
                 existants.Add(nouveau);
                 traites.Add(nouveau.Id);
                 ajoutes++;
@@ -1199,8 +1224,23 @@ public sealed class ServiceAdherents(
             }
 
             existant.Actif = true;
+            var fiche = existant.MoniteurId is { } idFiche && classes is not null ? await classes.ObtenirAsync(idFiche, ct) : null;
+            var roles = await RolesImportAsync(existant, fiche, lu.Enseignant, lu.NiveauEncadrement, ct);
+            if (roles.Refus)
+            {
+                rolesRefuses.Add(lu.Numero);
+            }
+
             await adherents.MettreAJourAsync(existant, ct);
-            await SynchroniserEnseignantAsync(existant, ct);
+            if (roles.Roles is not null)
+            {
+                await AppliquerRolesAsync(existant, roles.Roles, fiche, ct); // Reprend aussi prénom, nom, téléphone et licence.
+            }
+            else
+            {
+                await SynchroniserEnseignantAsync(existant, ct);
+            }
+
             misAJour++;
         }
 
@@ -1213,6 +1253,12 @@ public sealed class ServiceAdherents(
         if (enDouble.Count > 0)
         {
             message += $", {Libelles.Pluriel(enDouble.Count, "ligne en double ignorée", "lignes en double ignorées")} (ligne{(enDouble.Count > 1 ? "s" : "")} {string.Join(", ", enDouble.Order().Take(10))}{(enDouble.Count > 10 ? "…" : "")})";
+        }
+
+        if (rolesRefuses.Count > 0)
+        {
+            message += $", {Libelles.Pluriel(rolesRefuses.Count, "rôle d'enseignant laissé inchangé", "rôles d'enseignant laissés inchangés")} " +
+                $"(ligne{(rolesRefuses.Count > 1 ? "s" : "")} {string.Join(", ", rolesRefuses.Take(10))}{(rolesRefuses.Count > 10 ? "…" : "")} : licence d'un autre enseignant ou niveau trop long)";
         }
 
         if (niveauxInconnus.Count > 0)
@@ -1229,6 +1275,22 @@ public sealed class ServiceAdherents(
 
         await JournaliserAsync(ActionsJournal.AdherentsImportes, $"Import de la liste des adhérents : {message}", ct);
         return ResultatOperation.Ok($"Import terminé : {message}.", ajoutes + misAJour);
+    }
+
+    /// <summary>
+    /// Rôle d'enseignant lu dans le fichier : null (case vide) = inchangé. « Oui » le rend enseignant (niveau d'encadrement lu,
+    /// sinon celui qu'il avait), « Non » le retire (sa fiche et ses sorties restent) ; le rôle d'inspecteur TIV est gardé.
+    /// Refus (licence d'un autre enseignant, niveau trop long) : rôle inchangé, la ligne est signalée.
+    /// </summary>
+    private async Task<(RolesAdherent? Roles, bool Refus)> RolesImportAsync(Adherent a, Moniteur? fiche, bool? enseignant, string? niveau, CancellationToken ct)
+    {
+        if (enseignant is not { } ens || classes is null)
+        {
+            return (null, false);
+        }
+
+        var roles = new RolesAdherent(ens, niveau ?? fiche?.Niveau, fiche?.InspecteurTiv ?? false);
+        return await VerifierRolesAsync(a, roles, fiche, ct) is null ? (roles, false) : (null, true);
     }
 
     private static readonly string[] FormatsDate = ["dd/MM/yyyy", "d/M/yyyy", "dd/MM/yy", "d/M/yy", "yyyy-MM-dd", "dd-MM-yyyy", "dd.MM.yyyy"];
