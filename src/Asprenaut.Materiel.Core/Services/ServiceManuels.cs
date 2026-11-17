@@ -4,7 +4,7 @@ using Asprenaut.Materiel.Core.Resultats;
 
 namespace Asprenaut.Materiel.Core.Services;
 
-/// <summary>Ce que l'on saisit pour un manuel (ajout ou modification). Le fichier PDF n'est donné qu'à l'ajout.</summary>
+/// <summary>Ce que l'on saisit pour un manuel (ajout ou modification). Le fichier PDF est donné à part (ajout, remplacement).</summary>
 public sealed record FicheManuel(
     string Marque,
     string Titre,
@@ -107,19 +107,9 @@ public sealed class ServiceManuels(
             return refus;
         }
 
-        if (string.IsNullOrWhiteSpace(cheminPdf) || !File.Exists(cheminPdf))
+        if (VerifierPdf(cheminPdf, nbPages) is { } refusPdf)
         {
-            return ResultatOperation.Echec("Choisissez le fichier PDF du manuel.");
-        }
-
-        if (!string.Equals(Path.GetExtension(cheminPdf), ".pdf", StringComparison.OrdinalIgnoreCase))
-        {
-            return ResultatOperation.Echec("Le manuel doit être un fichier PDF.");
-        }
-
-        if (nbPages < 1)
-        {
-            return ResultatOperation.Echec("Ce fichier PDF ne peut pas être lu.");
+            return refusPdf;
         }
 
         var manuel = new Manuel { NbPages = nbPages };
@@ -141,8 +131,11 @@ public sealed class ServiceManuels(
         return ResultatOperation.Ok($"Manuel « {manuel.Titre} » ajouté.", id);
     }
 
-    /// <summary>Modifie la fiche d'un manuel (le PDF reste le même).</summary>
-    public async Task<ResultatOperation> ModifierAsync(long id, FicheManuel fiche, CancellationToken ct = default)
+    /// <summary>
+    /// Modifie la fiche d'un manuel. Avec <paramref name="nouveauPdf"/> (nouvelle édition de la notice), le PDF est remplacé :
+    /// le nouveau est copié, la fiche vérifiée avec son nombre de pages, puis l'ancien fichier est supprimé du dossier.
+    /// </summary>
+    public async Task<ResultatOperation> ModifierAsync(long id, FicheManuel fiche, string? nouveauPdf = null, int nbPages = 0, CancellationToken ct = default)
     {
         if (Autorisation() is { Reussi: false } refus)
         {
@@ -154,13 +147,75 @@ public sealed class ServiceManuels(
             return ResultatOperation.Echec("Ce manuel n'existe plus.");
         }
 
+        var remplace = nouveauPdf is not null;
+        if (remplace && VerifierPdf(nouveauPdf, nbPages) is { } refusPdf)
+        {
+            return refusPdf;
+        }
+
+        var ancienFichier = manuel.Fichier;
+        var anciennesPages = manuel.NbPages;
+        if (remplace)
+        {
+            manuel.NbPages = nbPages; // Le sommaire et la page de l'entretien sont vérifiés sur le nouveau PDF.
+        }
+
         if (await RemplirAsync(manuel, fiche, ct) is { } erreur)
         {
+            manuel.NbPages = anciennesPages;
             return erreur;
         }
 
+        if (remplace)
+        {
+            try
+            {
+                manuel.Fichier = stockage.Importer(nouveauPdf!);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                manuel.NbPages = anciennesPages;
+                return ResultatOperation.Echec("Le fichier n'a pas pu être copié. Vérifiez qu'il n'est pas ouvert ailleurs.");
+            }
+        }
+
         await manuels.MettreAJourAsync(manuel, ct);
+        if (remplace)
+        {
+            SupprimerFichier(ancienFichier);
+            return ResultatOperation.Ok($"Manuel « {manuel.Titre} » enregistré avec le nouveau PDF.", id);
+        }
+
         return ResultatOperation.Ok($"Manuel « {manuel.Titre} » enregistré.", id);
+    }
+
+    /// <summary>Le fichier choisi est-il un PDF lisible ? Retourne l'erreur à afficher, ou null.</summary>
+    private static ResultatOperation? VerifierPdf(string? cheminPdf, int nbPages)
+    {
+        if (string.IsNullOrWhiteSpace(cheminPdf) || !File.Exists(cheminPdf))
+        {
+            return ResultatOperation.Echec("Choisissez le fichier PDF du manuel.");
+        }
+
+        if (!string.Equals(Path.GetExtension(cheminPdf), ".pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            return ResultatOperation.Echec("Le manuel doit être un fichier PDF.");
+        }
+
+        return nbPages < 1 ? ResultatOperation.Echec("Ce fichier PDF ne peut pas être lu.") : null;
+    }
+
+    /// <summary>Supprime un PDF du dossier ; s'il est ouvert ailleurs, il reste dans le dossier (sans erreur).</summary>
+    private void SupprimerFichier(string fichier)
+    {
+        try
+        {
+            stockage.Supprimer(fichier);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Fichier ouvert ailleurs : il restera dans le dossier.
+        }
     }
 
     /// <summary>Retire un manuel et son fichier PDF du dossier des manuels.</summary>
@@ -177,14 +232,7 @@ public sealed class ServiceManuels(
         }
 
         await manuels.SupprimerAsync(id, ct);
-        try
-        {
-            stockage.Supprimer(manuel.Fichier);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // Fichier ouvert ailleurs : le manuel est retiré de la liste, le fichier restera dans le dossier.
-        }
+        SupprimerFichier(manuel.Fichier);
 
         return ResultatOperation.Ok($"Manuel « {manuel.Titre} » retiré.");
     }

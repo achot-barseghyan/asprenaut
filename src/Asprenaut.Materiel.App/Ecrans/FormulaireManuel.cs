@@ -75,14 +75,54 @@ public static class FormulaireManuel
         return fenetre.ShowDialog(proprietaire) == DialogResult.OK ? cree : null;
     }
 
-    /// <summary>Ouvre la fiche d'un manuel ; vrai s'il a été modifié.</summary>
+    /// <summary>
+    /// Ouvre la fiche d'un manuel ; vrai s'il a été modifié. « Remplacer le PDF… » choisit la nouvelle édition de la notice :
+    /// elle remplace l'ancien fichier à l'enregistrement.
+    /// </summary>
     public static async Task<bool> ModifierAsync(IWin32Window? proprietaire, ServiceManuels manuels, Manuel manuel)
     {
         var champs = new Champs(await manuels.ListerCategoriesAsync(), manuel);
+        string? nouveauPdf = null;
+        var pages = 0;
+
+        var fichier = new ChampSaisie { Margin = Padding.Empty, Valeur = $"{manuel.Fichier} · {manuel.NbPages} pages" };
+        fichier.Champ.ReadOnly = true;
+        fichier.Champ.Font = Theme.Police(10f);
+        fichier.Champ.AccessibleName = "Fichier PDF";
+        var remplacer = new BoutonArrondi("Remplacer le PDF…", StyleBouton.Secondaire) { Margin = new Padding(10, 0, 0, 0) };
+        var ligneFichier = Ui.Colonnes((fichier, SizeType.Percent, 100), (remplacer, SizeType.AutoSize, 0));
+        var aide = Ui.Libelle("Nouvelle édition de la notice : choisissez le nouveau PDF, l'ancien sera remplacé à l'enregistrement.",
+            Theme.Police(9.75f), Theme.TexteSecondaire);
+        aide.Margin = new Padding(0, 4, 0, 10);
+        aide.MaximumSize = new Size(FenetreFormulaire.LargeurNormale - 2 * 28, 0); // Largeur des champs : le texte passe à la ligne.
+
         using var fenetre = new FenetreFormulaire($"Modifier « {manuel.Titre} »", "Enregistrer", async () =>
-            champs.Lire() is { } fiche ? await manuels.ModifierAsync(manuel.Id, fiche) : ResultatOperation.Echec(champs.Erreur));
-        var aide = Ui.Libelle($"{manuel.Fichier} · {manuel.NbPages} pages", Theme.Police(9.75f), Theme.TexteSecondaire);
-        aide.Margin = new Padding(0, 0, 0, 14);
+            champs.Lire() is { } fiche
+                ? await manuels.ModifierAsync(manuel.Id, fiche, nouveauPdf, pages)
+                : ResultatOperation.Echec(champs.Erreur));
+
+        remplacer.Click += async (_, _) =>
+        {
+            using var choix = new OpenFileDialog { Title = "Choisir la nouvelle notice du fabricant", Filter = "Fichiers PDF (*.pdf)|*.pdf", CheckFileExists = true };
+            if (choix.ShowDialog(fenetre) != DialogResult.OK)
+            {
+                return;
+            }
+
+            var lues = await LecteurPdf.CompterPagesAsync(choix.FileName);
+            if (lues == 0)
+            {
+                Dialogues.Erreur(fenetre, "Ce fichier PDF ne peut pas être lu (abîmé ou protégé par un mot de passe).");
+                return;
+            }
+
+            nouveauPdf = choix.FileName;
+            pages = lues;
+            fichier.Valeur = $"{Path.GetFileName(nouveauPdf)} · {lues} pages · nouveau";
+            aide.Text = $"Remplacera « {manuel.Fichier} » à l'enregistrement. Pensez à mettre à jour l'édition, le sommaire et la page de l'entretien.";
+        };
+
+        fenetre.Champ("Fichier PDF", ligneFichier);
         fenetre.Ajouter(aide);
         champs.Placer(fenetre);
         fenetre.Shown += (_, _) => champs.Marque.Champ.Focus();

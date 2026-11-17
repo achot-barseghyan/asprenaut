@@ -153,6 +153,67 @@ public sealed class ManuelsTests : IDisposable
     }
 
     [Fact]
+    public async Task Une_nouvelle_edition_remplace_le_pdf_et_supprime_l_ancien()
+    {
+        var id = (await _manuels.AjouterAsync(Fiche(), _pdf, 24)).Id!.Value;
+        var ancien = Assert.Single(await _manuels.ListerAsync()).Fichier;
+        var nouveau = Path.Combine(Path.GetTempPath(), $"notice-2026-{Guid.NewGuid():N}.pdf");
+        File.WriteAllText(nouveau, "%PDF-1.7");
+        try
+        {
+            var r = await _manuels.ModifierAsync(id, Fiche("8.2 Entretien ; 30", pageEntretien: 30) with { Edition = "2026" }, nouveau, 32);
+
+            Assert.True(r.Reussi, r.Message);
+            var manuel = Assert.Single(await _manuels.ListerAsync());
+            Assert.Equal(Path.GetFileName(nouveau), manuel.Fichier);
+            Assert.Equal(32, manuel.NbPages);
+            Assert.Equal("2026", manuel.Edition);
+            Assert.Equal([manuel.Fichier], _stockage.Fichiers);
+            Assert.DoesNotContain(ancien, _stockage.Fichiers);
+        }
+        finally
+        {
+            File.Delete(nouveau);
+        }
+    }
+
+    [Fact]
+    public async Task Un_nouveau_pdf_refuse_garde_l_ancien()
+    {
+        var id = (await _manuels.AjouterAsync(Fiche(), _pdf, 24)).Id!.Value;
+        var nouveau = Path.Combine(Path.GetTempPath(), $"notice-courte-{Guid.NewGuid():N}.pdf");
+        File.WriteAllText(nouveau, "%PDF-1.7");
+        try
+        {
+            // Le nouveau PDF n'a que 10 pages : la page de l'entretien (17) n'y est plus.
+            var r = await _manuels.ModifierAsync(id, Fiche(), nouveau, 10);
+            Assert.False(r.Reussi);
+            Assert.Contains("entre 1 et 10", r.Message);
+            Assert.False((await _manuels.ModifierAsync(id, Fiche(), Path.ChangeExtension(nouveau, ".txt"), 24)).Reussi);
+            Assert.False((await _manuels.ModifierAsync(id, Fiche(), nouveau, 0)).Reussi);
+
+            var manuel = Assert.Single(await _manuels.ListerAsync());
+            Assert.Equal(Path.GetFileName(_pdf), manuel.Fichier);
+            Assert.Equal(24, manuel.NbPages);
+            Assert.Equal([manuel.Fichier], _stockage.Fichiers);
+        }
+        finally
+        {
+            File.Delete(nouveau);
+        }
+    }
+
+    [Fact]
+    public async Task Remplacer_le_pdf_demande_le_code_gestionnaire()
+    {
+        var id = (await _manuels.AjouterAsync(Fiche(), _pdf, 24)).Id!.Value;
+        Assert.True(_ctx.Gestion.DefinirCode(null, "1234", "1234").Reussi);
+        _ctx.Gestion.Verrouiller();
+
+        Assert.False((await _manuels.ModifierAsync(id, Fiche(), _pdf, 24)).Reussi);
+    }
+
+    [Fact]
     public async Task Les_notices_fournies_s_installent_une_seule_fois_et_sans_code()
     {
         Assert.True(_ctx.Gestion.DefinirCode(null, "1234", "1234").Reussi);

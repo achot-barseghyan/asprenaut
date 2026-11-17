@@ -299,7 +299,9 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     puis `ChoixPersonnes` dans Nouvelle sortie et Modifier la sortie. Filtres de l'écran Membres (`FiltresMembresTests`) : onglet Adhérents, recherche, liste « formation en cours » (toutes, les classes actives, « Sans formation » = `ServiceAdherents.SansNiveau`) et puces Tous / Enseignants / Inspecteurs TIV / Matériel dehors / Non rendu / Nitrox / CACI à renouveler / Désactivés ; pas de filtre pour les classes (`ServiceMoniteurs.Filtrer` reste, sans écran). Données de démo : chargées si aucun moniteur (genre Moniteur).
 25. Manuels (`ServiceManuels`, migration 009, écran `EcranManuels`, maquette « Manuels ») : consultation libre ; ajouter, modifier,
     retirer = action protégée Matériel. Le PDF est copié dans `Manuels\` à côté de la base (`IStockageManuels`, nom déjà pris →
-    « (2) ») ; l'écran lit son nombre de pages (`LecteurPdf.CompterPagesAsync`). Marque et titre obligatoires ; sommaire tapé une
+    « (2) ») ; l'écran lit son nombre de pages (`LecteurPdf.CompterPagesAsync`).
+    Nouvelle édition : « Remplacer le PDF… » dans « Modifier » (`ModifierAsync(id, fiche, nouveauPdf, nbPages)`) : fiche vérifiée
+    sur les pages du nouveau PDF, copie, puis l'ancien fichier est supprimé ; refusé → l'ancien PDF reste. Marque et titre obligatoires ; sommaire tapé une
     section par ligne, page à la fin (« 8.2 Entretien ; 17 », `SectionManuel.Lire`), pages ≤ celles du PDF ; délais du fabricant
     une ligne « Libellé : délai » ; révision du fabricant 1 à 120 mois ; page de l'entretien dans le PDF. Équipements liés : même
     catégorie et même marque (majuscules, espaces, tirets et points ignorés : « Aqualung » = « Aqua Lung »), hors réformés. `Conformite` compare la révision du fabricant à
