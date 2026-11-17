@@ -281,6 +281,9 @@ internal sealed class SectionMembre : Control
         AccessibleName = $"{titre} : {(lignes.Count == 0 ? vide : string.Join(" ; ", lignes.Select(l => $"{l.Titre}, {l.Detail}{(l.Etat is null ? "" : $", {l.Etat}")}")))}";
     }
 
+    /// <summary>Texte mesuré et dessiné sans les marges de TextRenderer : mesuré avec, dessiné sans, il était coupé (« M… »).</summary>
+    private const TextFormatFlags TexteSerre = TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.Left;
+
     private int Ecart => _genre == GenreSectionMembre.Sorties ? 0 : EcartEquipement;
 
     private int PasLogique => (_genre == GenreSectionMembre.Sorties ? HauteurSortie : HauteurEquipement) + Ecart;
@@ -436,8 +439,8 @@ internal sealed class SectionMembre : Control
         if (l.Code is { } code)
         {
             var police = Theme.PoliceCode(9.75f);
-            var lc = TextRenderer.MeasureText(g, code, police, Size.Empty, TextFormatFlags.NoPadding).Width;
-            Dessin.Texte(g, code, police, new Rectangle(droite - lc, (int)r.Y, lc + 2, (int)r.Height), Theme.Accent);
+            var lc = TextRenderer.MeasureText(g, code, police, Size.Empty, TexteSerre).Width;
+            TextRenderer.DrawText(g, code, police, new Rectangle(droite - lc, (int)r.Y, lc + 2, (int)r.Height), Theme.Accent, TexteSerre | TextFormatFlags.VerticalCenter);
             droite -= lc + (int)E(12);
         }
 
@@ -502,8 +505,8 @@ internal sealed class SectionMembre : Control
         if (l.Type is { } type)
         {
             var police = Theme.PoliceTitre(9f);
-            var lt = Math.Min(droite - x, TextRenderer.MeasureText(g, type, police, Size.Empty, TextFormatFlags.NoPadding).Width + 2);
-            Dessin.Texte(g, type, police, new Rectangle(x, y, lt, bas - y), l.CouleurType);
+            var lt = Math.Min(droite - x, TextRenderer.MeasureText(g, type, police, Size.Empty, TexteSerre).Width + 2);
+            TextRenderer.DrawText(g, type, police, new Rectangle(x, y, lt, bas - y), l.CouleurType, TexteSerre | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
             gauche = x + lt;
         }
 
