@@ -262,6 +262,7 @@ public sealed class EcranMoniteurs : EcranBase
             contenu.Controls.Add(c, 0, contenu.RowStyles.Count - 1);
         }
 
+        (Control Entete, Control Pied)? cadre = null;
         if (adherents)
         {
             if (ficheAdherent is null)
@@ -272,7 +273,7 @@ public sealed class EcranMoniteurs : EcranBase
             }
             else
             {
-                ConstruireFicheAdherent(ficheAdherent, encadrement, Ligne);
+                cadre = ConstruireFicheAdherent(ficheAdherent, encadrement, Ligne);
             }
         }
         else if (detail is null)
@@ -285,6 +286,7 @@ public sealed class EcranMoniteurs : EcranBase
         }
 
         Dessin.MettreALEchelle(contenu, this);
+        PoserCadreFiche(cadre);
         _fiche.SuspendLayout();
         while (_fiche.Controls.Count > 0)
         {
@@ -295,6 +297,63 @@ public sealed class EcranMoniteurs : EcranBase
 
         _fiche.Controls.Add(contenu);
         _fiche.ResumeLayout(true);
+    }
+
+    private Control? _enteteFiche;
+    private Control? _piedFiche;
+
+    /// <summary>
+    /// Fiche d'un adhérent (maquette « Fiche d'un membre ») : en-tête et pied fixes, seul le corps défile ; filets sur toute la
+    /// largeur, donc pas de marge à gauche ni à droite de la carte (le haut et le bas gardent le rayon de la carte, pour ne pas
+    /// peindre ses coins). Classe ou aucune fiche : la carte reprend sa marge de 24.
+    /// </summary>
+    private void PoserCadreFiche((Control Entete, Control Pied)? cadre)
+    {
+        _carteFiche.SuspendLayout();
+        foreach (var ancien in new[] { _enteteFiche, _piedFiche })
+        {
+            if (ancien is not null)
+            {
+                _carteFiche.Controls.Remove(ancien);
+                ancien.Dispose();
+            }
+        }
+
+        _enteteFiche = cadre?.Entete;
+        _piedFiche = cadre?.Pied;
+        int P(int v) => (int)Dessin.Echelle(this, v);
+        if (cadre is { } c)
+        {
+            _carteFiche.Padding = new Padding(0, P(Theme.RayonCarte), 0, P(Theme.RayonCarte));
+            _fiche.Padding = new Padding(P(22), P(18), P(22), P(8));
+            Dessin.MettreALEchelle(c.Entete, this);
+            Dessin.MettreALEchelle(c.Pied, this);
+            c.Entete.Dock = DockStyle.Top;
+            c.Pied.Dock = DockStyle.Bottom;
+            _carteFiche.Controls.Add(c.Entete);
+            _carteFiche.Controls.Add(c.Pied);
+            _carteFiche.Controls.SetChildIndex(_fiche, 0); // Placé en dernier : remplit ce qui reste entre l'en-tête et le pied.
+        }
+        else
+        {
+            _carteFiche.Padding = new Padding(P(24));
+            _fiche.Padding = Padding.Empty;
+        }
+
+        _carteFiche.ResumeLayout(true);
+    }
+
+    /// <summary>Ouvre une sortie de la fiche : le départ si elle est en préparation, sinon le retour.</summary>
+    private void OuvrirSortie(long id, StatutSortie statut)
+    {
+        if (statut == StatutSortie.EnPreparation)
+        {
+            _navigation.AllerA<EcranDepart>(id);
+        }
+        else
+        {
+            _navigation.AllerA<EcranRetour>(id);
+        }
     }
 
     private void ConstruireFiche(DetailMoniteur detail, Action<Control> ligne)
@@ -478,158 +537,178 @@ public sealed class EcranMoniteurs : EcranBase
     }
 
     /// <summary>
-    /// Fiche d'un adhérent : formation, licence, téléphone, CACI ; matériel qu'il a en ce moment ; matériel non rendu (code,
-    /// sortie, date) ; dernières sorties nominatives. Enseignant (<paramref name="encadrement"/>) : matériel dehors sous sa
-    /// responsabilité et dernières sorties encadrées, « Créer une sortie ». Actions : Modifier, Désactiver / Réactiver.
+    /// Fiche d'un adhérent (maquette « Fiche d'un membre ») : en-tête (pastille, nom, pastilles de rôle et de niveau, licence,
+    /// téléphone, CACI, menu « ⋮ » Désactiver / Réactiver, bandeau « Tout est rentré » ou « 3 équipements dehors · 1 non rendu »,
+    /// trois chiffres) ; corps : dehors en ce moment (le sien et, pour un enseignant, celui des sorties dont il est responsable),
+    /// non rendu, sorties encadrées et sorties avec du matériel (clic = la sortie) ; pied : Modifier, Créer une sortie (enseignant).
     /// </summary>
-    private void ConstruireFicheAdherent(DetailAdherent detail, DetailMoniteur? encadrement, Action<Control> ligne)
+    private (Control Entete, Control Pied) ConstruireFicheAdherent(DetailAdherent detail, DetailMoniteur? encadrement, Action<Control> ligne)
     {
         var a = detail.Adherent;
         var index = Math.Max(0, _listeAdherents.ToList().FindIndex(f => f.Adherent.Id == a.Id));
+        var bilan = ServiceAdherents.BilanDe(detail, encadrement);
+        var enseignant = a.Enseignant && a.MoniteurId is not null;
 
-        var nom = Ui.Libelle(a.NomComplet, Theme.PoliceGrasse(16f));
-        nom.Margin = new Padding(0, 0, 0, 4);
-        var role = a.Enseignant ? $"Enseignant{(a.NiveauEncadrement is { Length: > 0 } niveauEnc ? $" {niveauEnc}" : "")}" : "Adhérent";
-        var qualite = string.Join(" · ", new[]
+        // Pastilles : de la plus importante à la moins importante (toutes affichées, à la ligne si besoin).
+        var pastilles = new List<PastilleMembre>();
+        if (!a.Actif)
         {
-            role, a.InspecteurTiv ? "inspecteur TIV" : null, a.NiveauObtenu, a.Niveau is { } formation ? $"prépare {formation}" : null,
-            ServiceAdherents.ListeBrevets(a.AutresBrevets) is { Count: > 0 } autres ? string.Join(", ", autres) : null,
-            a.Nitrox ? "certifié nitrox" : null, a.Actif ? null : "désactivé",
-        }.Where(p => !string.IsNullOrWhiteSpace(p)));
-        var textes = Ui.Pile(nom, Ui.Libelle(qualite, Theme.Police(9.75f), a.Enseignant ? Theme.Encadrement : Theme.TexteSecondaireClair));
+            pastilles.Add(new("Désactivé", Theme.Erreur));
+        }
+
+        if (detail.CaciExpire)
+        {
+            pastilles.Add(new("CACI expiré", Theme.Erreur));
+        }
+
+        if (a.Enseignant)
+        {
+            pastilles.Add(new(a.NiveauEncadrement is { Length: > 0 } enc ? $"Enseignant {enc}" : "Enseignant", Theme.Encadrement));
+        }
+
+        if (a.InspecteurTiv)
+        {
+            pastilles.Add(new("Inspecteur TIV", Theme.Avertissement));
+        }
+
+        if (!string.IsNullOrWhiteSpace(a.NiveauObtenu))
+        {
+            pastilles.Add(new(a.NiveauObtenu, Theme.TexteSecondaireClair));
+        }
+
+        if (!string.IsNullOrWhiteSpace(a.Niveau))
+        {
+            pastilles.Add(new($"Prépare {ServiceMoniteurs.AbregeDe(a.Niveau)}", Theme.AccentClair));
+        }
+
+        pastilles.AddRange(ServiceAdherents.ListeBrevets(a.AutresBrevets).Select(b => new PastilleMembre(b, Theme.TexteSecondaireClair)));
+        if (a.Nitrox)
+        {
+            pastilles.Add(new("Nitrox", Theme.Retour));
+        }
+
+        if (detail.CaciBientot && !detail.CaciExpire)
+        {
+            pastilles.Add(new("CACI bientôt", Theme.Avertissement));
+        }
+
+        // Lignes : licence, téléphone, CACI.
+        var lignes = new List<LigneInfoMembre>();
         if (a.Licence is { Length: > 0 } licence)
         {
-            textes.Controls.Add(Ui.Libelle($"Licence {licence}", Theme.PoliceCode(9.5f), Theme.TexteDoux));
+            lignes.Add(new("Licence", Theme.TexteSecondaireClair, licence));
         }
 
         if (a.Telephone is { Length: > 0 } telephone)
         {
-            textes.Controls.Add(Ui.Rangee(true, new Picto(Icones.Telephone, 18, Theme.TexteSecondaire, Color.Transparent) { Margin = new Padding(0, 2, 6, 0) },
-                Ui.Libelle(telephone, Theme.Police(9.75f), Theme.TexteDoux)));
+            lignes.Add(new("Tél.", Theme.TexteSecondaireClair, telephone));
         }
 
         if (a.Caci && a.CaciExpiration is { } finCaci)
         {
             var jours = finCaci.DayNumber - _adherents.AujourdHui.DayNumber;
-            textes.Controls.Add(detail.CaciExpire
-                ? Ui.Libelle($"CACI expiré le {Libelles.Date(finCaci)} : ne sort plus de matériel", Theme.PoliceGrasse(9.75f), Theme.Erreur)
+            lignes.Add(detail.CaciExpire
+                ? new($"CACI expiré le {Libelles.Date(finCaci)} : ne sort plus de matériel", Theme.Erreur, Gras: true)
                 : detail.CaciBientot
-                    ? Ui.Libelle($"CACI à renouveler : fin le {Libelles.Date(finCaci)} ({(jours == 0 ? "aujourd'hui" : jours == 1 ? "demain" : $"dans {jours} jours")})", Theme.PoliceGrasse(9.75f), Theme.Avertissement)
-                    : Ui.Libelle($"CACI valable jusqu'au {Libelles.Date(finCaci)}", Theme.Police(9.75f), Theme.TexteDoux));
+                    ? new($"CACI à renouveler : fin le {Libelles.Date(finCaci)} ({(jours == 0 ? "aujourd'hui" : jours == 1 ? "demain" : $"dans {jours} jours")})", Theme.Avertissement, Gras: true)
+                    : new($"CACI valable jusqu'au {Libelles.Date(finCaci)}", Theme.TexteSecondaireClair));
         }
 
-        var avatar = new AvatarAdherent(a, index, 72);
-        var entete = Ui.Colonnes((avatar, SizeType.Absolute, 72 + 16), (textes, SizeType.Percent, 100));
-        entete.Height = textes.Controls.Count > 4 ? 120 : 96;
-        entete.Margin = new Padding(0, 0, 0, 18);
-        avatar.Dock = DockStyle.None;
-        avatar.Anchor = AnchorStyles.Left;
-        textes.Dock = DockStyle.None;
-        textes.Anchor = AnchorStyles.Left;
-        ligne(entete);
+        // Trois chiffres : dehors, non rendu, sorties (encadrées cette saison pour un enseignant).
+        var sortiesSaison = enseignant ? _tous.FirstOrDefault(f => f.Moniteur.Id == a.MoniteurId)?.SortiesSaison ?? 0 : 0;
+        var chiffres = new[]
+        {
+            new ChiffreMembre(bilan.Dehors, "dehors en ce moment", bilan.Dehors > 0 ? Theme.DepartClair : Theme.Texte),
+            new ChiffreMembre(bilan.NonRendus, bilan.NonRendus > 1 ? "non rendus" : "non rendu", bilan.NonRendus > 0 ? Theme.Erreur : Theme.Texte),
+            enseignant
+                ? new ChiffreMembre(sortiesSaison, "sorties encadrées cette saison", Theme.Texte)
+                : new ChiffreMembre(detail.NbSorties, detail.NbSorties > 1 ? "sorties avec du matériel" : "sortie avec du matériel", Theme.Texte),
+        };
 
-        // Matériel qu'il a en ce moment.
-        ligne(Section("Matériel qu'il a en ce moment"));
-        if (detail.Dehors.Count == 0)
-        {
-            var rien = new BandeauMessage { Margin = new Padding(0, 0, 0, 18), Height = 60 };
-            rien.Afficher(NiveauResultat.Succes, "Rien dehors.");
-            ligne(rien);
-        }
-        else
-        {
-            ligne(ListeAdherent(detail.Dehors, StyleListe.ARendre, null));
-        }
+        var entete = new EnTeteMembre(a, AvatarAdherent.Degrade(index), pastilles, lignes, bilan, chiffres);
+        entete.Actions.Click += (_, _) => MenuMembre.Ouvrir(entete.Actions,
+        [
+            a.Actif
+                ? new ActionMenuMembre(Icones.Interdit, "Désactiver ce membre", Theme.Erreur, () => Executer(() => ChangerActifAsync(a)))
+                : new ActionMenuMembre(Icones.Coche, "Réactiver ce membre", Theme.Retour, () => Executer(() => ChangerActifAsync(a))),
+        ]);
 
-        // Matériel jamais rendu (manquant à la clôture d'une sortie).
-        ligne(Section("Matériel non rendu"));
-        if (detail.NonRendus.Count == 0)
+        // Dehors en ce moment : ce qu'il a pris, puis ce qui est encore dehors dans les sorties dont il est responsable.
+        var dehors = detail.Dehors
+            .Select(p => new LigneMembre(p.Libelle, $"{p.Intitule} · {p.DateSortie.ToString("dd/MM", Libelles.Culture)}",
+                () => OuvrirSortie(p.SortieId, p.StatutSortie), p.Code))
+            .ToList();
+        var dejaVus = detail.Dehors.Select(p => p.EquipementId).ToHashSet();
+        foreach (var sd in encadrement?.EnCours ?? [])
         {
-            var aucun = Ui.Libelle("Tout a été rendu.", Theme.Police(9.75f), Theme.TexteSecondaire);
-            aucun.Margin = new Padding(0, 0, 0, 18);
-            ligne(aucun);
-        }
-        else
-        {
-            ligne(ListeAdherent(detail.NonRendus, StyleListe.ARendre, "Non rendu"));
+            var s = sd.Sortie;
+            dehors.AddRange(sd.Dehors.Where(l => dejaVus.Add(l.EquipementId)).Select(l => new LigneMembre(l.Libelle,
+                $"{s.Intitule} · {s.DateSortie.ToString("dd/MM", Libelles.Culture)}{(l.AdherentNom is { Length: > 0 } nom ? $" · {nom}" : "")}",
+                () => OuvrirSortie(s.Id, s.Statut), l.Code)));
         }
 
-        ligne(Section("Dernières sorties nominatives"));
-        if (detail.Sorties.Count == 0)
+        if (dehors.Count > 0)
         {
-            var aucune = Ui.Libelle("Aucune sortie nominative.", Theme.Police(9.75f), Theme.TexteSecondaire);
-            aucune.Margin = new Padding(0, 0, 0, 18);
-            ligne(aucune);
+            ligne(new SectionMembre("Dehors en ce moment", GenreSectionMembre.Dehors, dehors));
         }
 
-        foreach (var s in detail.Sorties)
+        if (detail.NonRendus.Count > 0)
         {
-            ligne(new LigneSortieAdherent(s));
+            ligne(new SectionMembre("Non rendu", GenreSectionMembre.NonRendu, detail.NonRendus
+                .Select(p => new LigneMembre(p.Libelle, $"{p.Intitule} · {p.DateSortie.ToString("dd/MM", Libelles.Culture)} · pas rendu à la clôture",
+                    () => OuvrirSortie(p.SortieId, p.StatutSortie), p.Code))
+                .ToList()));
         }
 
-        // Enseignant (ou ancien enseignant qui a encadré) : ce qu'il a sous sa responsabilité, ses dernières sorties encadrées.
+        // Sorties encadrées (enseignant, ou ancien enseignant qui a encadré) : en cours puis les dernières clôturées.
         if (encadrement is not null && (a.Enseignant || encadrement.EnCours.Count > 0 || encadrement.Dernieres.Count > 0))
         {
-            ligne(Section("Matériel dehors sous sa responsabilité"));
-            if (encadrement.EnCours.Count == 0)
-            {
-                var rien = new BandeauMessage { Margin = new Padding(0, 0, 0, 18), Height = 60 };
-                rien.Afficher(NiveauResultat.Succes, "Rien dehors. Tout le matériel est rentré.");
-                ligne(rien);
-            }
-
-            foreach (var sd in encadrement.EnCours)
-            {
-                ligne(CarteDehors(sd));
-            }
-
-            ligne(Section("Dernières sorties encadrées"));
-            if (encadrement.Dernieres.Count == 0)
-            {
-                var aucune = Ui.Libelle("Aucune sortie clôturée.", Theme.Police(9.75f), Theme.TexteSecondaire);
-                aucune.Margin = new Padding(0, 0, 0, 18);
-                ligne(aucune);
-            }
-
-            foreach (var s in encadrement.Dernieres)
-            {
-                ligne(new LigneHistorique(s));
-            }
+            var encadrees = encadrement.EnCours.Select(sd => sd.Sortie).Concat(encadrement.Dernieres)
+                .Select(s =>
+                {
+                    var (etat, couleur) = s.Statut switch
+                    {
+                        StatutSortie.EnPreparation => ("En préparation", Theme.DepartClair),
+                        StatutSortie.EnCours => ("En cours", Theme.DepartClair),
+                        _ when s.NbManquants > 0 => (Libelles.Pluriel(s.NbManquants, "manquant"), Theme.Erreur),
+                        _ => ("Tout rendu", Theme.Retour),
+                    };
+                    return new LigneMembre(s.Intitule, $"{s.NbTotal} équip.", () => OuvrirSortie(s.Id, s.Statut),
+                        Date: s.DateSortie, Type: s.LibelleType, CouleurType: Theme.CouleurTypeSortie(s.Type), Etat: etat, CouleurEtat: couleur);
+                })
+                .ToList();
+            ligne(new SectionMembre("Sorties encadrées", GenreSectionMembre.Sorties, encadrees, "Aucune sortie encadrée pour l'instant."));
         }
 
-        // Actions : Modifier, et Désactiver (il ne peut plus sortir de matériel) ou Réactiver ; enseignant : Créer une sortie.
-        var modifier = new BoutonArrondi("Modifier", StyleBouton.Secondaire) { AutoSize = false, Margin = new Padding(0, 0, 10, 0) };
+        // Sorties où il a pris du matériel (sorties nominatives).
+        if (!enseignant || detail.Sorties.Count > 0)
+        {
+            ligne(new SectionMembre(enseignant ? "Ses sorties avec du matériel" : "Dernières sorties", GenreSectionMembre.Sorties, detail.Sorties
+                .Select(s => new LigneMembre(s.Intitule, $"{s.NbEquipements} équip.", () => OuvrirSortie(s.SortieId, s.Statut),
+                    Date: s.Date, Type: s.Type, CouleurType: Theme.CouleurTypeSortie(s.Famille), Etat: s.Etat,
+                    CouleurEtat: s.EnCours ? Theme.DepartClair : s.NbNonRendus > 0 ? Theme.Erreur : Theme.Retour))
+                .ToList(), "Aucune sortie avec du matériel à son nom."));
+        }
+
+        // Pied : Modifier, et Créer une sortie pour un enseignant actif.
+        var modifier = new BoutonArrondi("Modifier", StyleBouton.Secondaire, Icones.Crayon) { AutoSize = false, Margin = Padding.Empty };
         _garde.Lier(modifier, ActionProtegee.Moniteurs);
         modifier.Click += (_, _) => Executer(() => ModifierAdherentAsync(a));
-        var activer = new BoutonArrondi(a.Actif ? "Désactiver" : "Réactiver", StyleBouton.Secondaire, a.Actif ? Icones.Croix : Icones.Coche)
+        Control boutons = modifier;
+        if (a.Enseignant && a.Actif && a.MoniteurId is { } moniteurId)
         {
-            AutoSize = false,
-            Margin = Padding.Empty, // Au bord de la fiche défilante : la pastille du cadenas rentre d'elle-même (PastilleVerrou).
-            AccessibleDescription = a.Actif ? "Il ne pourra plus sortir de matériel" : "Il pourra de nouveau sortir du matériel",
-        };
-        if (a.Actif)
-        {
-            activer.CouleurIcone = Theme.Erreur;
-        }
-
-        _garde.Lier(activer, ActionProtegee.Moniteurs);
-        activer.Click += (_, _) => Executer(() => ChangerActifAsync(a));
-        var actions = Ui.Colonnes((modifier, SizeType.Percent, 50), (activer, SizeType.Percent, 50));
-        actions.Height = Theme.HauteurBouton;
-        actions.Margin = new Padding(0, 18, 0, 0);
-        ligne(actions);
-        if (a.Enseignant && a.MoniteurId is { } moniteurId)
-        {
+            modifier.Margin = new Padding(0, 0, 10, 0);
             var creer = new BoutonArrondi("Créer une sortie", StyleBouton.Principal, Icones.Plus)
             {
                 AutoSize = false,
-                Height = Theme.HauteurBouton,
-                Margin = new Padding(0, 10, 0, 0),
+                Margin = Padding.Empty,
                 AccessibleDescription = $"Nouvelle sortie avec {a.NomComplet} pour responsable",
             };
             creer.Click += (_, _) => _navigation.AllerA<EcranNouvelleSortie>(moniteurId);
-            ligne(creer);
+            boutons = Ui.Colonnes((modifier, SizeType.Percent, 38), (creer, SizeType.Percent, 62));
         }
+
+        return (entete, new PiedFicheMembre(boutons));
     }
 
     /// <summary>Désactive (avec confirmation) ou réactive l'adhérent, puis relit la liste.</summary>
@@ -716,16 +795,6 @@ public sealed class EcranMoniteurs : EcranBase
         _adherentChoisi = dernier ?? _adherentChoisi;
         _choixAdherents = FiltreAdherents.Tous;
         await OuvrirOngletAsync(OngletAdherents);
-    }
-
-    /// <summary>Équipements d'un adhérent : « A07 · Lac des Settons · 25/10/2026 », pastille « Non rendu » si besoin.</summary>
-    private static ListeMateriel ListeAdherent(IReadOnlyList<PassageAdherent> passages, StyleListe style, string? alerte)
-    {
-        var liste = new ListeMateriel(style, "") { Margin = new Padding(0, 0, 0, 18) };
-        liste.Afficher(passages.Select(p => new ElementMateriel(p.EquipementId, p.Code, p.Libelle, p.Categorie,
-            Detail: $"{p.Intitule} · {Libelles.Date(p.DateSortie)}", Alerte: alerte, CouleurAlerte: Theme.Erreur)));
-        liste.Height = (Math.Min(passages.Count, 4) * 58) + 4;
-        return liste;
     }
 
     /// <summary>Ajout (a = null) ou modification d'un adhérent ; le rendre inactif le retire de la liste du départ.</summary>
@@ -1941,46 +2010,6 @@ public sealed class EcranMoniteurs : EcranBase
             var x = (int)(r.X + E(12));
             Dessin.Texte(g, nombre, Theme.PoliceGrasse(13.5f), new Rectangle(x, (int)(r.Y + E(6)), (int)r.Width - 16, (int)E(26)), couleurNombre);
             Dessin.Texte(g, legende, Theme.Police(8.25f), new Rectangle(x, (int)(r.Y + E(32)), (int)r.Width - 16, (int)E(18)), couleurLegende);
-        }
-    }
-
-    /// <summary>Ligne « 25/10 · Lac des Settons · 3 équip. · Tout rendu » d'une sortie nominative de l'adhérent.</summary>
-    private sealed class LigneSortieAdherent : ControleDessine
-    {
-        private readonly SortieAdherent _s;
-
-        public LigneSortieAdherent(SortieAdherent s)
-        {
-            _s = s;
-            Height = 40;
-            AccessibleName = $"{Libelles.Date(s.Date)}, {s.Intitule}, {Libelles.Pluriel(s.NbEquipements, "équipement")}, {s.Etat}";
-        }
-
-        protected override void Peindre(Graphics g)
-        {
-            using (var filet = new Pen(Theme.Sur(Theme.Surface, Theme.AccentClair, 0.08f)))
-            {
-                g.DrawLine(filet, 0, 0, Width, 0);
-            }
-
-            var police = Theme.Police(9.75f);
-            var couleur = _s.EnCours ? Theme.DepartClair : _s.NbNonRendus == 0 ? Theme.Retour : Theme.Erreur;
-            var pp = Theme.PoliceTitre(8.25f);
-            var lp = TextRenderer.MeasureText(g, _s.Etat, pp, Size.Empty, TextFormatFlags.NoPadding).Width + E(16);
-            var rp = new RectangleF(Width - lp, (Height - E(22)) / 2, lp, E(22));
-            using (var chemin = Dessin.Arrondi(rp, rp.Height / 2))
-            using (var pinceau = new SolidBrush(Theme.Teinte(couleur, 0.14f)))
-            {
-                g.FillPath(pinceau, chemin);
-            }
-
-            Dessin.Texte(g, _s.Etat, pp, Rectangle.Round(rp), couleur, centre: true);
-            var nb = $"{_s.NbEquipements} équip.";
-            var lnb = TextRenderer.MeasureText(g, nb, police).Width;
-            var xnb = (int)(rp.Left - E(10) - lnb);
-            Dessin.Texte(g, nb, police, new Rectangle(xnb, 0, lnb, Height), Theme.TexteSecondaire);
-            Dessin.Texte(g, _s.Date.ToString("dd/MM", Libelles.Culture), police, new Rectangle(0, 0, (int)E(48), Height), Theme.TexteSecondaire);
-            Dessin.Texte(g, $"{_s.Intitule} · {_s.Type}", police, Rectangle.FromLTRB((int)E(52), 0, xnb - (int)E(8), Height), Theme.TexteDoux);
         }
     }
 

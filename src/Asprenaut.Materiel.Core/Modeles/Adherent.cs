@@ -162,7 +162,8 @@ public sealed record FicheAdherent(Adherent Adherent, int NbDehors, int NbNonRen
 public sealed record ListeAdherents(IReadOnlyList<FicheAdherent> Fiches, int Tous, int MaterielDehors, int NonRendu, int Nitrox = 0, int Desactives = 0, int CaciARenouveler = 0, int Enseignants = 0, int InspecteursTiv = 0);
 
 /// <summary>Une sortie nominative d'un adhérent : équipements pris, rendus, non rendus.</summary>
-public sealed record SortieAdherent(long SortieId, DateOnly Date, string Intitule, string Type, int NbEquipements, int NbNonRendus, bool EnCours)
+public sealed record SortieAdherent(long SortieId, DateOnly Date, string Intitule, string Type, int NbEquipements, int NbNonRendus, bool EnCours,
+    TypeSortie Famille = TypeSortie.Piscine, StatutSortie Statut = StatutSortie.Cloturee)
 {
     /// <summary>« Tout rendu », « 1 non rendu », « En cours ».</summary>
     public string Etat => EnCours ? "En cours" : NbNonRendus == 0 ? "Tout rendu" : $"{NbNonRendus} non rendu{(NbNonRendus > 1 ? "s" : "")}";
@@ -175,7 +176,26 @@ public sealed record DetailAdherent(
     IReadOnlyList<PassageAdherent> NonRendus,
     IReadOnlyList<SortieAdherent> Sorties,
     bool CaciExpire = false,
-    bool CaciBientot = false);
+    bool CaciBientot = false,
+    int NbSorties = 0);
+
+/// <summary>
+/// Bandeau d'état de la fiche d'un membre (maquette « Fiche d'un membre ») : équipements dehors (les siens et, pour un
+/// enseignant, ceux des sorties dont il est responsable, sans compter deux fois le même) et matériel non rendu.
+/// </summary>
+public sealed record BilanMembre(int Dehors, int NonRendus)
+{
+    public bool ToutRentre => Dehors == 0 && NonRendus == 0;
+
+    /// <summary>« Tout est rentré », « 3 équipements dehors · 1 non rendu », « 1 non rendu ».</summary>
+    public string Message => ToutRentre
+        ? "Tout est rentré"
+        : string.Join(" · ", new[]
+        {
+            Dehors > 0 ? Libelles.Pluriel(Dehors, "équipement") + " dehors" : null,
+            NonRendus > 0 ? $"{NonRendus} non rendu{(NonRendus > 1 ? "s" : "")}" : null,
+        }.Where(t => t is not null));
+}
 
 /// <summary>Adhérent récent d'une sortie (raccourcis du départ) : le plus récent d'abord.</summary>
 public sealed record AdherentRecent(long AdherentId, string Nom, int NbEquipements);

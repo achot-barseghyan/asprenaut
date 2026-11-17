@@ -346,4 +346,36 @@ public class AdherentsTests
         var noms = (await _ctx.Adherents.ListerFormationsAsync()).Select(f => f.Nom).ToList();
         Assert.Equal(noms, ServiceAdherents.ColonnesModele(noms)[3].Choix);
     }
+
+    // ---------------------------------------------------------------- Bandeau de la fiche (maquette « Fiche d'un membre »)
+
+    private static PassageAdherent Passage(long equipement, StatutSortieEquipement statut) =>
+        new() { SortieId = 1, EquipementId = equipement, Code = $"A{equipement:00}", Statut = statut };
+
+    [Fact]
+    public void La_fiche_dit_tout_est_rentre_sans_materiel_dehors_ni_perdu()
+    {
+        var bilan = ServiceAdherents.BilanDe(new DetailAdherent(new Adherent(), [], [], []), null);
+
+        Assert.True(bilan.ToutRentre);
+        Assert.Equal("Tout est rentré", bilan.Message);
+    }
+
+    [Fact]
+    public void La_fiche_d_un_enseignant_compte_aussi_le_materiel_de_ses_sorties_sans_doublon()
+    {
+        var detail = new DetailAdherent(new Adherent(),
+            [Passage(7, StatutSortieEquipement.Dehors)],
+            [Passage(18, StatutSortieEquipement.Manquant)],
+            []);
+        var encadrement = new DetailMoniteur(new Moniteur(),
+            [new SortieDehors(new SortieResume { Id = 1 }, [new LigneSortie { EquipementId = 7 }, new LigneSortie { EquipementId = 34 }, new LigneSortie { EquipementId = 12 }])],
+            []);
+
+        var bilan = ServiceAdherents.BilanDe(detail, encadrement);
+
+        Assert.Equal((3, 1), (bilan.Dehors, bilan.NonRendus)); // A07 pris par lui dans sa propre sortie : compté une fois.
+        Assert.Equal("3 équipements dehors · 1 non rendu", bilan.Message);
+        Assert.Equal("1 non rendu", new BilanMembre(0, 1).Message);
+    }
 }

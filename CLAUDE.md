@@ -390,7 +390,12 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     validation). Retour : nom de l'adhérent sur le matériel dehors. Clôture : `ManquantDeclare` garde `AdherentId` (« pris par … »
     dans l'historique). Adhérents (onglet de `EcranMoniteurs`, menu « Membres ») : responsables de sortie seulement s'ils sont enseignants (règle 44), jamais supprimés
     (inactif : plus proposé au départ, gardé dans l'historique) ; nom et prénom obligatoires, licence unique ; filtres Tous / Matériel
-    dehors / Non rendu ; fiche (matériel en ce moment, non rendu, dernières sorties nominatives, Modifier) ; ajouter et importer
+    dehors / Non rendu ; fiche (maquette « Fiche d'un membre », `Ecrans/FicheMembre.cs`) : en-tête fixe `EnTeteMembre` (pastille carrée,
+    nom, pastilles de rôle à la ligne, licence / tél. / CACI, bouton « ⋮ » → `MenuMembre` Désactiver / Réactiver, bandeau
+    `ServiceAdherents.BilanDe` → `BilanMembre` « Tout est rentré » / « 3 équipements dehors · 1 non rendu » (le sien + celui des
+    sorties qu'il encadre, sans doublon), trois chiffres), corps défilant de `SectionMembre` (un contrôle dessiné par section :
+    Dehors en ce moment, Non rendu, Sorties encadrées, Dernières sorties ; clic ou Entrée = la sortie), pied fixe `PiedFicheMembre`
+    (Modifier, Créer une sortie pour un enseignant actif) ; la carte perd sa marge latérale (filets sur toute la largeur) ; ajouter et importer
     demandent le code (action Moniteurs). Import (`ImporterAsync`, `LireTableau`) : en-tête « Nom » + « Prénom » (Niveau, Licence,
     Téléphone facultatifs), mise à jour par licence (sinon nom + prénom), ajout des autres, personne retiré ; fichier .xlsx ou .csv
     lu par `Infrastructure/LecteurTableur` (zip XML, sans bibliothèque). « Modèle Excel à remplir » (libre, onglet Adhérents) : classeur vide écrit par `Infrastructure/EcrivainTableur` (zip XML, sans bibliothèque ; en-têtes `ServiceAdherents.ColonnesModele(niveaux)` = ceux de l'import, listes Niveau et Nitrox rangées dans une feuille cachée « Listes », première ligne figée, cases au format texte, bulle d'aide par colonne, liste Oui / Non pour Nitrox, feuille « Mode d'emploi » `ModeEmploiModele(avecListe)`), à donner au club puis à réimporter ; nom `NomFichierModele`.

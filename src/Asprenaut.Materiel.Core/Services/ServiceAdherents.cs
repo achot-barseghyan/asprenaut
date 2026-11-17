@@ -347,7 +347,8 @@ public sealed class ServiceAdherents(
             {
                 var p = g.First();
                 return new SortieAdherent(p.SortieId, p.DateSortie, p.Intitule, p.TypeNom is { Length: > 0 } nom ? nom : Libelles.De(p.TypeSortie),
-                    g.Count(), g.Count(x => x.Statut == StatutSortieEquipement.Manquant), p.StatutSortie != StatutSortie.Cloturee);
+                    g.Count(), g.Count(x => x.Statut == StatutSortieEquipement.Manquant), p.StatutSortie != StatutSortie.Cloturee,
+                    p.TypeSortie, p.StatutSortie);
             })
             .OrderByDescending(s => s.Date).ThenByDescending(s => s.SortieId)
             .Take(NombreSortiesFiche)
@@ -357,8 +358,20 @@ public sealed class ServiceAdherents(
             passages.Where(p => p.Statut == StatutSortieEquipement.Manquant).ToList(),
             sorties,
             adherent.CaciExpire(horloge.AujourdHui),
-            adherent.CaciBientot(horloge.AujourdHui, JoursAvantFinCaci));
+            adherent.CaciBientot(horloge.AujourdHui, JoursAvantFinCaci),
+            passages.Select(p => p.SortieId).Distinct().Count());
     }
+
+    /// <summary>
+    /// Bandeau de la fiche : équipements dehors (pris par l'adhérent, et pour un enseignant ceux encore dehors dans les sorties
+    /// dont il est responsable ; un équipement compté une fois) et matériel non rendu par l'adhérent.
+    /// </summary>
+    public static BilanMembre BilanDe(DetailAdherent detail, DetailMoniteur? encadrement) =>
+        new(detail.Dehors.Select(p => p.EquipementId)
+                .Concat(encadrement?.EnCours.SelectMany(s => s.Dehors).Select(l => l.EquipementId) ?? [])
+                .Distinct()
+                .Count(),
+            detail.NonRendus.Count);
 
     // ---------------------------------------------------------------- Ajout et modification
 
