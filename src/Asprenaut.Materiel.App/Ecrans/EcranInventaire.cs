@@ -109,6 +109,7 @@ public sealed class EcranInventaire : EcranBase
         DefinirColonnes(ColonnesGenerales);
         _grille.CellFormatting += ColorerCellule;
         _grille.CellPainting += PeindreCellule;
+        _grille.Resize += (_, _) => AdapterColonnes(); // Écran étroit : colonnes secondaires retirées (voir OrdreMasquage).
 
         // Clic sur la ligne (nom souligné, double-clic, Entrée) : fiche de suivi. La cellule d'actions a trois boutons
         // carrés (maquette) : fiche de suivi EPI, signaler (libre, comme au retour d'une sortie) puis modifier (code) ;
@@ -834,6 +835,7 @@ public sealed class EcranInventaire : EcranBase
         }
 
         _grille.ResumeLayout();
+        AdapterColonnes();
     }
 
     /// <summary>
@@ -857,10 +859,78 @@ public sealed class EcranInventaire : EcranBase
                 continue;
             }
 
-            colonne.MinimumWidth = c.Nom == "action" ? (int)Dessin.Echelle(this, 196) : 5;
             if (Math.Abs(colonne.FillWeight - c.Largeur) > 0.01f)
             {
                 colonne.FillWeight = c.Largeur;
+            }
+        }
+
+        _grille.ResumeLayout();
+        AdapterColonnes();
+    }
+
+    /// <summary>
+    /// Largeur en dessous de laquelle une colonne devient illisible (pixels logiques, tableau en pleine largeur).
+    /// Si même les colonnes gardées n'y tiennent pas, le tableau défile en largeur plutôt que de tout couper.
+    /// </summary>
+    private static int LargeurMin(string colonne) => colonne switch
+    {
+        "equipement" => 170,
+        "code" => 60,
+        "marque" => 90,
+        "modele" => 80,
+        "taille" => 56,
+        "serie" => 100,
+        "statut" => 118,
+        "utilisation" => 160,
+        "sortie" => 110,
+        "revision" => 120,
+        "identification" => 200,
+        "action" => 196, // Quatre boutons de 38 + écarts de 6 + marge droite de 12 (Tableaux.ZonesBoutonsIcones).
+        _ => 60,
+    };
+
+    /// <summary>
+    /// Colonnes retirées, dans cet ordre, quand le tableau est trop étroit (écran 4/3, menu déplié). Leur contenu se
+    /// retrouve ailleurs : marque sous le nom de l'équipement, sortie en cours dans le statut « Dehors », identification
+    /// calculée d'après le code et la taille.
+    /// </summary>
+    private static readonly string[] OrdreMasquage = ["identification", "serie", "modele", "sortie", "taille", "marque"];
+
+    /// <summary>Masque les colonnes secondaires qui ne tiennent pas et pose les largeurs minimales (pleine largeur seulement).</summary>
+    private void AdapterColonnes()
+    {
+        if (_grille.AutoSizeColumnsMode != DataGridViewAutoSizeColumnsMode.Fill || _grille.Columns.Count == 0)
+        {
+            return;
+        }
+
+        var dispo = _grille.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 2;
+        int Min(string nom) => (int)Dessin.Echelle(this, LargeurMin(nom));
+        var gardees = _colonnes.Select(c => c.Nom).ToList();
+        foreach (var nom in OrdreMasquage)
+        {
+            if (gardees.Sum(Min) <= dispo)
+            {
+                break;
+            }
+
+            gardees.Remove(nom);
+        }
+
+        _grille.SuspendLayout();
+        foreach (DataGridViewColumn colonne in _grille.Columns)
+        {
+            var visible = gardees.Contains(colonne.Name);
+            if (colonne.Visible != visible)
+            {
+                colonne.Visible = visible;
+            }
+
+            var min = Min(colonne.Name);
+            if (colonne.MinimumWidth != min)
+            {
+                colonne.MinimumWidth = min;
             }
         }
 

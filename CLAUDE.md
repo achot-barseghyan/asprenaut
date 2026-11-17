@@ -739,6 +739,9 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   Les hauteurs de lignes des DataGridView sont fixées par `Theme.AppliquerGrille(grille, hauteurLigne)`.
 - Boutons `AutoSize` : ne jamais repartir de `base.GetPreferredSize` (en GrowOnly, il inclut la taille actuelle → la largeur grandit
   à chaque mise en page).
+- Écran 4/3 du club : `Ui.Entete` → `EnTeteEcran` (boutons sous le titre et à la ligne si la place manque) ; Inventaire :
+  `AdapterColonnes` retire les colonnes secondaires (`OrdreMasquage` : identification, n° série, modèle, sortie, taille, marque)
+  sous leurs `LargeurMin`, puis le tableau défile en largeur plutôt que de couper.
 - Petits écrans : `ScanInput` passe en mode compact (sans sonar, puis champ seul) ; le champ de scan reste toujours visible.
 - Propriétés publiques des contrôles : `[DesignerSerializationVisibility(Hidden)]`, sinon l'analyseur WinForms WFO1000 casse le build.
 - Pas de concepteur WinForms : les écrans sont construits en code (`Ui.Colonne`, `Ui.Entete`, `Ui.Rangee`, `Ui.Pile`).
