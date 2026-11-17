@@ -13,7 +13,8 @@ namespace Asprenaut.Materiel.App.Controles;
 public sealed class EchelleBrevets : ControleDessine
 {
     private const int Pastille = 58;
-    private const int HauteurTotale = 104;
+    private const int HauteurTotale = 114; // Marge haute de 10 : halo (5) et anneau du focus (8) des pastilles.
+    private const int Halo = 10;
 
     private static readonly (string Court, string Libelle, string Detail)[] Etapes =
     [
@@ -73,7 +74,7 @@ public sealed class EchelleBrevets : ControleDessine
     private RectangleF Rond(int i)
     {
         var d = E(Pastille);
-        return new RectangleF((LargeurColonne * (i + 0.5f)) - (d / 2), E(4), d, d);
+        return new RectangleF((LargeurColonne * (i + 0.5f)) - (d / 2), E(Halo), d, d);
     }
 
     protected override void Peindre(Graphics g)
@@ -274,7 +275,8 @@ public sealed class ChoixBrevets : ControleDessine
     public ChoixBrevets(IReadOnlyList<string> proposes)
     {
         _proposes = proposes;
-        SetStyle(ControlStyles.Selectable, true);
+        SetStyle(ControlStyles.Selectable | ControlStyles.SupportsTransparentBackColor, true);
+        BackColor = Color.Transparent; // Sinon le champ « Autre brevet… » efface ses coins avec le blanc par défaut d'un Control.
         TabStop = true;
         AccessibleName = "Autres brevets";
         Champ = new ChampSaisie { TexteIndicatif = "Autre brevet…", Size = new Size(LargeurChamp, HauteurPuce), Padding = new Padding(14, 0, 6, 0) };
