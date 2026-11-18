@@ -379,23 +379,39 @@ public static class Theme
     public const int LargeurMenuReduit = 84;
 
     // --- Polices ---
-    private static readonly string FamilleTexte = PremiereDisponible("Segoe UI Variable Text", "Segoe UI");
-    private static readonly string FamilleTitre = PremiereDisponible("Segoe UI Variable Display Semib", "Segoe UI Semibold", "Segoe UI");
-    private static readonly string FamilleTitreGras = PremiereDisponible("Segoe UI Variable Display", "Segoe UI");
-    private static readonly string FamilleCode = PremiereDisponible("Cascadia Mono", "Consolas", "Courier New");
+    // Maquette : Sora (titres, grands chiffres) et Manrope (tout le reste), embarquées (Polices) ; codes en Consolas.
+    // Chaque graisse est sa propre famille (« Manrope SemiBold ») dessinée en style normal : jamais de gras simulé.
+    // Repli si elles manquent : Segoe UI, avec un gras simulé pour les semi-gras.
+    private static readonly FontFamily FamilleTexte = Polices.Famille("Manrope", "Segoe UI Variable Text", "Segoe UI");
+    private static readonly FontFamily FamilleTexteDemiGras = Polices.Famille("Manrope SemiBold", "Segoe UI Variable Display Semib", "Segoe UI Semibold", "Segoe UI");
+    private static readonly FontFamily FamilleTexteExtraGras = Polices.Famille("Manrope ExtraBold", "Segoe UI Variable Display", "Segoe UI");
+    private static readonly FontFamily FamilleTitre = Polices.Famille("Sora SemiBold", "Segoe UI Variable Display Semib", "Segoe UI Semibold", "Segoe UI");
+    private static readonly FontFamily FamilleTitreGras = Polices.Famille("Sora", "Segoe UI Variable Display", "Segoe UI");
+    private static readonly FontFamily FamilleCode = Polices.Famille("Consolas", "Consolas", "Cascadia Mono", "Courier New");
     private static readonly Dictionary<(string, float, FontStyle), Font> Cache = [];
 
-    /// <summary>Police du texte courant (points).</summary>
+    /// <summary>
+    /// Taille (points) à partir de laquelle un texte semi-gras ou gras est un titre ou un grand chiffre (Sora) ;
+    /// en dessous, boutons, étiquettes et pastilles restent en Manrope. 12 pt = 16 px CSS de la maquette.
+    /// </summary>
+    private const float TailleTitre = 12f;
+
+    /// <summary>Police du texte courant (points), Manrope.</summary>
     public static Font Police(float taille = 10.5f, FontStyle style = FontStyle.Regular) => Obtenir(FamilleTexte, taille, style);
 
-    /// <summary>Police semi-grasse des titres et boutons (points).</summary>
-    public static Font PoliceTitre(float taille = 10.5f) =>
-        Obtenir(FamilleTitre, taille, FamilleTitre == "Segoe UI" ? FontStyle.Bold : FontStyle.Regular);
+    /// <summary>Police semi-grasse des titres (Sora 600) et des boutons, étiquettes (Manrope 600) (points).</summary>
+    public static Font PoliceTitre(float taille = 10.5f)
+    {
+        var famille = taille >= TailleTitre ? FamilleTitre : FamilleTexteDemiGras;
+        return Obtenir(famille, taille, famille.Name == "Segoe UI" ? FontStyle.Bold : FontStyle.Regular);
+    }
 
-    /// <summary>Police grasse des grands titres et des chiffres (points).</summary>
-    public static Font PoliceGrasse(float taille) => Obtenir(FamilleTitreGras, taille, FontStyle.Bold);
+    /// <summary>Police grasse des grands titres et des chiffres (Sora 700) et des pastilles (Manrope 800) (points).</summary>
+    public static Font PoliceGrasse(float taille) => taille >= TailleTitre
+        ? Obtenir(FamilleTitreGras, taille, FontStyle.Bold)
+        : Obtenir(FamilleTexteExtraGras, taille, FamilleTexteExtraGras.Name == "Manrope ExtraBold" ? FontStyle.Regular : FontStyle.Bold);
 
-    /// <summary>Police à chasse fixe des codes d'étiquette (points).</summary>
+    /// <summary>Police à chasse fixe des codes d'étiquette (points), Consolas.</summary>
     public static Font PoliceCode(float taille = 9f) => Obtenir(FamilleCode, taille, FontStyle.Regular);
 
     public static Color Eclaircir(Color c, float part = 0.12f) => Melanger(c, Color.White, part);
@@ -486,32 +502,18 @@ public static class Theme
         Natif.ScrollbarsDuTheme(grille);
     }
 
-    private static Font Obtenir(string famille, float taille, FontStyle style)
+    private static Font Obtenir(FontFamily famille, float taille, FontStyle style)
     {
         lock (Cache)
         {
-            if (!Cache.TryGetValue((famille, taille, style), out var police))
+            if (!Cache.TryGetValue((famille.Name, taille, style), out var police))
             {
                 police = new Font(famille, taille, style, GraphicsUnit.Point);
-                Cache[(famille, taille, style)] = police;
+                Cache[(famille.Name, taille, style)] = police;
             }
 
             return police;
         }
-    }
-
-    private static string PremiereDisponible(params string[] familles)
-    {
-        foreach (var nom in familles)
-        {
-            using var essai = new Font(nom, 10f);
-            if (string.Equals(essai.Name, nom, StringComparison.OrdinalIgnoreCase))
-            {
-                return nom;
-            }
-        }
-
-        return familles[^1];
     }
 
     private static Color Melanger(Color a, Color b, float part) => Color.FromArgb(

@@ -28,6 +28,8 @@
     <EmbeddedResource Include="Ressources\Manuels\*.pdf" LogicalName="Manuels.%(Filename)%(Extension)" />
     <!-- Son d'un scan réussi au départ et au retour (PCM 16 bits mono, lu par SoundPlayer). -->
     <EmbeddedResource Include="Ressources\Sons\ScanReussi.wav" LogicalName="Sons.ScanReussi.wav" />
+    <!-- Polices de la maquette (Google Fonts, licence SIL OFL : Ressources\Polices\OFL-*.txt), chargées par Apparence\Polices. -->
+    <EmbeddedResource Include="Ressources\Polices\*.ttf" LogicalName="Polices.%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>
