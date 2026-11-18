@@ -121,4 +121,41 @@ public class TypesSortieTests
 
         Assert.Equal([new TypeBilan(TypeSortie.Mer, "Sortie bateau", 1)], bilan.Types);
     }
+
+    // Maquette « Ajouter un type de sortie » : 28 pictogrammes et 7 couleurs ; la famille suit le pictogramme.
+    [Fact]
+    public async Task Un_type_choisit_son_pictogramme_et_sa_couleur()
+    {
+        var r = await _ctx.TypesSortie.CreerAsync("Sortie bateau", "bateau", "rose");
+
+        Assert.True(r.Reussi, r.Message);
+        var bateau = _ctx.Db.TypesSortie.Single(t => t.Id == r.Id);
+        Assert.Equal(("bateau", "rose", TypeSortie.Mer, 4), (bateau.IconeEffective, bateau.CouleurEffective, bateau.Pictogramme, bateau.Utilisations));
+        Assert.Equal("Choisissez un pictogramme.", (await _ctx.TypesSortie.CreerAsync("Nuit", "fusee", "rose")).Message);
+        Assert.Equal("Choisissez une couleur.", (await _ctx.TypesSortie.CreerAsync("Nuit", "nuit", "noir")).Message);
+
+        Assert.True((await _ctx.TypesSortie.ModifierAsync(bateau.Id, "Carrière", "carriere", "jaune", actif: true)).Reussi);
+        Assert.Equal(("carriere", "jaune", TypeSortie.Lac), (bateau.IconeEffective, bateau.CouleurEffective, bateau.Pictogramme));
+
+        // Masquer garde le pictogramme et la couleur choisis.
+        Assert.True((await _ctx.TypesSortie.BasculerMasqueAsync(bateau.Id)).Reussi);
+        Assert.Equal(("carriere", "jaune", false), (bateau.IconeEffective, bateau.CouleurEffective, bateau.Actif));
+    }
+
+    [Fact]
+    public void Le_pictogramme_est_devine_d_apres_le_nom_et_se_cherche_sans_accents()
+    {
+        Assert.Equal(28, TypeDeSortie.Icones.Count);
+        Assert.Equal(7, TypeDeSortie.Couleurs.Count);
+        Assert.Equal("bateau", TypeDeSortie.DevinerIcone("Sortie bateau"));
+        Assert.Equal("nuit", TypeDeSortie.DevinerIcone("Plongée de NUIT"));
+        Assert.Equal("epave", TypeDeSortie.DevinerIcone("Épave du Donator"));
+        Assert.Null(TypeDeSortie.DevinerIcone("Sortie"));
+        Assert.Equal(["epave"], TypeDeSortie.ChercherIcones("épa").Select(i => i.Cle));
+        Assert.Equal(["secours"], TypeDeSortie.ChercherIcones("RIFAP").Select(i => i.Cle));
+        Assert.Equal(28, TypeDeSortie.ChercherIcones("  ").Count);
+
+        // Ancien type sans choix : d'après sa famille.
+        Assert.Equal(("lac", "bleu"), (new TypeDeSortie { Pictogramme = TypeSortie.Lac }.IconeEffective, new TypeDeSortie { Pictogramme = TypeSortie.Lac }.CouleurEffective));
+    }
 }

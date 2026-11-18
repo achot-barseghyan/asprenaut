@@ -5,11 +5,11 @@ using Dapper;
 
 namespace Asprenaut.Materiel.Data.Depots;
 
-/// <summary>Types de sortie (table type_sortie, migration 004).</summary>
+/// <summary>Types de sortie (table type_sortie, migration 004 ; pictogramme et couleur, migration 035).</summary>
 public sealed class TypeSortieRepository(FabriqueConnexion fabrique) : ITypeSortieRepository
 {
     private const string Select = """
-        SELECT t.id, t.nom, t.pictogramme, t.actif, t.ordre, t.utilisations, t.nominatif,
+        SELECT t.id, t.nom, t.pictogramme, t.icone, t.couleur, t.actif, t.ordre, t.utilisations, t.nominatif,
                (SELECT COUNT(*) FROM sortie s WHERE s.type_sortie_id = t.id) AS nb_sorties
         FROM type_sortie t
         """;
@@ -31,7 +31,7 @@ public sealed class TypeSortieRepository(FabriqueConnexion fabrique) : ITypeSort
     {
         await using var cx = await fabrique.OuvrirAsync(ct);
         type.Id = await cx.ExecuteScalarAsync<long>(new CommandDefinition(
-            "INSERT INTO type_sortie (nom, pictogramme, actif, ordre, utilisations, nominatif) VALUES (@Nom, @Pictogramme, @Actif, @Ordre, @Utilisations, @Nominatif) RETURNING id;",
+            "INSERT INTO type_sortie (nom, pictogramme, icone, couleur, actif, ordre, utilisations, nominatif) VALUES (@Nom, @Pictogramme, @Icone, @Couleur, @Actif, @Ordre, @Utilisations, @Nominatif) RETURNING id;",
             Parametres(type), cancellationToken: ct));
         return type.Id;
     }
@@ -40,7 +40,7 @@ public sealed class TypeSortieRepository(FabriqueConnexion fabrique) : ITypeSort
     {
         await using var cx = await fabrique.OuvrirAsync(ct);
         await cx.ExecuteAsync(new CommandDefinition(
-            "UPDATE type_sortie SET nom = @Nom, pictogramme = @Pictogramme, actif = @Actif, ordre = @Ordre, utilisations = @Utilisations, nominatif = @Nominatif WHERE id = @Id;",
+            "UPDATE type_sortie SET nom = @Nom, pictogramme = @Pictogramme, icone = @Icone, couleur = @Couleur, actif = @Actif, ordre = @Ordre, utilisations = @Utilisations, nominatif = @Nominatif WHERE id = @Id;",
             Parametres(type), cancellationToken: ct));
     }
 
@@ -58,6 +58,8 @@ public sealed class TypeSortieRepository(FabriqueConnexion fabrique) : ITypeSort
         t.Id,
         t.Nom,
         Pictogramme = t.Pictogramme.ToString(),
+        t.Icone,
+        t.Couleur,
         Actif = t.Actif ? 1 : 0,
         t.Ordre,
         t.Utilisations,

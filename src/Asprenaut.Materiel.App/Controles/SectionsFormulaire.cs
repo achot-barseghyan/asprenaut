@@ -646,9 +646,10 @@ public sealed class ChoixPuces : ControleDessine
 /// </summary>
 public sealed class ChoixCouleur : ControleDessine
 {
-    private const int Taille = 44;
-    private const int Ecart = 8;
     private const int ParLigne = 7;
+    private readonly int _taille;
+    private readonly int _ecart;
+    private readonly bool _coche;
 
     private readonly List<(string Cle, string Nom, Color Couleur)> _couleurs;
     private readonly ToolTip _bulle = new();
@@ -656,15 +657,20 @@ public sealed class ChoixCouleur : ControleDessine
     private int _survol = -1;
     private int _focus;
 
-    public ChoixCouleur(IEnumerable<(string Cle, string Nom, Color Couleur)> couleurs)
+    /// <param name="taille">Côté de chaque pastille cliquable (pixels logiques), le rond de couleur au milieu.</param>
+    /// <param name="coche">Coche dans la pastille choisie (sinon l'anneau seul : « Ajouter un type de sortie »).</param>
+    public ChoixCouleur(IEnumerable<(string Cle, string Nom, Color Couleur)> couleurs, int taille = 44, int ecart = 8, bool coche = true)
     {
+        _taille = taille;
+        _ecart = ecart;
+        _coche = coche;
         _couleurs = couleurs.ToList();
         _valeur = _couleurs.Count > 0 ? _couleurs[0].Cle : "";
         SetStyle(ControlStyles.Selectable, true);
         TabStop = true;
         Cursor = Cursors.Hand;
         var lignes = Math.Max(1, (_couleurs.Count + ParLigne - 1) / ParLigne);
-        Size = new Size((ParLigne * Taille) + ((ParLigne - 1) * Ecart), (lignes * Taille) + ((lignes - 1) * Ecart));
+        Size = new Size((ParLigne * _taille) + ((ParLigne - 1) * _ecart), (lignes * _taille) + ((lignes - 1) * _ecart));
     }
 
     /// <summary>Clé de la couleur choisie.</summary>
@@ -688,7 +694,7 @@ public sealed class ChoixCouleur : ControleDessine
     public event EventHandler? ValeurChangee;
 
     private RectangleF Zone(int i) =>
-        new(E((i % ParLigne) * (Taille + Ecart)), E((i / ParLigne) * (Taille + Ecart)), E(Taille), E(Taille));
+        new(E((i % ParLigne) * (_taille + _ecart)), E((i / ParLigne) * (_taille + _ecart)), E(_taille), E(_taille));
 
     protected override void Peindre(Graphics g)
     {
@@ -699,7 +705,7 @@ public sealed class ChoixCouleur : ControleDessine
             var choisie = cle == _valeur;
             using (var pinceau = new SolidBrush(couleur))
             {
-                g.FillEllipse(pinceau, RectangleF.Inflate(zone, -E(8), -E(8)));
+                g.FillEllipse(pinceau, RectangleF.Inflate(zone, -E(_taille * 2 / 11f), -E(_taille * 2 / 11f)));
             }
 
             var focus = Focused && i == _focus;
@@ -710,7 +716,7 @@ public sealed class ChoixCouleur : ControleDessine
                 g.DrawEllipse(stylo, anneau);
             }
 
-            if (choisie)
+            if (choisie && _coche)
             {
                 Icones.Dessiner(g, Icones.Coche, RectangleF.Inflate(zone, -E(14), -E(14)), Theme.TexteSurAvatar);
             }

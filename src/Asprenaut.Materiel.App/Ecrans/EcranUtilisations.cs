@@ -122,7 +122,7 @@ public sealed class EcranUtilisations : EcranBase
         _chiffres.Afficher(donnees);
 
         var types = donnees.Types;
-        _filtre.CouleurPoint = nom => types.FirstOrDefault(t => t.Type == nom) is { Type: not null } t ? Theme.CouleurTypeSortie(t.Famille) : null;
+        _filtre.CouleurPoint = nom => types.FirstOrDefault(t => t.Type == nom) is { Type: not null } t ? Theme.CouleurTypeSortie(t.Type, t.Famille) : null;
         _filtre.Afficher(donnees.Sorties.Count(), types.Select(t => (t.Type, t.Nombre)));
         _filtre.Visible = types.Count > 1;
         AfficherLignes();
@@ -551,7 +551,7 @@ public sealed class EcranUtilisations : EcranBase
 
             // Intitulé et pastille du type.
             Dessin.Texte(g, ligne.Titre, Theme.PoliceTitre(10f), new Rectangle(colonne(1), milieu - (int)E(23), Largeur(1), (int)E(22)), Theme.Texte);
-            var couleurType = Theme.CouleurTypeSortie(ligne.Famille);
+            var couleurType = Theme.CouleurTypeSortie(ligne.TypeNom, ligne.Famille);
             Pilule(g, ligne.TypeNom, colonne(1), milieu + (int)E(2), (int)E(22), Largeur(1), couleurType, Theme.PoliceGrasse(7.5f));
 
             Dessin.Texte(g, ligne.Responsable, Theme.Police(9.75f), new Rectangle(colonne(2), y, Largeur(2), h), Theme.TexteDoux);

@@ -37,7 +37,7 @@ internal static class FormulaireModele
         aideJour.Margin = new Padding(0, 0, 0, 4);
 
         var choixType = new ChoixTypeSortie { ColonnesMax = 3, Margin = new Padding(0, 0, 0, 14) };
-        choixType.Remplir(types.Select(t => new ChoixTypeSortie.Element(t.Id, t.Nom, Icones.PourTypeSortie(t.Pictogramme), Theme.CouleurTypeSortie(t.Pictogramme))));
+        choixType.Remplir(types.Select(t => new ChoixTypeSortie.Element(t.Id, t.Nom, Icones.PourTypeSortie(t), Theme.CouleurTypeSortie(t))));
         choixType.Valeur = types.FirstOrDefault(t => t.Id == m?.TypeId)?.Id ?? types.FirstOrDefault()?.Id;
         var lieu = new ChampSaisie { Valeur = m?.Lieu ?? "", TexteIndicatif = "Nom de la piscine, du site…", Icone = Icones.Lieu };
         lieu.Champ.AccessibleName = "Lieu";

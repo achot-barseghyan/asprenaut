@@ -5,7 +5,7 @@ using Asprenaut.Materiel.Core.Resultats;
 namespace Asprenaut.Materiel.Core.Services;
 
 /// <summary>
-/// Types de sortie du club (Paramètres) : ajouter, renommer, changer le pictogramme, masquer, supprimer.
+/// Types de sortie du club (Paramètres) : ajouter, renommer, changer le pictogramme et la couleur, masquer, supprimer.
 /// Nom obligatoire et unique (sans tenir compte des majuscules), 40 caractères au plus. Un type utilisé par une sortie
 /// ne se supprime pas : on le masque (il n'est plus proposé, les sorties le gardent). Il reste toujours un type proposé.
 /// Action protégée (Paramètres).
@@ -21,7 +21,17 @@ public sealed class ServiceTypesSortie(ITypeSortieRepository types, ServiceGesti
     public async Task<IReadOnlyList<TypeDeSortie>> ListerProposesAsync(long? typeActuel = null, CancellationToken ct = default) =>
         (await types.ListerAsync(ct)).Where(t => t.Actif || t.Id == typeActuel).ToList();
 
-    public async Task<ResultatOperation> CreerAsync(string nom, TypeSortie pictogramme, CancellationToken ct = default)
+    /// <summary>Ancien appel (famille seulement) : pictogramme et couleur de la famille.</summary>
+    public Task<ResultatOperation> CreerAsync(string nom, TypeSortie pictogramme, CancellationToken ct = default) =>
+        Enum.IsDefined(pictogramme)
+            ? CreerAsync(nom, TypeDeSortie.IconeParDefaut(pictogramme), TypeDeSortie.CouleurParDefaut(pictogramme), ct)
+            : Task.FromResult(ResultatOperation.Echec("Choisissez un pictogramme."));
+
+    /// <summary>
+    /// Ajoute un type (maquette « Ajouter un type de sortie ») : nom, pictogramme (<see cref="TypeDeSortie.Icones"/>) et couleur
+    /// (<see cref="TypeDeSortie.Couleurs"/>). Sa famille et ses utilisations par sortie suivent le pictogramme.
+    /// </summary>
+    public async Task<ResultatOperation> CreerAsync(string nom, string icone, string couleur, CancellationToken ct = default)
     {
         if (Autorisation() is { Reussi: false } refus)
         {
@@ -29,25 +39,42 @@ public sealed class ServiceTypesSortie(ITypeSortieRepository types, ServiceGesti
         }
 
         var tous = await types.ListerAsync(ct);
-        if (Valider(nom, pictogramme, tous, null) is { } erreur)
+        if (Valider(nom, icone, couleur, tous, null) is { } erreur)
         {
             return erreur;
         }
 
+        var famille = TypeDeSortie.FamilleDe(icone);
         var type = new TypeDeSortie
         {
             Nom = nom.Trim(),
-            Pictogramme = pictogramme,
+            Pictogramme = famille,
+            Icone = icone.ToLowerInvariant(),
+            Couleur = couleur.ToLowerInvariant(),
             Actif = true,
             Ordre = tous.Count == 0 ? 1 : tous.Max(t => t.Ordre) + 1,
-            Utilisations = TypeDeSortie.UtilisationsParDefaut(pictogramme),
+            Utilisations = TypeDeSortie.UtilisationsParDefaut(famille),
         };
         var id = await types.AjouterAsync(type, ct);
         return ResultatOperation.Ok($"Type « {type.Nom} » ajouté.", id);
     }
 
-    /// <summary>Renomme, change le pictogramme ou masque / réaffiche un type.</summary>
+    /// <summary>Ancien appel (famille seulement) : le pictogramme et la couleur sont gardés si la famille ne change pas.</summary>
     public async Task<ResultatOperation> ModifierAsync(long id, string nom, TypeSortie pictogramme, bool actif, CancellationToken ct = default)
+    {
+        if (!Enum.IsDefined(pictogramme))
+        {
+            return ResultatOperation.Echec("Choisissez un pictogramme.");
+        }
+
+        var actuel = await types.ObtenirAsync(id, ct);
+        return actuel is not null && actuel.Pictogramme == pictogramme
+            ? await ModifierAsync(id, nom, actuel.IconeEffective, actuel.CouleurEffective, actif, ct)
+            : await ModifierAsync(id, nom, TypeDeSortie.IconeParDefaut(pictogramme), TypeDeSortie.CouleurParDefaut(pictogramme), actif, ct);
+    }
+
+    /// <summary>Renomme, change le pictogramme ou la couleur, masque / réaffiche un type.</summary>
+    public async Task<ResultatOperation> ModifierAsync(long id, string nom, string icone, string couleur, bool actif, CancellationToken ct = default)
     {
         if (Autorisation() is { Reussi: false } refus)
         {
@@ -60,7 +87,7 @@ public sealed class ServiceTypesSortie(ITypeSortieRepository types, ServiceGesti
             return ResultatOperation.Echec("Ce type de sortie n'existe plus.");
         }
 
-        if (Valider(nom, pictogramme, tous, id) is { } erreur)
+        if (Valider(nom, icone, couleur, tous, id) is { } erreur)
         {
             return erreur;
         }
@@ -71,7 +98,9 @@ public sealed class ServiceTypesSortie(ITypeSortieRepository types, ServiceGesti
         }
 
         type.Nom = nom.Trim();
-        type.Pictogramme = pictogramme;
+        type.Pictogramme = TypeDeSortie.FamilleDe(icone);
+        type.Icone = icone.ToLowerInvariant();
+        type.Couleur = couleur.ToLowerInvariant();
         type.Actif = actif;
         await types.MettreAJourAsync(type, ct);
         return ResultatOperation.Ok($"Type « {type.Nom} » enregistré.", id);
@@ -130,7 +159,7 @@ public sealed class ServiceTypesSortie(ITypeSortieRepository types, ServiceGesti
         }
 
         var etaitPropose = type.Actif;
-        var resultat = await ModifierAsync(id, type.Nom, type.Pictogramme, !etaitPropose, ct);
+        var resultat = await ModifierAsync(id, type.Nom, type.IconeEffective, type.CouleurEffective, !etaitPropose, ct);
         return resultat.Reussi
             ? ResultatOperation.Ok(etaitPropose ? $"« {type.Nom} » masqué." : $"« {type.Nom} » de nouveau proposé.", id)
             : resultat;
@@ -167,7 +196,7 @@ public sealed class ServiceTypesSortie(ITypeSortieRepository types, ServiceGesti
             : ResultatOperation.Echec($"« {type.Nom} » vient d'être utilisé par une sortie : il ne peut pas être supprimé.");
     }
 
-    private static ResultatOperation? Valider(string? nom, TypeSortie pictogramme, IReadOnlyList<TypeDeSortie> tous, long? id)
+    private static ResultatOperation? Valider(string? nom, string? icone, string? couleur, IReadOnlyList<TypeDeSortie> tous, long? id)
     {
         var n = (nom ?? "").Trim();
         if (n.Length == 0)
@@ -180,9 +209,14 @@ public sealed class ServiceTypesSortie(ITypeSortieRepository types, ServiceGesti
             return ResultatOperation.Echec($"Nom trop long ({TypeDeSortie.LongueurMaxNom} caractères au plus).");
         }
 
-        if (!Enum.IsDefined(pictogramme))
+        if (!TypeDeSortie.EstIcone(icone))
         {
             return ResultatOperation.Echec("Choisissez un pictogramme.");
+        }
+
+        if (!TypeDeSortie.EstCouleur(couleur))
+        {
+            return ResultatOperation.Echec("Choisissez une couleur.");
         }
 
         return tous.Any(t => t.Id != id && string.Equals(t.Nom.Trim(), n, StringComparison.CurrentCultureIgnoreCase))

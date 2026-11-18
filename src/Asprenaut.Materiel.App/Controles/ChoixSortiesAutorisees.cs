@@ -178,7 +178,7 @@ public sealed class ChoixSortiesAutorisees : ControleDessine
 
             var type = _types[index];
             var autorise = !_interdits.Contains(type.Id);
-            var couleur = Theme.CouleurTypeSortie(type.Pictogramme);
+            var couleur = Theme.CouleurTypeSortie(type);
             var r = new RectangleF(zone.X + 0.5f, zone.Y + 0.5f, zone.Width - 1, zone.Height - 1);
             using (var chemin = Dessin.Arrondi(r, E(12)))
             {

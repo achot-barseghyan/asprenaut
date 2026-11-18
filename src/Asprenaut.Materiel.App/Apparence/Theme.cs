@@ -50,6 +50,10 @@ public sealed class Palette
     /// <summary>Sorties en fosse (violet de la maquette).</summary>
     public required Color Profondeur { get; init; }
 
+    /// <summary>Couleurs « bleu » et « rose » d'un type de sortie (maquette « Ajouter un type de sortie »).</summary>
+    public required Color Ciel { get; init; }
+    public required Color Rose { get; init; }
+
     // Bordures et fonds teintés
     public required Color Bordure { get; init; }
     public required Color BordureForte { get; init; }
@@ -167,16 +171,30 @@ public static class Theme
         _ => Accent,
     };
 
-    /// <summary>Couleur d'un type de sortie (point du filtre, pastille du tableau « Utilisations »), d'après sa famille.</summary>
-    public static Color CouleurTypeSortie(TypeSortie famille) => famille switch
+    /// <summary>
+    /// Couleur d'un type de sortie d'après sa clé (<see cref="TypeDeSortie.Couleurs"/>) : turquoise, bleu, vert, violet, jaune,
+    /// corail, rose ; rôles du thème, lisibles dans les deux thèmes.
+    /// </summary>
+    public static Color CouleurTypeSortie(string? cle) => cle switch
     {
-        TypeSortie.Piscine => AccentClair,
-        TypeSortie.Bapteme => Retour,
-        TypeSortie.Lac => Materiel,
-        TypeSortie.Mer => DepartClair,
-        TypeSortie.Fosse => Profondeur,
-        _ => TexteSecondaireClair,
+        "bleu" => _p.Ciel,
+        "vert" => Retour,
+        "violet" => Prestataire,
+        "jaune" => Avertissement,
+        "corail" => DepartClair,
+        "rose" => _p.Rose,
+        _ => Accent,
     };
+
+    /// <summary>Couleur d'un type de sortie : celle choisie, sinon celle de sa famille.</summary>
+    public static Color CouleurTypeSortie(TypeDeSortie type) => CouleurTypeSortie(type.CouleurEffective);
+
+    /// <summary>
+    /// Couleur d'un type de sortie connu seulement par son nom et sa famille (résumés de sorties, utilisations) : celle choisie
+    /// pour ce nom (<see cref="TypesSortieRetenus"/>), sinon celle de la famille.
+    /// </summary>
+    public static Color CouleurTypeSortie(string? nom, TypeSortie famille) =>
+        CouleurTypeSortie(TypesSortieRetenus.Trouver(nom)?.CouleurEffective ?? TypeDeSortie.CouleurParDefaut(famille));
 
     // --- Bordures ---
     public static Color Bordure => _p.Bordure;
@@ -300,6 +318,8 @@ public static class Theme
             PrestataireClair = Hex("#CBBCFF"),
             TexteSurPrestataire = Hex("#1D1240"),
             Profondeur = Hex("#C9A8FF"),
+            Ciel = Hex("#8CC4FF"),
+            Rose = Hex("#FF9EC7"),
             Bordure = Melanger(surface, accentClair, 0.14f),
             BordureForte = Melanger(surface, accentClair, 0.26f),
             FondDepart = Melanger(surface, depart, 0.16f),
@@ -355,6 +375,8 @@ public static class Theme
             PrestataireClair = Hex("#5B21B6"),
             TexteSurPrestataire = Color.White,
             Profondeur = Hex("#7E22CE"),
+            Ciel = Hex("#1D4ED8"),
+            Rose = Hex("#BE185D"),
             Bordure = Hex("#D5E1EA"),
             BordureForte = Hex("#B4C7D7"),
             FondDepart = Melanger(surface, depart, 0.10f),

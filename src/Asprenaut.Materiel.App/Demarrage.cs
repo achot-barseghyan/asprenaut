@@ -138,6 +138,9 @@ internal static class Demarrage
         // Pictogramme choisi pour chaque catégorie (Lampes, Plombs…), utilisé partout où une catégorie est dessinée.
         Apparence.Icones.RetenirCategories(await services.GetRequiredService<ServiceInventaire>().ListerCategoriesAsync());
 
+        // Pictogramme et couleur choisis pour chaque type de sortie, dessinés partout où un type n'est connu que par son nom.
+        Apparence.TypesSortieRetenus.Retenir(await services.GetRequiredService<ServiceTypesSortie>().ListerAsync());
+
         // Notices des fabricants livrées avec l'appli : installées une seule fois. Un échec ne bloque pas le démarrage.
         try
         {

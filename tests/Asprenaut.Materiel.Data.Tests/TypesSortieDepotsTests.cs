@@ -78,6 +78,21 @@ public class TypesSortieDepotsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Le_pictogramme_et_la_couleur_sont_enregistres()
+    {
+        var depot = new TypeSortieRepository(_base.Fabrique);
+        var service = new ServiceTypesSortie(depot);
+        var nuit = (await service.CreerAsync("Plongée de nuit", "nuit", "violet")).Id!.Value;
+        Assert.True((await service.ModifierAsync(nuit, "Plongée de nuit", "epave", "rose", actif: true)).Reussi);
+
+        await using var cx = await _base.Fabrique.OuvrirAsync();
+        Assert.Equal(("Mer", "epave", "rose"), await cx.QuerySingleAsync<(string, string, string)>(
+            "SELECT pictogramme, icone, couleur FROM type_sortie WHERE id = @nuit;", new { nuit }));
+        var lu = (await depot.ObtenirAsync(nuit))!;
+        Assert.Equal(("epave", "rose", TypeSortie.Mer), (lu.IconeEffective, lu.CouleurEffective, lu.Pictogramme));
+    }
+
+    [Fact]
     public async Task Les_utilisations_du_type_et_de_la_sortie_sont_enregistrees()
     {
         var depot = new TypeSortieRepository(_base.Fabrique);

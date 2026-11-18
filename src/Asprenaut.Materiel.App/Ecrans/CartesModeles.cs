@@ -15,7 +15,7 @@ internal abstract class CarteModeleBase : Carte
     protected CarteModeleBase(FicheModele fiche)
     {
         Fiche = fiche;
-        Couleur = fiche.Type is { } t ? Theme.CouleurTypeSortie(t.Pictogramme) : Theme.TexteSecondaire;
+        Couleur = fiche.Type is { } t ? Theme.CouleurTypeSortie(t) : Theme.TexteSecondaire;
         Rayon = 20;
         AccessibleName = fiche.Modele.Nom;
     }
@@ -42,7 +42,7 @@ internal abstract class CarteModeleBase : Carte
     /// <summary>Pictogramme du type, nom du modèle et ligne de détail, en tête de carte.</summary>
     protected TableLayoutPanel Tete(string detail)
     {
-        var picto = new Picto(Fiche.Type is { } t ? Icones.PourTypeSortie(t.Pictogramme) : Icones.Autre, 42, Couleur, Theme.Teinte(Couleur, 0.14f));
+        var picto = new Picto(Fiche.Type is { } t ? Icones.PourTypeSortie(t) : Icones.Autre, 42, Couleur, Theme.Teinte(Couleur, 0.14f));
         var nom = Ui.Libelle(Fiche.Modele.Nom, Theme.PoliceTitre(12f));
         nom.AutoSize = false;
         nom.AutoEllipsis = true;

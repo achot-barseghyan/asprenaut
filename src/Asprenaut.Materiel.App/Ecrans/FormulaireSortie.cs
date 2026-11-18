@@ -41,7 +41,7 @@ internal static class FormulaireSortie
 
         // --- Champs ---
         var choixType = new ChoixTypeSortie();
-        choixType.Remplir(types.Select(t => new ChoixTypeSortie.Element(t.Id, t.Nom, Icones.PourTypeSortie(t.Pictogramme), Theme.CouleurTypeSortie(t.Pictogramme))));
+        choixType.Remplir(types.Select(t => new ChoixTypeSortie.Element(t.Id, t.Nom, Icones.PourTypeSortie(t), Theme.CouleurTypeSortie(t))));
         choixType.Valeur = types.FirstOrDefault(t => t.Id == s.TypeId)?.Id ?? types.FirstOrDefault()?.Id;
         var date = new ChampDate { Date = s.DateSortie };
         var intitule = new ChampSaisie { Valeur = s.Intitule, TexteIndicatif = "Ex. Week-end Marseille" };
@@ -172,7 +172,7 @@ internal static class FormulaireSortie
                 detail += $" · {lieu.Valeur.Trim()}";
             }
 
-            entete.Afficher(date.Date, intitule.Valeur, type?.Nom ?? "", type is null ? Theme.Accent : Theme.CouleurTypeSortie(type.Pictogramme), detail);
+            entete.Afficher(date.Date, intitule.Valeur, type?.Nom ?? "", type is null ? Theme.Accent : Theme.CouleurTypeSortie(type), detail);
 
             // Modifications par rapport à la sortie enregistrée.
             var changes = new List<string>();

@@ -674,7 +674,7 @@ public sealed class EcranMoniteurs : EcranBase
                         _ => ("Tout rendu", Theme.Retour),
                     };
                     return new LigneMembre(s.Intitule, $"{s.NbTotal} équip.", () => OuvrirSortie(s.Id, s.Statut),
-                        Date: s.DateSortie, Type: s.LibelleType, CouleurType: Theme.CouleurTypeSortie(s.Type), Etat: etat, CouleurEtat: couleur);
+                        Date: s.DateSortie, Type: s.LibelleType, CouleurType: Theme.CouleurTypeSortie(s.LibelleType, s.Type), Etat: etat, CouleurEtat: couleur);
                 })
                 .ToList();
             ligne(new SectionMembre("Sorties encadrées", GenreSectionMembre.Sorties, encadrees, "Aucune sortie encadrée pour l'instant."));
@@ -685,7 +685,7 @@ public sealed class EcranMoniteurs : EcranBase
         {
             ligne(new SectionMembre(enseignant ? "Ses sorties avec du matériel" : "Dernières sorties", GenreSectionMembre.Sorties, detail.Sorties
                 .Select(s => new LigneMembre(s.Intitule, $"{s.NbEquipements} équip.", () => OuvrirSortie(s.SortieId, s.Statut),
-                    Date: s.Date, Type: s.Type, CouleurType: Theme.CouleurTypeSortie(s.Famille), Etat: s.Etat,
+                    Date: s.Date, Type: s.Type, CouleurType: Theme.CouleurTypeSortie(s.Type, s.Famille), Etat: s.Etat,
                     CouleurEtat: s.EnCours ? Theme.DepartClair : s.NbNonRendus > 0 ? Theme.Erreur : Theme.Retour))
                 .ToList(), "Aucune sortie avec du matériel à son nom."));
         }

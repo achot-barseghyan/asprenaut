@@ -264,6 +264,16 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     modifiables à la création et en modification (`NouvelleSortie.Utilisations`) ; en modification sans valeur, elle garde les
     siennes sauf si le type change. Liste des types : corbeille rouge si jamais utilisé, sinon bouton œil
     (`BasculerMasqueAsync`) pour masquer / réafficher ; type masqué grisé « · masqué ».
+    Pictogramme et couleur (migration 035, maquette « Ajouter un type de sortie », `TypesSortieTests`) : `TypeDeSortie.Icone` (28 clés
+    de `TypeDeSortie.Icones`, avec nom et mots-clés ; tracés `Icones.DeTypeSortie`) et `Couleur` (7 clés de `TypeDeSortie.Couleurs` →
+    `Theme.CouleurTypeSortie(cle)`, rôles `Ciel` / `Rose` ajoutés aux palettes) ; null = d'après la famille (`IconeEffective`,
+    `CouleurEffective`). La famille suit le pictogramme (`FamilleDe` : bateau, épave, bio → Mer ; carrière, rivière, glace → Lac).
+    `CreerAsync(nom, icone, couleur)` / `ModifierAsync(id, nom, icone, couleur, actif)` (anciens appels par famille gardés).
+    Fenêtre `Ecrans/FormulaireTypeSortie` : carte du nom avec grand pictogramme teinté, « Pictogramme · Bateau » + recherche
+    (`ChercherIcones`, sans accents), `GrillePictogrammes` (7 par ligne, dessinée), `ChoixCouleur` (38 px, sans coche), aperçu
+    `ApercuTypeSortie` ; tant qu'aucun pictogramme n'est cliqué, il suit le nom tapé (`DevinerIcone`) ; « Ajouter » grisé sans nom.
+    Écrans qui ne connaissent qu'un nom de type et sa famille : `TypesSortieRetenus` (retenus au démarrage et dans Paramètres),
+    `Theme.CouleurTypeSortie(nom, famille)`, `Icones.PourTypeSortie(nom, famille)`.
 22. Fiche matériel (registres « Stab » et « Détendeurs » du club, migration 005) : marque, modèle, n° de série pour tous (premier
     étage pour un détendeur) ; détendeur seulement : montage `MontageDetendeur` (Étrier / DIN), deuxième étage (marque, modèle, n°),
     D.S (oui / non / non renseigné), mano (marque, modèle et n°), octopus (marque, modèle, n°) ; marque de l'octopus, modèle et n° du
@@ -725,11 +735,12 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   032 : adherent.autres_brevets (« PA40; RIFAP », null = aucun) ; un niveau_obtenu hors Débutant / Niveau 1 à 4 y est déplacé.
   033 : equipement.marque_octopus, modele_manometre, numero_manometre (texte, vide par défaut) ; numero_manometre repris de composant.
   034 : equipement.types_sortie_interdits (ids de type_sortie « 3;5 », vide = toutes les sorties ; règle 47).
+  035 : type_sortie.icone et type_sortie.couleur (clés ; types existants repris de leur famille ; règle 21).
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/035_xxx.sql`, sans jamais modifier un script déjà livré
+- Nouvelle migration : ajouter `Migrations/036_xxx.sql`, sans jamais modifier un script déjà livré
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.

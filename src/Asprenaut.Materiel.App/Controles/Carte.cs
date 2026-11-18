@@ -362,6 +362,10 @@ public sealed class Picto : ControleDessine
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public Color Couleur { get => _couleur; set => Invalider(ref _couleur, value); }
 
+    /// <summary>Fond du carré arrondi, ou null : pictogramme seul.</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Color? Fond { get => _fond; set => Invalider(ref _fond, value); }
+
     protected override void Peindre(Graphics g)
     {
         var r = new RectangleF(0, 0, Width - 1, Height - 1);

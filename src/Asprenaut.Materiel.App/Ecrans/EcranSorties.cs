@@ -356,7 +356,7 @@ public sealed class EcranSorties : EcranBase
         };
         _types.Changement += (_, _) =>
             Filtrer(_filtre with { TypeId = _types.Selection is { } nom && _typesAffiches.TryGetValue(nom, out var t) ? t.TypeId : null });
-        _types.CouleurPoint = nom => _typesAffiches.TryGetValue(nom, out var t) ? Theme.CouleurTypeSortie(t.Famille) : null;
+        _types.CouleurPoint = nom => _typesAffiches.TryGetValue(nom, out var t) ? Theme.CouleurTypeSortie(nom, t.Famille) : null;
         _bilan.Changement += (_, _) =>
         {
             if (!_remplissage)
@@ -478,7 +478,7 @@ public sealed class EcranSorties : EcranBase
                 e.Handled = true;
                 break;
             case "type":
-                Tableaux.PeindrePastille(e, s.LibelleType.ToUpper(Libelles.Culture), Theme.CouleurTypeSortie(s.Type));
+                Tableaux.PeindrePastille(e, s.LibelleType.ToUpper(Libelles.Culture), Theme.CouleurTypeSortie(s.LibelleType, s.Type));
                 break;
             case "bilan":
                 if (s.NbManquants == 0)

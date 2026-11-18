@@ -328,7 +328,7 @@ public sealed class EcranNouvelleSortie : EcranBase
         }
 
         _types.Remplir(_listeTypes.Select(t => new ChoixTypeSortie.Element(
-            t.Id, t.Nom, Icones.PourTypeSortie(t.Pictogramme), Theme.CouleurTypeSortie(t.Pictogramme), Libelles.Pluriel(t.Utilisations, "utilisation"))));
+            t.Id, t.Nom, Icones.PourTypeSortie(t), Theme.CouleurTypeSortie(t), Libelles.Pluriel(t.Utilisations, "utilisation"))));
         _types.Valeur = _listeTypes.FirstOrDefault()?.Id;
 
         _datesRapides.Groupe("", ServiceSortie.DatesProposees(DateOnly.FromDateTime(DateTime.Today)).Select(d => (d.Date.ToString("yyyy-MM-dd", Libelles.Culture), d.Texte)));
@@ -510,7 +510,7 @@ public sealed class EcranNouvelleSortie : EcranBase
                 : new(Icones.Bouclier, "Règle « 1 par catégorie » ", "coupée"));
         }
 
-        _apercu.Afficher(_date.Date, type?.Nom ?? "", type is null ? Theme.Accent : Theme.CouleurTypeSortie(type.Pictogramme), _intitule.Valeur, lignes);
+        _apercu.Afficher(_date.Date, type?.Nom ?? "", type is null ? Theme.Accent : Theme.CouleurTypeSortie(type), _intitule.Valeur, lignes);
 
         var manque = new List<string>();
         if (type is null)

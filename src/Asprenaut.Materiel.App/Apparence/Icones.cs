@@ -196,27 +196,51 @@ public static class Icones
 
     private static readonly Dictionary<string, GraphicsPath> Cache = [];
 
-    /// <summary>Pictogramme d'un type de sortie, d'après sa famille.</summary>
-    public static string PourTypeSortie(Core.Modeles.TypeSortie famille) => famille switch
+    /// <summary>Tracés des pictogrammes de types de sortie (clés de <see cref="Core.Modeles.TypeDeSortie.Icones"/>, maquette).</summary>
+    private static readonly Dictionary<string, string> TracesTypesSortie = new(StringComparer.OrdinalIgnoreCase)
     {
-        Core.Modeles.TypeSortie.Piscine => Piscine,
-        Core.Modeles.TypeSortie.Fosse => Fosse,
-        Core.Modeles.TypeSortie.Mer => Mer,
-        Core.Modeles.TypeSortie.Lac => Lac,
-        Core.Modeles.TypeSortie.Bapteme => Bapteme,
-        _ => Autre,
+        ["piscine"] = "M3 6h18v12H3zM3 12c2 0 2-1.5 4.5-1.5S10 12 12 12s2-1.5 4.5-1.5S19 12 21 12",
+        ["fosse"] = "M12 4v14M6 12l6 6 6-6M4 21h16",
+        ["mer"] = "M3 10c2 0 2-2 4.5-2S10 10 12 10s2-2 4.5-2S19 10 21 10M3 16c2 0 2-2 4.5-2S10 16 12 16s2-2 4.5-2S19 16 21 16",
+        ["lac"] = "M3 18l6-9 4 6 3-4 5 7zM3 21h18",
+        ["bapteme"] = "M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z",
+        ["bateau"] = "M3 15h18l-2 5H5zM6 15V9h9l3 6M10 9V4h3",
+        ["carriere"] = "M3 20l4-8 4 3 3-6 7 11z",
+        ["riviere"] = "M7 3c4 4-4 8 0 12s-4 6 0 6M15 3c4 4-4 8 0 12s-4 6 0 6",
+        ["nuit"] = "M20 14a8 8 0 1 1-10-10 7 7 0 0 0 10 10z",
+        ["epave"] = "M12 5a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM12 5v16M5 13a7 7 0 0 0 14 0M8 9h8",
+        ["bio"] = "M3 12c3-5 9-6 14-2l4-3v10l-4-3c-5 4-11 3-14-2zM14 11h.01",
+        ["glace"] = "M12 2v20M4.9 7l14.2 10M4.9 17L19.1 7",
+        ["apnee"] = "M12 3v8M12 11c-2 0-4 2-5 5s-1 5 1 5 4-3 4-6M12 11c2 0 4 2 5 5s1 5-1 5-4-3-4-6",
+        ["nitrox"] = "M9 7h6v13a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1zM10 7V4h4v3M12 2v2",
+        ["formation"] = "M3 9l9-5 9 5-9 5zM7 11v5c3 2 7 2 10 0v-5",
+        ["examen"] = "M9 4h6v3H9zM7 5H5v16h14V5h-2M9 14l2 2 4-4",
+        ["secours"] = "M9 3h6v6h6v6h-6v6H9v-6H3V9h6z",
+        ["photo"] = "M4 7h4l2-3h4l2 3h4v13H4zM12 10a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z",
+        ["voyage"] = "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18",
+        ["weekend"] = "M3 20L12 4l9 16zM12 4v16M9 20l3-5 3 5",
+        ["ete"] = Soleil,
+        ["groupe"] = Groupe,
+        ["event"] = Drapeau,
+        ["entretien"] = Revisions,
+        ["nettoyage"] = Sac,
+        ["compet"] = "M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 21h8M10 17h4",
+        ["enfant"] = "M12 7a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM8 22v-6l-2-1 2-5h8l2 5-2 1v6",
+        ["autre"] = Autre,
     };
 
-    /// <summary>Nom du pictogramme proposé dans Paramètres › Types de sortie.</summary>
-    public static string NomPictogramme(Core.Modeles.TypeSortie famille) => famille switch
-    {
-        Core.Modeles.TypeSortie.Piscine => "Piscine (bassin)",
-        Core.Modeles.TypeSortie.Fosse => "Fosse (flèche vers le bas)",
-        Core.Modeles.TypeSortie.Mer => "Mer (vagues)",
-        Core.Modeles.TypeSortie.Lac => "Lac (montagne)",
-        Core.Modeles.TypeSortie.Bapteme => "Baptême (étoile)",
-        _ => "Autre (points)",
-    };
+    /// <summary>Tracé d'un pictogramme de type de sortie d'après sa clé ; points si la clé est inconnue.</summary>
+    public static string DeTypeSortie(string? cle) => cle is not null && TracesTypesSortie.TryGetValue(cle, out var trace) ? trace : Autre;
+
+    /// <summary>Pictogramme d'un type de sortie : celui choisi, sinon celui de sa famille.</summary>
+    public static string PourTypeSortie(Core.Modeles.TypeDeSortie type) => DeTypeSortie(type.IconeEffective);
+
+    /// <summary>Pictogramme d'une famille de types (anciens types, sorties sans type).</summary>
+    public static string PourTypeSortie(Core.Modeles.TypeSortie famille) => DeTypeSortie(Core.Modeles.TypeDeSortie.IconeParDefaut(famille));
+
+    /// <summary>Pictogramme d'un type connu par son nom : celui choisi pour ce nom (<see cref="TypesSortieRetenus"/>), sinon celui de la famille.</summary>
+    public static string PourTypeSortie(string? nom, Core.Modeles.TypeSortie famille) =>
+        DeTypeSortie(TypesSortieRetenus.Trouver(nom)?.IconeEffective ?? Core.Modeles.TypeDeSortie.IconeParDefaut(famille));
 
     // Pictogramme choisi pour chaque catégorie (nom → clé), retenu quand les catégories sont lues.
     private static Dictionary<string, string> _categories = new(StringComparer.OrdinalIgnoreCase);

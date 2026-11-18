@@ -1521,6 +1521,7 @@ public sealed class EcranParametres : EcranBase
     private async Task AfficherTypesAsync()
     {
         var types = await _typesSortie.ListerAsync();
+        TypesSortieRetenus.Retenir(types);
         if (IsDisposed)
         {
             return;
@@ -1560,7 +1561,17 @@ public sealed class EcranParametres : EcranBase
         var detail = Ui.Libelle(precision, Theme.Police(9f), Theme.TexteSecondaire);
         detail.Margin = Padding.Empty;
         var textes = Ui.Pile(nom, detail);
-        textes.Anchor = AnchorStyles.Left;
+        textes.Margin = Padding.Empty;
+        var couleur = Theme.CouleurTypeSortie(t);
+        var picto = new Picto(Icones.PourTypeSortie(t), 40, t.Actif ? couleur : Theme.TexteSecondaire, Theme.Teinte(couleur, t.Actif ? 0.14f : 0.06f))
+        {
+            Anchor = AnchorStyles.Left,
+            Margin = new Padding(0, 0, 12, 0),
+            TabStop = false,
+        };
+        var identite = Ui.Rangee(true, picto, textes);
+        identite.WrapContents = false;
+        identite.Anchor = AnchorStyles.Left;
 
         var utilisations = new SelecteurNombre($"Utilisations pour {t.Nom}", n => Libelles.Pluriel(n, "utilisation"))
         {
@@ -1642,7 +1653,7 @@ public sealed class EcranParametres : EcranBase
         ligne.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         ligne.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         ligne.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        ligne.Controls.Add(textes, 0, 0);
+        ligne.Controls.Add(identite, 0, 0);
         ligne.Controls.Add(utilisations, 1, 0);
         ligne.Controls.Add(modifier, 2, 0);
         ligne.Controls.Add(action, 3, 0);
@@ -1691,7 +1702,7 @@ public sealed class EcranParametres : EcranBase
         await AfficherTypesAsync();
     }
 
-    /// <summary>Fenêtre d'ajout (<paramref name="type"/> null) ou de modification d'un type de sortie.</summary>
+    /// <summary>Fenêtre d'ajout (<paramref name="type"/> null) ou de modification d'un type de sortie (maquette).</summary>
     private async Task EditerTypeAsync(TypeDeSortie? type)
     {
         if (!Autoriser())
@@ -1699,29 +1710,8 @@ public sealed class EcranParametres : EcranBase
             return;
         }
 
-        var nom = new ChampSaisie { Valeur = type?.Nom ?? "", TexteIndicatif = "Ex. : Sortie bateau" };
-        nom.Champ.AccessibleName = "Nom du type de sortie";
-        nom.Champ.MaxLength = TypeDeSortie.LongueurMaxNom;
-        var pictogramme = new ListeDeroulante { AccessibleName = "Pictogramme" };
-        foreach (var famille in Enum.GetValues<TypeSortie>())
-        {
-            pictogramme.Items.Add(new Choix<TypeSortie>(famille, Icones.NomPictogramme(famille)));
-        }
-
-        pictogramme.SelectedItem = pictogramme.Items.OfType<Choix<TypeSortie>>().First(c => c.Valeur == (type?.Pictogramme ?? TypeSortie.Autre));
-
         // Proposé ou masqué : bouton œil de la liste. Utilisations : sélecteur de la liste (nouveau type : selon le pictogramme).
-        using var fenetre = new FenetreFormulaire(type is null ? "Ajouter un type de sortie" : $"Modifier « {type.Nom} »", type is null ? "Ajouter" : "Enregistrer", () =>
-        {
-            var famille = (pictogramme.SelectedItem as Choix<TypeSortie>)?.Valeur ?? TypeSortie.Autre;
-            return type is null
-                ? _typesSortie.CreerAsync(nom.Valeur, famille)
-                : _typesSortie.ModifierAsync(type.Id, nom.Valeur, famille, type.Actif);
-        });
-        fenetre.DeuxChamps("Nom", nom, "Pictogramme", pictogramme);
-
-        fenetre.Shown += (_, _) => nom.Champ.Focus();
-        if (fenetre.ShowDialog(FindForm()) == DialogResult.OK)
+        if (FormulaireTypeSortie.Ouvrir(FindForm(), type, _typesSortie))
         {
             await AfficherTypesAsync();
         }

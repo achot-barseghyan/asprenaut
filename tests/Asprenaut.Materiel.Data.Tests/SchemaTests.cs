@@ -37,9 +37,21 @@ public class SchemaTests : IAsyncLifetime
     }
 
     [Fact]
-    public void Scripts_001_a_034_sont_embarques()
+    public void Scripts_001_a_035_sont_embarques()
     {
-        Assert.Equal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34], GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
+        Assert.Equal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35], GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
+    }
+
+    // 035 : chaque type de sortie existant reprend le pictogramme et la couleur de sa famille.
+    [Fact]
+    public async Task La_migration_035_donne_pictogramme_et_couleur_aux_types_existants()
+    {
+        await using var cx = await _base.Fabrique.OuvrirAsync();
+        var lignes = (await cx.QueryAsync<(string, string, string)>("SELECT pictogramme, icone, couleur FROM type_sortie ORDER BY id;")).ToList();
+        Assert.Contains(("Piscine", "piscine", "cyan"), lignes);
+        Assert.Contains(("Mer", "mer", "corail"), lignes);
+        Assert.Contains(("Lac", "lac", "bleu"), lignes);
+        Assert.Contains(("Autre", "autre", "bleu"), lignes);
     }
 
     // 033 : marque de l'octopus, modèle et n° du manomètre ; le n° d'un manomètre ajouté depuis la fiche EPI est repris.
