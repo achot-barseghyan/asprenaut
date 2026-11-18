@@ -46,6 +46,9 @@ public class FicheMaterielDepotsTests : IAsyncLifetime
             Manometre = "Scubapro",
             Octopus = "R 095",
             NumeroOctopus = "1641000963",
+            MarqueOctopus = "Scubapro",
+            ModeleManometre = "SPG 300",
+            NumeroManometre = "M-778",
         }, derniereRevision: new DateOnly(2021, 3, 17));
         Assert.True(r.Reussi, r.Message);
 
@@ -61,17 +64,28 @@ public class FicheMaterielDepotsTests : IAsyncLifetime
         var relu = (await depot.ObtenirAsync(r.Id!.Value))!;
         Assert.Equal((MontageDetendeur.Din, (bool?)true, "R 295", "1641000963"), (relu.Montage, relu.DirectSystem, relu.ModeleDeuxiemeEtage, relu.NumeroOctopus));
 
+        Assert.Equal(("Scubapro", "SPG 300", "M-778"), (relu.MarqueOctopus, relu.ModeleManometre, relu.NumeroManometre)); // Migration 033.
+        await using (var cx = await _base.Fabrique.OuvrirAsync())
+        {
+            Assert.Equal(("Scubapro", "SPG 300", "M-778"), await cx.QuerySingleAsync<(string, string, string)>(
+                "SELECT marque_octopus, modele_manometre, numero_manometre FROM equipement WHERE code = 'A05';"));
+        }
+
         var ligne = (await inventaire.ListerAsync("0614500682", null)).Single(); // Recherche par numéro du deuxième étage.
+        var parMano = (await inventaire.ListerAsync("M-778", null)).Single(); // Recherche par numéro du manomètre.
+        Assert.Equal(("A05", "Scubapro", "SPG 300", "M-778"), (parMano.Code, parMano.MarqueOctopus, parMano.ModeleManometre, parMano.NumeroManometre));
         Assert.Equal(("Scubapro", "MK2", new DateOnly(2021, 3, 17)), (ligne.Marque, ligne.Modele, ligne.DerniereRevision!.Value));
 
         // Sans fiche : colonnes vides, D.S et montage non renseignés.
+        relu.MarqueOctopus = relu.ModeleManometre = relu.NumeroManometre = "";
         relu.Montage = null;
         relu.DirectSystem = null;
         await depot.MettreAJourAsync(relu);
         Assert.Equal((null, (bool?)null), ((await depot.ObtenirAsync(relu.Id))!.Montage, (await depot.ObtenirAsync(relu.Id))!.DirectSystem));
+        Assert.Equal("", (await depot.ObtenirAsync(relu.Id))!.NumeroManometre);
 
         var csv = (await new ServiceExport(new ExportRepository(_base.Fabrique), new HorlogeFixe()).ExporterAsync()).Single(f => f.Nom == "materiel.csv").Contenu;
-        Assert.Contains("A05;Détendeur Scubapro;Détendeurs;Scubapro;MK2;;0614500681;En service;17/03/2021;17/03/2023;;;Scub;R 295;0614500682;;Scubapro;R 095;1641000963;",
+        Assert.Contains("A05;Détendeur Scubapro;Détendeurs;Scubapro;MK2;;0614500681;En service;17/03/2021;17/03/2023;;;Scub;R 295;0614500682;;Scubapro;;;;R 095;1641000963;", // Mano, modèle et n° mano, marque octopus (vidés), octopus.
             csv, StringComparison.Ordinal);
     }
 }

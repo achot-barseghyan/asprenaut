@@ -90,6 +90,7 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
                    e.taille, e.etat, e.date_prochaine_revision, e.date_requalification,
                    e.marque, e.modele, e.numero_serie, e.montage, e.marque_deuxieme_etage, e.modele_deuxieme_etage,
                    e.numero_deuxieme_etage, e.direct_system, e.manometre, e.octopus, e.numero_octopus, e.nitrox,
+                   e.marque_octopus, e.modele_manometre, e.numero_manometre,
                    (SELECT MAX(ct.date_controle) FROM controle ct WHERE ct.equipement_id = e.id AND ct.type = 'Revision' AND ct.composant = '') AS derniere_revision,
                    s.id AS sortie_en_cours_id, s.intitule AS sortie_en_cours_intitule,
                    EXISTS (SELECT 1 FROM sortie_equipement m
@@ -101,7 +102,7 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
             LEFT JOIN sortie s ON s.id = se.sortie_id
             WHERE (@motif IS NULL OR e.code LIKE @motif OR e.libelle LIKE @motif OR e.taille LIKE @motif
                    OR e.marque LIKE @motif OR e.modele LIKE @motif OR e.numero_serie LIKE @motif
-                   OR e.numero_deuxieme_etage LIKE @motif OR e.numero_octopus LIKE @motif)
+                   OR e.numero_deuxieme_etage LIKE @motif OR e.numero_octopus LIKE @motif OR e.numero_manometre LIKE @motif)
               AND (@categorieId IS NULL OR e.categorie_id = @categorieId)
             ORDER BY e.code;
             """;
@@ -173,7 +174,8 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
                 marque = @Marque, modele = @Modele, numero_serie = @NumeroSerie, montage = @Montage,
                 marque_deuxieme_etage = @MarqueDeuxiemeEtage, modele_deuxieme_etage = @ModeleDeuxiemeEtage,
                 numero_deuxieme_etage = @NumeroDeuxiemeEtage, direct_system = @DirectSystem, manometre = @Manometre,
-                octopus = @Octopus, numero_octopus = @NumeroOctopus, nitrox = @Nitrox
+                octopus = @Octopus, numero_octopus = @NumeroOctopus, nitrox = @Nitrox,
+                marque_octopus = @MarqueOctopus, modele_manometre = @ModeleManometre, numero_manometre = @NumeroManometre
             WHERE id = @Id;
             """;
         await using var cx = await fabrique.OuvrirAsync(ct);
@@ -286,14 +288,17 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
         e.Octopus,
         e.NumeroOctopus,
         Nitrox = e.Nitrox ? 1 : 0,
+        e.MarqueOctopus,
+        e.ModeleManometre,
+        e.NumeroManometre,
     };
 
     /// <summary>Colonnes de la fiche matériel (migration 005), dans l'ordre des paramètres d'écriture.</summary>
     private const string ColonnesFiche =
-        "marque, modele, numero_serie, montage, marque_deuxieme_etage, modele_deuxieme_etage, numero_deuxieme_etage, direct_system, manometre, octopus, numero_octopus, nitrox";
+        "marque, modele, numero_serie, montage, marque_deuxieme_etage, modele_deuxieme_etage, numero_deuxieme_etage, direct_system, manometre, octopus, numero_octopus, nitrox, marque_octopus, modele_manometre, numero_manometre";
 
     private const string ValeursFiche =
-        "@Marque, @Modele, @NumeroSerie, @Montage, @MarqueDeuxiemeEtage, @ModeleDeuxiemeEtage, @NumeroDeuxiemeEtage, @DirectSystem, @Manometre, @Octopus, @NumeroOctopus, @Nitrox";
+        "@Marque, @Modele, @NumeroSerie, @Montage, @MarqueDeuxiemeEtage, @ModeleDeuxiemeEtage, @NumeroDeuxiemeEtage, @DirectSystem, @Manometre, @Octopus, @NumeroOctopus, @Nitrox, @MarqueOctopus, @ModeleManometre, @NumeroManometre";
 }
 
 public sealed class MoniteurRepository(FabriqueConnexion fabrique) : IMoniteurRepository

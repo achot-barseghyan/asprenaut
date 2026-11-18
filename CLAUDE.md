@@ -165,7 +165,7 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
    Fenêtre (`Ecrans/FormulaireEquipement`, maquette « Inventaire · Ajouter équipements (formulaire) », 1120 px) : catégorie, sections
    1 Identification (`RangeeChamps` : Pour Adulte | Enfant pour un détendeur → `ProposerCodeAsync(id, "E")`, code lu → Pour suit la
    lettre, nom proposé tant qu'il n'est pas tapé ; État en modification), 2 Composition (détendeur, `GrilleComposition` +
-   `ElementComposition` : interrupteurs octopus / manomètre, cases que la fiche ne garde pas = « — » ; raccord et D.S en `Bascule`)
+   `ElementComposition` : interrupteurs octopus / manomètre, marque, modèle et n° pour chaque élément ; raccord et D.S en `Bascule`)
    ou 2 Fiche, 3 Révision et usage (`OptionNitrox`, notes) ; aperçu `ApercuEquipement` à droite (médaille `Theme.Medaille…`) ;
    « Ajouter et en créer un autre » (`FenetreFormulaire.BoutonEnPlus`, ajout depuis l'inventaire : code suivant, numéros et notes vidés).
 5. Retour d'un équipement absent de la sortie → avertir sans rien modifier ; s'il est dehors ailleurs →
@@ -266,7 +266,8 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     (`BasculerMasqueAsync`) pour masquer / réafficher ; type masqué grisé « · masqué ».
 22. Fiche matériel (registres « Stab » et « Détendeurs » du club, migration 005) : marque, modèle, n° de série pour tous (premier
     étage pour un détendeur) ; détendeur seulement : montage `MontageDetendeur` (Étrier / DIN), deuxième étage (marque, modèle, n°),
-    D.S (oui / non / non renseigné), mano (marque), octopus (modèle, vide = sans) et son n°. Ces champs sont vidés pour les
+    D.S (oui / non / non renseigné), mano (marque, modèle et n°), octopus (marque, modèle, n°) ; marque de l'octopus, modèle et n° du
+    manomètre depuis la migration 033 (le n° du manomètre ajouté par la fiche EPI y est repris ; la fiche EPI le lit d'abord là). Ces champs sont vidés pour les
     autres catégories (`ServiceInventaire.Fiche`). Composant noté « NON », « sans », « aucun », « - »… (registres : « Mano : NON ») = absent,
     enregistré vide (`ServiceInventaire.SignifieAbsent`, aussi dans `ComposantsDe` ; migration 027 a vidé les anciennes valeurs). « Date de la dernière révision » saisie dans la fiche (hors blocs) : pas dans le
     futur, pas avant une révision déjà enregistrée ; elle devient un contrôle « révision conforme » (note « Saisie dans l'inventaire »)
@@ -709,11 +710,12 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   030 : inspecteur TIV indépendant du rôle d'enseignant (règle 44) : la case TIV des enseignants déjà inactifs est retirée.
   031 : adherent.niveau_obtenu (dernier niveau obtenu, null = non renseigné ; règle 31).
   032 : adherent.autres_brevets (« PA40; RIFAP », null = aucun) ; un niveau_obtenu hors Débutant / Niveau 1 à 4 y est déplacé.
+  033 : equipement.marque_octopus, modele_manometre, numero_manometre (texte, vide par défaut) ; numero_manometre repris de composant.
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/033_xxx.sql`, sans jamais modifier un script déjà livré
+- Nouvelle migration : ajouter `Migrations/034_xxx.sql`, sans jamais modifier un script déjà livré
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.

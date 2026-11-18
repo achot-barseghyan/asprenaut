@@ -147,6 +147,9 @@ public sealed class LigneInventaire
     public string Manometre { get; set; } = "";
     public string Octopus { get; set; } = "";
     public string NumeroOctopus { get; set; } = "";
+    public string MarqueOctopus { get; set; } = "";
+    public string ModeleManometre { get; set; } = "";
+    public string NumeroManometre { get; set; } = "";
 
     /// <summary>Bloc ou détendeur nitrox.</summary>
     public bool Nitrox { get; set; }

@@ -68,7 +68,7 @@ public sealed class EquipementRepositoryMemoire(BaseMemoire db) : IEquipementRep
             .Where(e => recherche is null
                 || e.Code.Contains(recherche, StringComparison.OrdinalIgnoreCase)
                 || e.Libelle.Contains(recherche, StringComparison.OrdinalIgnoreCase)
-                || new[] { e.Taille ?? "", e.Marque, e.Modele, e.NumeroSerie, e.NumeroDeuxiemeEtage, e.NumeroOctopus }
+                || new[] { e.Taille ?? "", e.Marque, e.Modele, e.NumeroSerie, e.NumeroDeuxiemeEtage, e.NumeroOctopus, e.NumeroManometre }
                     .Any(v => v.Contains(recherche, StringComparison.OrdinalIgnoreCase)))
             .Select(e =>
             {
@@ -99,6 +99,9 @@ public sealed class EquipementRepositoryMemoire(BaseMemoire db) : IEquipementRep
                     Manometre = e.Manometre,
                     Octopus = e.Octopus,
                     NumeroOctopus = e.NumeroOctopus,
+                    MarqueOctopus = e.MarqueOctopus,
+                    ModeleManometre = e.ModeleManometre,
+                    NumeroManometre = e.NumeroManometre,
                     DerniereRevision = db.Controles.Where(c => c.EquipementId == e.Id && c.Type == TypeControle.Revision && c.Composant.Length == 0).Select(c => (DateOnly?)c.DateControle).Max(),
                     JamaisUtilise = JamaisUtilise(e.Id),
                 };

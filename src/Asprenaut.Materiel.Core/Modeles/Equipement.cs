@@ -45,6 +45,14 @@ public sealed class Equipement
 
     public string NumeroOctopus { get; set; } = "";
 
+    /// <summary>Marque de l'octopus (migration 033).</summary>
+    public string MarqueOctopus { get; set; } = "";
+
+    /// <summary>Modèle et n° de série du manomètre (migration 033) ; sa marque est <see cref="Manometre"/>.</summary>
+    public string ModeleManometre { get; set; } = "";
+
+    public string NumeroManometre { get; set; } = "";
+
     /// <summary>Bloc ou détendeur nitrox : lors d'une sortie nominative, seul un adhérent certifié nitrox peut le prendre.</summary>
     public bool Nitrox { get; set; }
 

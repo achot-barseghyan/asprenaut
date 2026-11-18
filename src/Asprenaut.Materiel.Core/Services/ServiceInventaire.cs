@@ -205,12 +205,12 @@ public sealed partial class ServiceInventaire(
             composants.Add("Deuxième étage");
         }
 
-        if (Renseigne(e.Octopus, e.NumeroOctopus))
+        if (Renseigne(e.MarqueOctopus, e.Octopus, e.NumeroOctopus))
         {
             composants.Add("Octopus");
         }
 
-        if (Renseigne(e.Manometre))
+        if (Renseigne(e.Manometre, e.ModeleManometre, e.NumeroManometre))
         {
             composants.Add("Manomètre");
         }
@@ -249,8 +249,8 @@ public sealed partial class ServiceInventaire(
         [
             new("Premier étage", true, Joindre(e.Modele).Length > 0 ? Joindre(e.Modele) : Joindre(e.Marque)),
             new("Deuxième étage", presents.Contains("Deuxième étage"), Joindre(e.ModeleDeuxiemeEtage).Length > 0 ? Joindre(e.ModeleDeuxiemeEtage) : Joindre(e.MarqueDeuxiemeEtage)),
-            new("Octopus", presents.Contains("Octopus"), Joindre(e.Octopus)),
-            new("Manomètre", presents.Contains("Manomètre"), Joindre(e.Manometre)),
+            new("Octopus", presents.Contains("Octopus"), Joindre(e.Octopus).Length > 0 ? Joindre(e.Octopus) : Joindre(e.MarqueOctopus)),
+            new("Manomètre", presents.Contains("Manomètre"), Joindre(e.Manometre, e.ModeleManometre)),
         ];
     }
 
@@ -371,6 +371,7 @@ public sealed partial class ServiceInventaire(
                 break;
             default:
                 e.Manometre = modele;
+                e.NumeroManometre = numero;
                 break;
         }
 
@@ -463,6 +464,9 @@ public sealed partial class ServiceInventaire(
             Manometre = detendeur ? C(e.Manometre) : "",
             Octopus = detendeur ? C(e.Octopus) : "",
             NumeroOctopus = detendeur ? C(e.NumeroOctopus) : "",
+            MarqueOctopus = detendeur ? C(e.MarqueOctopus) : "",
+            ModeleManometre = detendeur ? C(e.ModeleManometre) : "",
+            NumeroManometre = detendeur ? C(e.NumeroManometre) : "",
             Nitrox = PeutEtreNitrox(categorie) && e.Nitrox,
         };
     }
@@ -480,12 +484,15 @@ public sealed partial class ServiceInventaire(
         cible.Manometre = source.Manometre;
         cible.Octopus = source.Octopus;
         cible.NumeroOctopus = source.NumeroOctopus;
+        cible.MarqueOctopus = source.MarqueOctopus;
+        cible.ModeleManometre = source.ModeleManometre;
+        cible.NumeroManometre = source.NumeroManometre;
         cible.Nitrox = source.Nitrox;
     }
 
     private static string ResumeFiche(Equipement e) => string.Join("|",
         e.Marque, e.Modele, e.NumeroSerie, e.Montage, e.MarqueDeuxiemeEtage, e.ModeleDeuxiemeEtage, e.NumeroDeuxiemeEtage,
-        e.DirectSystem, e.Manometre, e.Octopus, e.NumeroOctopus);
+        e.DirectSystem, e.Manometre, e.Octopus, e.NumeroOctopus, e.MarqueOctopus, e.ModeleManometre, e.NumeroManometre);
 
     /// <summary>
     /// Date de la dernière révision saisie dans la fiche (hors blocs, qui passent par la TIV) : pas dans le futur,
@@ -549,7 +556,7 @@ public sealed partial class ServiceInventaire(
     public string ExporterCsv(IEnumerable<LigneInventaire> lignes) => Csv.Ecrire(
         ["Code", "Équipement", "Catégorie", "Marque", "Modèle", "Taille", "N° série", "État", "Statut", "Sortie en cours",
          "Date de la dernière révision", "Prochaine révision / TIV", "Prochaine requalification",
-         "Étrier / DIN", "Marque deuxième étage", "Deuxième étage", "N° deuxième étage", "D.S", "Mano", "Octopus", "N° octopus", "Identification"],
+         "Étrier / DIN", "Marque deuxième étage", "Deuxième étage", "N° deuxième étage", "D.S", "Mano", "Modèle mano", "N° mano", "Marque octopus", "Octopus", "N° octopus", "Identification"],
         lignes.Select(l => new[]
         {
             l.Code,
@@ -571,6 +578,9 @@ public sealed partial class ServiceInventaire(
             l.NumeroDeuxiemeEtage,
             l.DirectSystem is { } ds ? (ds ? "Oui" : "Non") : "",
             l.Manometre,
+            l.ModeleManometre,
+            l.NumeroManometre,
+            l.MarqueOctopus,
             l.Octopus,
             l.NumeroOctopus,
             Identification(l.Categorie, l.Code, l.Taille),

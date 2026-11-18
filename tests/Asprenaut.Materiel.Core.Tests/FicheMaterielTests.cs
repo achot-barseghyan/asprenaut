@@ -69,6 +69,38 @@ public class FicheMaterielTests
         Assert.False(ServiceInventaire.SignifieAbsent("Nonsuch"));
     }
 
+    // Migration 033 : marque de l'octopus, modèle et n° du manomètre. Gardés pour un détendeur (le manomètre compte comme
+    // présent avec son seul modèle), « NON » = absent, vidés pour une autre catégorie.
+    [Fact]
+    public async Task Marque_octopus_et_modele_et_numero_du_manometre()
+    {
+        var det = Detendeur();
+        det.Manometre = "";
+        det.ModeleManometre = " SPG 300 ";
+        det.NumeroManometre = "M-778";
+        det.MarqueOctopus = "Scubapro";
+        var r = await _ctx.Inventaire.CreerAsync(det);
+
+        Assert.True(r.Reussi, r.Message);
+        var e = _ctx.Db.Equipements.Single(x => x.Id == r.Id);
+        Assert.Equal(("Scubapro", "SPG 300", "M-778"), (e.MarqueOctopus, e.ModeleManometre, e.NumeroManometre));
+        Assert.Contains("Manomètre", ServiceInventaire.ComposantsDe(e, "Détendeurs"));
+        Assert.Equal("SPG 300", ServiceInventaire.Composition(e).Single(c => c.Role == "Manomètre").Modele);
+
+        var sans = Detendeur("A06");
+        sans.MarqueOctopus = "non";
+        sans.NumeroManometre = "-";
+        var r2 = await _ctx.Inventaire.CreerAsync(sans);
+        var e2 = _ctx.Db.Equipements.Single(x => x.Id == r2.Id);
+        Assert.Equal(("", ""), (e2.MarqueOctopus, e2.NumeroManometre));
+
+        var gilet = new Equipement { Code = "S01", Libelle = "Gilet", CategorieId = Categorie("Gilets"), MarqueOctopus = "X", ModeleManometre = "Y", NumeroManometre = "Z" };
+        var r3 = await _ctx.Inventaire.CreerAsync(gilet);
+        Assert.True(r3.Reussi, r3.Message);
+        var e3 = _ctx.Db.Equipements.Single(x => x.Id == r3.Id);
+        Assert.Equal(("", "", ""), (e3.MarqueOctopus, e3.ModeleManometre, e3.NumeroManometre));
+    }
+
     [Fact]
     public async Task Une_revision_conforme_de_detendeur_vaut_deux_ans_et_un_gilet_n_a_pas_de_date_obligatoire()
     {

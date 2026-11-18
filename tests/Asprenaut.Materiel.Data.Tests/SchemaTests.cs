@@ -37,9 +37,35 @@ public class SchemaTests : IAsyncLifetime
     }
 
     [Fact]
-    public void Scripts_001_a_032_sont_embarques()
+    public void Scripts_001_a_033_sont_embarques()
     {
-        Assert.Equal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32], GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
+        Assert.Equal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33], GestionnaireMigrations.ScriptsDisponibles().Select(s => s.Version));
+    }
+
+    // 033 : marque de l'octopus, modèle et n° du manomètre ; le n° d'un manomètre ajouté depuis la fiche EPI est repris.
+    [Fact]
+    public async Task La_migration_033_complete_la_fiche_du_detendeur()
+    {
+        var fabrique = new Connexion.FabriqueConnexion(Path.Combine(_base.Dossier, "avant-033.db"));
+        var migrations = new GestionnaireMigrations(fabrique);
+        Assert.Equal(32, await migrations.AppliquerAsync(jusqua: 32));
+        await using (var cx = await fabrique.OuvrirAsync())
+        {
+            await cx.ExecuteAsync("""
+                INSERT INTO equipement (code, libelle, categorie_id, cree_le, manometre) VALUES
+                    ('A01', 'Détendeur adulte A01', 1, '2026-01-01T00:00:00.000Z', 'Scubapro'),
+                    ('A02', 'Détendeur adulte A02', 1, '2026-01-01T00:00:00.000Z', '');
+                INSERT INTO composant (equipement_id, role, numero_serie) SELECT id, 'Manomètre', 'M-778' FROM equipement WHERE code = 'A01';
+                """);
+        }
+
+        await migrations.AppliquerAsync();
+        await using (var cx = await fabrique.OuvrirAsync())
+        {
+            var lignes = (await cx.QueryAsync<(string, string, string, string)>(
+                "SELECT code, marque_octopus, modele_manometre, numero_manometre FROM equipement ORDER BY code;")).ToList();
+            Assert.Equal([("A01", "", "", "M-778"), ("A02", "", "", "")], lignes);
+        }
     }
 
     // 029 : un adhérent relié à sa fiche d'enseignant ; les adhérents existants restent sans lien (rapprochés par l'application).

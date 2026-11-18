@@ -40,10 +40,10 @@ public class ExportTests
         var lignes = csv.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal("Code;Équipement;Catégorie;Marque;Modèle;Taille;N° série;État;Statut;Sortie en cours;Date de la dernière révision;"
             + "Prochaine révision / TIV;Prochaine requalification;Étrier / DIN;Marque deuxième étage;Deuxième étage;N° deuxième étage;"
-            + "D.S;Mano;Octopus;N° octopus;Identification", lignes[0]);
-        Assert.Equal("S01;Gilet;Gilets;Aqualung;Wave;XL;BB388677;En service;Dehors;Fosse;;;;;;;;;;;;(Stab) S01 taille XL Asprenaut Chalon 14 71-0025", lignes[1]);
+            + "D.S;Mano;Modèle mano;N° mano;Marque octopus;Octopus;N° octopus;Identification", lignes[0]);
+        Assert.Equal("S01;Gilet;Gilets;Aqualung;Wave;XL;BB388677;En service;Dehors;Fosse;;;;;;;;;;;;;;;(Stab) S01 taille XL Asprenaut Chalon 14 71-0025", lignes[1]);
         Assert.Equal("A05;Détendeur;Détendeurs;Scubapro;MK2;;0614500681;En service;Disponible;;17/03/2021;17/03/2023;;Étrier;Scub;R 295;0614500681;"
-            + "Oui;Scubapro;R 095;1641000963;(Detendeur) A05 Asprenaut Chalon 14 71-0025", lignes[2]);
+            + "Oui;Scubapro;;;;R 095;1641000963;(Detendeur) A05 Asprenaut Chalon 14 71-0025", lignes[2]);
     }
 
     [Theory]

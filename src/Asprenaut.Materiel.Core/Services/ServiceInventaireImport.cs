@@ -16,7 +16,8 @@ public sealed partial class ServiceInventaire
     private enum ChampImport
     {
         Code, Nom, Categorie, Marque, Modele, Taille, NumeroSerie, Etat, DerniereRevision, ProchaineRevision, Requalification,
-        Montage, MarqueDeuxiemeEtage, ModeleDeuxiemeEtage, NumeroDeuxiemeEtage, DirectSystem, Manometre, Octopus, NumeroOctopus,
+        Montage, MarqueDeuxiemeEtage, ModeleDeuxiemeEtage, NumeroDeuxiemeEtage, DirectSystem, Manometre, ModeleManometre, NumeroManometre,
+        MarqueOctopus, Octopus, NumeroOctopus,
         Nitrox, Notes, Utilisations,
     }
 
@@ -39,6 +40,9 @@ public sealed partial class ServiceInventaire
         ["n deuxieme etage", "numero deuxieme etage", "n 2e etage", "n serie deuxieme etage"],
         ["ds", "direct system"],
         ["mano", "manometre", "marque manometre"],
+        ["modele mano", "modele manometre"],
+        ["n mano", "numero mano", "n manometre", "numero manometre", "n serie manometre"],
+        ["marque octopus"],
         ["octopus", "modele octopus"],
         ["n octopus", "numero octopus", "n serie octopus"],
         ["nitrox"],
@@ -73,6 +77,9 @@ public sealed partial class ServiceInventaire
         new("N° deuxième étage", "Numéro de série du deuxième étage (détendeurs)", 18, false),
         new("D.S", "Direct system (détendeurs)", 8, false, ["Oui", "Non"]),
         new("Mano", "Marque du manomètre (détendeurs) ; vide = sans manomètre", 14, false),
+        new("Modèle mano", "Modèle du manomètre (détendeurs)", 14, false),
+        new("N° mano", "Numéro de série du manomètre", 14, false),
+        new("Marque octopus", "Marque de l'octopus (détendeurs)", 14, false),
         new("Octopus", "Modèle de l'octopus (détendeurs) ; vide = sans octopus", 16, false),
         new("N° octopus", "Numéro de série de l'octopus", 16, false),
         new("Nitrox", "Blocs et détendeurs seulement", 10, false, ["Oui", "Non"]),
@@ -279,6 +286,9 @@ public sealed partial class ServiceInventaire
             Texte(ChampImport.ModeleDeuxiemeEtage, t => e.ModeleDeuxiemeEtage = t);
             Texte(ChampImport.NumeroDeuxiemeEtage, t => e.NumeroDeuxiemeEtage = t);
             Texte(ChampImport.Manometre, t => e.Manometre = t);
+            Texte(ChampImport.ModeleManometre, t => e.ModeleManometre = t);
+            Texte(ChampImport.NumeroManometre, t => e.NumeroManometre = t);
+            Texte(ChampImport.MarqueOctopus, t => e.MarqueOctopus = t);
             Texte(ChampImport.Octopus, t => e.Octopus = t);
             Texte(ChampImport.NumeroOctopus, t => e.NumeroOctopus = t);
             Texte(ChampImport.Notes, t => e.Notes = t);
@@ -468,6 +478,9 @@ public sealed partial class ServiceInventaire
         Manometre = e.Manometre,
         Octopus = e.Octopus,
         NumeroOctopus = e.NumeroOctopus,
+        MarqueOctopus = e.MarqueOctopus,
+        ModeleManometre = e.ModeleManometre,
+        NumeroManometre = e.NumeroManometre,
         Nitrox = e.Nitrox,
     };
 }

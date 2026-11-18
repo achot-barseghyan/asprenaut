@@ -137,9 +137,12 @@ public static class FormulaireEquipement
         private readonly ChampSaisie _marqueDeuxieme = new() { TexteIndicatif = "Ex. Scubapro" };
         private readonly ChampSaisie _modeleDeuxieme = new() { TexteIndicatif = "Ex. R 295" };
         private readonly ChampSaisie _numeroDeuxieme = new() { TexteIndicatif = "N° de série" };
+        private readonly ChampSaisie _marqueOctopus = new() { TexteIndicatif = "Ex. Scubapro" };
         private readonly ChampSaisie _modeleOctopus = new() { TexteIndicatif = "Ex. R 195" };
         private readonly ChampSaisie _numeroOctopus = new() { TexteIndicatif = "N° de série" };
         private readonly ChampSaisie _marqueManometre = new() { TexteIndicatif = "Ex. Aqualung" };
+        private readonly ChampSaisie _modeleManometre = new() { TexteIndicatif = "Ex. SPG 300" };
+        private readonly ChampSaisie _numeroManometre = new() { TexteIndicatif = "N° de série" };
         private readonly ElementComposition _octopus = new("Octopus", "source de secours", facultatif: true);
         private readonly ElementComposition _manometre = new("Manomètre", "ou console", facultatif: true);
         private readonly Bascule _raccord = new("—", "DIN", "Étrier") { Compact = true, AccessibleName = "Raccord" };
@@ -180,14 +183,14 @@ public static class FormulaireEquipement
             f.Code.Champ.ForeColor = Theme.AccentClair;
             f.Code.Champ.CharacterCasing = CharacterCasing.Upper;
             f.Code.Champ.AccessibleName = "Code de la médaille";
-            f._numeroPremier.Champ.Font = f._numeroDeuxieme.Champ.Font = f._numeroOctopus.Champ.Font = f.NumeroSerie.Champ.Font = Theme.PoliceCode(10.5f);
+            f._numeroPremier.Champ.Font = f._numeroDeuxieme.Champ.Font = f._numeroOctopus.Champ.Font = f._numeroManometre.Champ.Font = f.NumeroSerie.Champ.Font = Theme.PoliceCode(10.5f);
             foreach (var (champ, nom) in new[]
             {
                 (f.Nom, "Nom affiché"), (f.Marque, "Marque"), (f.Modele, "Modèle"), (f.Taille, "Taille"), (f.NumeroSerie, "Numéro de série"),
                 (f.Notes, "Notes"), (f._marquePremier, "Premier étage · marque"), (f._modelePremier, "Premier étage · modèle"),
                 (f._numeroPremier, "Premier étage · numéro de série"), (f._marqueDeuxieme, "Deuxième étage · marque"),
                 (f._modeleDeuxieme, "Deuxième étage · modèle"), (f._numeroDeuxieme, "Deuxième étage · numéro de série"),
-                (f._modeleOctopus, "Octopus · modèle"), (f._numeroOctopus, "Octopus · numéro de série"), (f._marqueManometre, "Manomètre · marque"),
+                (f._marqueOctopus, "Octopus · marque"), (f._modeleOctopus, "Octopus · modèle"), (f._numeroOctopus, "Octopus · numéro de série"), (f._marqueManometre, "Manomètre · marque"), (f._modeleManometre, "Manomètre · modèle"), (f._numeroManometre, "Manomètre · numéro de série"),
             })
             {
                 champ.Champ.AccessibleName = nom;
@@ -308,7 +311,7 @@ public static class FormulaireEquipement
         {
             Code.Valeur = "";
             Nom.Valeur = "";
-            foreach (var champ in new[] { NumeroSerie, _numeroPremier, _numeroDeuxieme, _numeroOctopus, Notes })
+            foreach (var champ in new[] { NumeroSerie, _numeroPremier, _numeroDeuxieme, _numeroOctopus, _numeroManometre, Notes })
             {
                 champ.Valeur = "";
             }
@@ -388,8 +391,8 @@ public static class FormulaireEquipement
         /// <summary>Octopus et manomètre absents : leurs cases sont grisées (et enregistrées vides).</summary>
         private void AdapterComposants()
         {
-            _modeleOctopus.Enabled = _numeroOctopus.Enabled = _octopus.Present;
-            _marqueManometre.Enabled = _manometre.Present;
+            _marqueOctopus.Enabled = _modeleOctopus.Enabled = _numeroOctopus.Enabled = _octopus.Present;
+            _marqueManometre.Enabled = _modeleManometre.Enabled = _numeroManometre.Enabled = _manometre.Present;
         }
 
         /// <summary>« Prochaine révision » = dernière révision + délai de la catégorie (même calcul qu'à l'enregistrement).</summary>
@@ -484,10 +487,13 @@ public static class FormulaireEquipement
             _modeleDeuxieme.Valeur = e.ModeleDeuxiemeEtage;
             _numeroDeuxieme.Valeur = e.NumeroDeuxiemeEtage;
             _marqueManometre.Valeur = e.Manometre;
+            _marqueOctopus.Valeur = e.MarqueOctopus;
             _modeleOctopus.Valeur = e.Octopus;
+            _modeleManometre.Valeur = e.ModeleManometre;
+            _numeroManometre.Valeur = e.NumeroManometre;
             _numeroOctopus.Valeur = e.NumeroOctopus;
-            _octopus.Presence!.Checked = e.Octopus.Trim().Length > 0 || e.NumeroOctopus.Trim().Length > 0;
-            _manometre.Presence!.Checked = e.Manometre.Trim().Length > 0;
+            _octopus.Presence!.Checked = new[] { e.MarqueOctopus, e.Octopus, e.NumeroOctopus }.Any(v => v.Trim().Length > 0);
+            _manometre.Presence!.Checked = new[] { e.Manometre, e.ModeleManometre, e.NumeroManometre }.Any(v => v.Trim().Length > 0);
             Nitrox.Checked = e.Nitrox;
             AdapterComposants();
             Actualiser();
@@ -515,6 +521,9 @@ public static class FormulaireEquipement
             e.Manometre = _manometre.Present ? _marqueManometre.Valeur : "";
             e.Octopus = _octopus.Present ? _modeleOctopus.Valeur : "";
             e.NumeroOctopus = _octopus.Present ? _numeroOctopus.Valeur : "";
+            e.MarqueOctopus = _octopus.Present ? _marqueOctopus.Valeur : "";
+            e.ModeleManometre = _manometre.Present ? _modeleManometre.Valeur : "";
+            e.NumeroManometre = _manometre.Present ? _numeroManometre.Valeur : "";
             e.Nitrox = _nitroxPossible && Nitrox.Checked;
             return e;
         }
@@ -553,8 +562,8 @@ public static class FormulaireEquipement
             var reglages = Ui.Rangee(true, libelleRaccord, _raccord, libelleDs, _directSystem);
             grille.SousLigne(reglages);
             grille.Element(new ElementComposition("Deuxième étage", "obligatoire", facultatif: false), _marqueDeuxieme, _modeleDeuxieme, _numeroDeuxieme);
-            grille.Element(_octopus, null, _modeleOctopus, _numeroOctopus);
-            grille.Element(_manometre, _marqueManometre, null, null);
+            grille.Element(_octopus, _marqueOctopus, _modeleOctopus, _numeroOctopus);
+            grille.Element(_manometre, _marqueManometre, _modeleManometre, _numeroManometre);
             _composition.Ajouter(grille);
 
             // 2 Fiche (autres catégories).

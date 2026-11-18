@@ -531,8 +531,9 @@ public sealed class ServiceHistorique(
             return role switch
             {
                 "Deuxième étage" => new ComposantSuivi(role, ModeleDe(e.MarqueDeuxiemeEtage, e.ModeleDeuxiemeEtage), e.NumeroDeuxiemeEtage, tuiles),
-                "Octopus" => new ComposantSuivi(role, ModeleDe(e.Octopus), e.NumeroOctopus, tuiles),
-                "Manomètre" => new ComposantSuivi(role, ModeleDe(e.Manometre), detail?.NumeroSerie ?? "", tuiles),
+                "Octopus" => new ComposantSuivi(role, ModeleDe(e.MarqueOctopus, e.Octopus), e.NumeroOctopus, tuiles),
+                "Manomètre" => new ComposantSuivi(role, ModeleDe(e.Manometre, e.ModeleManometre),
+                    e.NumeroManometre.Length > 0 ? e.NumeroManometre : detail?.NumeroSerie ?? "", tuiles),
                 _ => new ComposantSuivi(role, ModeleDe(e.Marque, e.Modele), e.NumeroSerie, tuiles),
             };
         }).ToList();

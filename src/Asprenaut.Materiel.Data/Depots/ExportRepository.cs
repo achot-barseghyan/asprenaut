@@ -20,14 +20,15 @@ public sealed class ExportRepository(FabriqueConnexion fabrique) : IExportReposi
             SELECT e.code, e.libelle, c.nom, e.marque, e.modele, e.taille, e.numero_serie, e.etat,
                    (SELECT MAX(ct.date_controle) FROM controle ct WHERE ct.equipement_id = e.id AND ct.type = 'Revision'),
                    e.date_prochaine_revision, e.date_requalification, e.montage, e.marque_deuxieme_etage, e.modele_deuxieme_etage,
-                   e.numero_deuxieme_etage, e.direct_system, e.manometre, e.octopus, e.numero_octopus, e.nitrox, e.notes, e.cree_le
+                   e.numero_deuxieme_etage, e.direct_system, e.manometre, e.modele_manometre, e.numero_manometre, e.marque_octopus, e.octopus, e.numero_octopus,
+                   e.nitrox, e.notes, e.cree_le
             FROM equipement e JOIN categorie c ON c.id = e.categorie_id ORDER BY e.code
             """,
             [new("Code"), new("Équipement"), new("Catégorie"), new("Marque"), new("Modèle"), new("Taille"), new("N° série"),
              new("État", GenreColonne.EtatEquipement), new("Dernière révision", GenreColonne.Date),
              new("Prochaine révision / TIV", GenreColonne.Date), new("Prochaine requalification", GenreColonne.Date),
              new("Étrier / DIN", GenreColonne.Montage), new("Marque deuxième étage"), new("Deuxième étage"), new("N° deuxième étage"),
-             new("D.S", GenreColonne.OuiNon), new("Mano"), new("Octopus"), new("N° octopus"), new("Nitrox", GenreColonne.OuiNon), new("Notes"),
+             new("D.S", GenreColonne.OuiNon), new("Mano"), new("Modèle mano"), new("N° mano"), new("Marque octopus"), new("Octopus"), new("N° octopus"), new("Nitrox", GenreColonne.OuiNon), new("Notes"),
              new("Ajouté le", GenreColonne.Horodatage)]),
         ("enseignants.csv",
             "SELECT CASE m.genre WHEN 'Classe' THEN 'Classe' ELSE 'Enseignant' END, m.prenom, m.nom, m.abrege, m.niveau, m.licence, m.telephone, m.inspecteur_tiv, m.actif FROM moniteur m ORDER BY m.genre = 'Classe', m.nom, m.prenom",
