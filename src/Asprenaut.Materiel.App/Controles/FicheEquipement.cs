@@ -118,6 +118,9 @@ public sealed class ElementComposition : ControleDessine
         _nom = nom;
         _precision = precision;
         TabStop = false;
+        // Transparent : l'interrupteur efface son fond avec celui de la section, pas avec le gris clair par défaut de Windows.
+        SetStyle(ControlStyles.SupportsTransparentBackColor, true);
+        BackColor = Color.Transparent;
         Size = new Size(190, Theme.HauteurChamp);
         if (facultatif)
         {
