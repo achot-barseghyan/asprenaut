@@ -36,6 +36,9 @@ public sealed class EcranDepart : EcranScanBase
     private readonly Bascule _vue = new("Par équipement", "Par adhérent") { Margin = new Padding(0, 0, 0, 10) };
     private readonly ListeMateriel _listePersonnes = new(StyleListe.Personne, "Aucun équipement attribué pour l'instant.") { Visible = false };
     private readonly TableLayoutPanel _carteListe;
+
+    /// <summary>Scan | liste : la liste prend la place quand la sortie n'attend pas de nom d'adhérent.</summary>
+    private readonly TableLayoutPanel _colonnes;
     private bool _nominatif;
     private LigneSortie? _enAttente;
 
@@ -98,7 +101,8 @@ public sealed class EcranDepart : EcranScanBase
         carteListe.Controls.Add(_carteListe);
 
         // Rangée de droite à gauche : « Modifier la sortie » tout à droite, « Supprimer » à sa gauche (sortie vide seulement).
-        Composer(Ui.Colonnes((gauche, SizeType.Percent, 58), (carteListe, SizeType.Percent, 42)), _modifier, _supprimer);
+        _colonnes = Ui.Colonnes((gauche, SizeType.Percent, 58), (carteListe, SizeType.Percent, 42));
+        Composer(_colonnes, _modifier, _supprimer);
     }
 
     public override string Titre => "Départ du matériel";
@@ -144,6 +148,15 @@ public sealed class EcranDepart : EcranScanBase
 
         _panneau.Visible = _enAttente is not null;
         ZoneScan.Visible = _enAttente is null;
+        // Sortie nominative : le panneau « À qui est… ? » a besoin de place ; sinon la zone de scan n'est qu'un champ
+        // (le pistolet tape tout seul) et la liste du matériel prend l'essentiel de la largeur.
+        var partScan = _nominatif ? 58f : 36f;
+        if (Math.Abs(_colonnes.ColumnStyles[0].Width - partScan) > 0.1f)
+        {
+            _colonnes.ColumnStyles[0].Width = partScan;
+            _colonnes.ColumnStyles[1].Width = 100f - partScan;
+        }
+
         var vueVisible = _nominatif;
         if (_vue.Visible != vueVisible)
         {
