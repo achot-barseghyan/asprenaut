@@ -245,7 +245,7 @@ public sealed class SectionFormulaire : Carte
         gauche.Margin = Padding.Empty;
         _droite.Anchor = AnchorStyles.Right;
         _droite.Margin = Padding.Empty;
-        var entete = Ui.Colonnes((gauche, SizeType.Percent, 100), (_droite, SizeType.AutoSize, 0));
+        var entete = _entete = Ui.Colonnes((gauche, SizeType.Percent, 100), (_droite, SizeType.AutoSize, 0));
         entete.AutoSize = true;
         entete.Margin = new Padding(0, 0, 0, 14);
         Ajouter(entete);
@@ -254,6 +254,29 @@ public sealed class SectionFormulaire : Carte
     }
 
     private readonly LibelleObligatoire _titre;
+    private readonly TableLayoutPanel _entete;
+    private Pastille? _pastille;
+
+    /// <summary>Pastille à droite du titre (« Toutes les sorties ») à la place du texte discret ; créée au premier appel.</summary>
+    public void PastilleDroite(string texte, Color couleur)
+    {
+        var fond = Theme.Sur(BackColor, couleur, 0.14f);
+        if (_pastille is null)
+        {
+            // Tailles calculées au dessin (E) : rien à mettre à l'échelle.
+            _pastille = new Pastille(texte, fond, couleur, police: Theme.PoliceGrasse(8.25f), hauteur: 26)
+            {
+                Anchor = AnchorStyles.Right,
+                Margin = Padding.Empty,
+                TabStop = false,
+            };
+            _entete.Controls.Remove(_droite);
+            _entete.Controls.Add(_pastille, 1, 0);
+            return;
+        }
+
+        _pastille.Definir(texte, fond, couleur);
+    }
 
     /// <summary>Point turquoise après le titre : un choix de la section diffère de celui enregistré.</summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]

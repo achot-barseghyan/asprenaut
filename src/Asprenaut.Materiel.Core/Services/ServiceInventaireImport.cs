@@ -482,5 +482,6 @@ public sealed partial class ServiceInventaire
         ModeleManometre = e.ModeleManometre,
         NumeroManometre = e.NumeroManometre,
         Nitrox = e.Nitrox,
+        TypesSortieInterdits = e.TypesSortieInterdits,
     };
 }

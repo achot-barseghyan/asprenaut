@@ -175,7 +175,8 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
                 marque_deuxieme_etage = @MarqueDeuxiemeEtage, modele_deuxieme_etage = @ModeleDeuxiemeEtage,
                 numero_deuxieme_etage = @NumeroDeuxiemeEtage, direct_system = @DirectSystem, manometre = @Manometre,
                 octopus = @Octopus, numero_octopus = @NumeroOctopus, nitrox = @Nitrox,
-                marque_octopus = @MarqueOctopus, modele_manometre = @ModeleManometre, numero_manometre = @NumeroManometre
+                marque_octopus = @MarqueOctopus, modele_manometre = @ModeleManometre, numero_manometre = @NumeroManometre,
+                types_sortie_interdits = @TypesSortieInterdits
             WHERE id = @Id;
             """;
         await using var cx = await fabrique.OuvrirAsync(ct);
@@ -291,14 +292,15 @@ public sealed class EquipementRepository(FabriqueConnexion fabrique) : IEquipeme
         e.MarqueOctopus,
         e.ModeleManometre,
         e.NumeroManometre,
+        e.TypesSortieInterdits,
     };
 
     /// <summary>Colonnes de la fiche matériel (migration 005), dans l'ordre des paramètres d'écriture.</summary>
     private const string ColonnesFiche =
-        "marque, modele, numero_serie, montage, marque_deuxieme_etage, modele_deuxieme_etage, numero_deuxieme_etage, direct_system, manometre, octopus, numero_octopus, nitrox, marque_octopus, modele_manometre, numero_manometre";
+        "marque, modele, numero_serie, montage, marque_deuxieme_etage, modele_deuxieme_etage, numero_deuxieme_etage, direct_system, manometre, octopus, numero_octopus, nitrox, marque_octopus, modele_manometre, numero_manometre, types_sortie_interdits";
 
     private const string ValeursFiche =
-        "@Marque, @Modele, @NumeroSerie, @Montage, @MarqueDeuxiemeEtage, @ModeleDeuxiemeEtage, @NumeroDeuxiemeEtage, @DirectSystem, @Manometre, @Octopus, @NumeroOctopus, @Nitrox, @MarqueOctopus, @ModeleManometre, @NumeroManometre";
+        "@Marque, @Modele, @NumeroSerie, @Montage, @MarqueDeuxiemeEtage, @ModeleDeuxiemeEtage, @NumeroDeuxiemeEtage, @DirectSystem, @Manometre, @Octopus, @NumeroOctopus, @Nitrox, @MarqueOctopus, @ModeleManometre, @NumeroManometre, @TypesSortieInterdits";
 }
 
 public sealed class MoniteurRepository(FabriqueConnexion fabrique) : IMoniteurRepository

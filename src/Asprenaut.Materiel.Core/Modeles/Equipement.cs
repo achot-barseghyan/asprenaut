@@ -56,6 +56,31 @@ public sealed class Equipement
     /// <summary>Bloc ou détendeur nitrox : lors d'une sortie nominative, seul un adhérent certifié nitrox peut le prendre.</summary>
     public bool Nitrox { get; set; }
 
+    /// <summary>
+    /// Types de sortie interdits (migration 034) : ids de type_sortie séparés par « ; », vide = toutes les sorties.
+    /// Lire et écrire par <see cref="TypesInterdits"/> / <see cref="EcrireTypesInterdits"/>.
+    /// </summary>
+    public string TypesSortieInterdits { get; set; } = "";
+
+    /// <summary>Types de sortie interdits (ids, sans doublon, triés).</summary>
+    public IReadOnlyList<long> TypesInterdits => LireTypesInterdits(TypesSortieInterdits);
+
+    /// <summary>Faux si la fiche interdit ce type de sortie ; une sortie sans type (avant la migration 004) est autorisée.</summary>
+    public bool AutoriseEn(long? typeSortieId) => AutoriseEn(TypesSortieInterdits, typeSortieId);
+
+    public static bool AutoriseEn(string? typesInterdits, long? typeSortieId) =>
+        typeSortieId is not { } id || !LireTypesInterdits(typesInterdits).Contains(id);
+
+    /// <summary>« 3;5 » → [3, 5] ; morceaux illisibles ignorés.</summary>
+    public static IReadOnlyList<long> LireTypesInterdits(string? texte) =>
+        (texte ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(m => long.TryParse(m, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var id) ? id : 0)
+            .Where(id => id > 0).Distinct().Order().ToList();
+
+    /// <summary>[5, 3, 3] → « 3;5 ».</summary>
+    public static string EcrireTypesInterdits(IEnumerable<long> ids) =>
+        string.Join(";", ids.Where(id => id > 0).Distinct().Order().Select(id => id.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+
     /// <summary>Échéance la plus proche : révision/TIV ou requalification.</summary>
     public DateOnly? ProchaineEcheance =>
         DateProchaineRevision is { } r && DateRequalification is { } q ? (r < q ? r : q) : DateProchaineRevision ?? DateRequalification;

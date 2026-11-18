@@ -16,7 +16,8 @@ public sealed class ServiceScan(
     IHorloge horloge,
     Reglages reglages,
     ServiceCompteur? compteur = null,
-    ServiceGestion? gestion = null)
+    ServiceGestion? gestion = null,
+    ITypeSortieRepository? typesSortie = null)
 {
     /// <summary>Scan d'un équipement qui part avec la sortie.</summary>
     public async Task<ResultatScan> ScannerDepartAsync(long sortieId, string codeBrut, CancellationToken ct = default)
@@ -77,6 +78,13 @@ public sealed class ServiceScan(
         if (equipement.Etat == EtatEquipement.Reforme)
         {
             return Avec(ResultatScan.Erreur($"{equipement.Designation} est réformé. Il ne peut pas partir.", equipement));
+        }
+
+        // Règle : la fiche de l'équipement interdit ce type de sortie (« Sorties autorisées ») → il ne part pas.
+        if (!equipement.AutoriseEn(sortie.TypeId))
+        {
+            var nomType = typesSortie is not null && await typesSortie.ObtenirAsync(sortie.TypeId!.Value, ct) is { } type ? $"en « {type.Nom} »" : "dans ce type de sortie";
+            return Avec(ResultatScan.Erreur($"{equipement.Designation} ne part pas {nomType} : sortie non autorisée sur sa fiche.", equipement));
         }
 
         // Règle : révision dépassée → refusée si le club l'a décidé dans les réglages (sinon, part avec un avertissement, plus bas).

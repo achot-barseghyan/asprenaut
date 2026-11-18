@@ -84,7 +84,7 @@ public static class FormulaireEquipement
     /// <summary>Ouvre la fiche d'un équipement existant ; vrai s'il a été modifié.</summary>
     public static async Task<bool> ModifierAsync(IWin32Window? proprietaire, ServiceInventaire inventaire, Equipement equipement, DateOnly? derniereRevision)
     {
-        var fiche = await Fiche.CreerAsync(inventaire, equipement.CategorieId, proposerCode: false, modification: true);
+        var fiche = await Fiche.CreerAsync(inventaire, equipement.CategorieId, proposerCode: false, modification: true, equipement);
         fiche.Remplir(equipement, derniereRevision);
 
         using var fenetre = new FenetreFormulaire($"Modifier {equipement.Code}", "Enregistrer", async () =>
@@ -157,6 +157,11 @@ public static class FormulaireEquipement
         private readonly Label _aide = Ui.Libelle("", Theme.Police(9f), Theme.TexteSecondaire);
         private readonly Label _libelleRevision = FenetreFormulaire.LibelleChamp("Prochaine révision");
 
+        // --- Sorties autorisées ---
+        private readonly ChoixSortiesAutorisees _sortiesAutorisees = new();
+        private readonly Label _aucuneSortie = Ui.Libelle("Aucune sortie autorisée : cet équipement ne pourra pas sortir.", Theme.PoliceGrasse(9.75f), Theme.Avertissement);
+        private SectionFormulaire? _sectionSorties;
+
         // --- Mise en page ---
         private readonly ApercuEquipement _apercu = new();
         private readonly RangeeChamps _identite = new();
@@ -171,7 +176,7 @@ public static class FormulaireEquipement
 
         private bool EstDetendeur => ServiceInventaire.EstDetendeur(NomCategorie);
 
-        public static async Task<Fiche> CreerAsync(ServiceInventaire inventaire, long? categorieId, bool proposerCode, bool modification)
+        public static async Task<Fiche> CreerAsync(ServiceInventaire inventaire, long? categorieId, bool proposerCode, bool modification, Equipement? equipement = null)
         {
             var f = new Fiche { _inventaire = inventaire, _proposerCode = proposerCode, _modification = modification };
             foreach (var etat in Enum.GetValues<EtatEquipement>())
@@ -244,6 +249,10 @@ public static class FormulaireEquipement
                     Erreurs.Signaler(f.Categorie.FindForm(), ex);
                 }
             };
+            // Sorties autorisées : tous les types proposés (et un type masqué que la fiche interdit déjà).
+            f._sortiesAutorisees.Definir(await inventaire.TypesPourAutorisationAsync(equipement), equipement?.TypesInterdits ?? []);
+            f._sortiesAutorisees.Changement += (_, _) => f.Actualiser();
+
             await f.Categorie.ChargerAsync(inventaire, categorieId);
             return f;
         }
@@ -455,6 +464,10 @@ public static class FormulaireEquipement
                 points.Add((DerniereRevision.Date is { } d ? $"Dernière révision {d:dd/MM/yyyy}" : "Révision non renseignée", DerniereRevision.Date is not null));
             }
 
+            var autorisation = ServiceInventaire.ResumerAutorisation(_sortiesAutorisees.Types, _sortiesAutorisees.Interdits);
+            _sectionSorties?.PastilleDroite(autorisation.Texte, autorisation.Restreint ? Theme.Avertissement : Theme.Retour);
+            _aucuneSortie.Visible = autorisation.Aucune;
+
             _apercu.Afficher(new ApercuEquipement.Donnees(
                 Categorie.CategorieChoisie,
                 code,
@@ -462,7 +475,8 @@ public static class FormulaireEquipement
                 pastilles,
                 points,
                 Revision.Date is null ? null : bloc ? "Prochaine TIV" : "Prochaine révision",
-                Revision.Date?.ToString("dd/MM/yyyy", Libelles.Culture)));
+                Revision.Date?.ToString("dd/MM/yyyy", Libelles.Culture),
+                autorisation.Restreint ? autorisation.Texte : null));
         }
 
         public void Remplir(Equipement e, DateOnly? derniereRevision)
@@ -525,6 +539,7 @@ public static class FormulaireEquipement
             e.ModeleManometre = _manometre.Present ? _modeleManometre.Valeur : "";
             e.NumeroManometre = _manometre.Present ? _numeroManometre.Valeur : "";
             e.Nitrox = _nitroxPossible && Nitrox.Checked;
+            e.TypesSortieInterdits = Equipement.EcrireTypesInterdits(_sortiesAutorisees.Interdits);
             return e;
         }
 
@@ -589,7 +604,20 @@ public static class FormulaireEquipement
             revision.Ajouter(_aide);
             revision.Champ("Notes · facultatif", Notes);
 
-            var gauche = FormulaireSortie.Pile(libelleCategorie, Categorie, identification, _composition, _sectionFiche, revision);
+            // 4 Sorties autorisées : un bouton par type de sortie (tous autorisés par défaut).
+            var sections = new List<Control> { libelleCategorie, Categorie, identification, _composition, _sectionFiche, revision };
+            if (_sortiesAutorisees.Types.Count > 0)
+            {
+                _sectionSorties = new SectionFormulaire(4, "Sorties autorisées");
+                _sortiesAutorisees.Margin = new Padding(0, 0, 0, 10);
+                _sectionSorties.Ajouter(_sortiesAutorisees);
+                _aucuneSortie.Margin = new Padding(0, 0, 0, 12);
+                _aucuneSortie.Visible = false;
+                _sectionSorties.Ajouter(_aucuneSortie);
+                sections.Add(_sectionSorties);
+            }
+
+            var gauche = FormulaireSortie.Pile([.. sections]);
             fenetre.Ajouter(Corps(gauche, _apercu));
             Adapter();
         }

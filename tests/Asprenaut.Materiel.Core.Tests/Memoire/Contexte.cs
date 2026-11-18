@@ -45,15 +45,15 @@ public sealed class Contexte
         DepotRevisions = new RevisionRepositoryMemoire(Db);
         Gestion = new ServiceGestion(Reglages, Stockage, Horloge);
         Compteur = new ServiceCompteur(Reglages, Stockage, equipements, categories, Gestion);
-        Scan = new ServiceScan(equipements, sorties, journal, Horloge, Reglages, Compteur, Gestion);
         var types = new TypeSortieRepositoryMemoire(Db);
+        Scan = new ServiceScan(equipements, sorties, journal, Horloge, Reglages, Compteur, Gestion, types);
         TypesSortie = new ServiceTypesSortie(types, Gestion);
         DepotAdherents = new AdherentRepositoryMemoire(Db);
         Adherents = new ServiceAdherents(DepotAdherents, journal, Horloge, Gestion, moniteurs);
         Sorties = new ServiceSortie(sorties, moniteurs, journal, Horloge, Reglages, Gestion, types, DepotAdherents);
         DepotModeles = new ModeleSortieRepositoryMemoire(Db);
         ModelesSortie = new ServiceModelesSortie(DepotModeles, types, moniteurs, Sorties, Horloge, Gestion);
-        Inventaire = new ServiceInventaire(equipements, categories, journal, Horloge, Reglages, Gestion, sorties, DepotRevisions);
+        Inventaire = new ServiceInventaire(equipements, categories, journal, Horloge, Reglages, Gestion, sorties, DepotRevisions, types);
         ServiceReglages = new ServiceReglages(Reglages, Stockage, Sauvegardes, Gestion);
         DepotSignalements = new SignalementRepositoryMemoire(Db);
         Signalements = new ServiceSignalements(DepotSignalements, equipements, categories, sorties, DepotRevisions, journal, Horloge, Gestion, Reglages);

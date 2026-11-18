@@ -88,6 +88,9 @@ public sealed class LigneSortie
     /// <summary>« Julie Martin », ou null.</summary>
     public string? AdherentNom { get; set; }
 
+    /// <summary>Types de sortie interdits par la fiche de l'équipement (<see cref="Equipement.TypesSortieInterdits"/>).</summary>
+    public string TypesSortieInterdits { get; set; } = "";
+
     /// <summary>Révision, TIV ou requalification dépassée.</summary>
     public bool RevisionDepassee(DateOnly aujourdHui) =>
         (DateProchaineRevision is { } r && r < aujourdHui) || (DateRequalification is { } q && q < aujourdHui);
@@ -269,3 +272,6 @@ public sealed record CompteTypeSortie(long? TypeId, string Nom, TypeSortie Famil
 
 /// <summary>Totaux des sorties clôturées d'un filtre : sorties, équipements sortis, et sorties par type (filtre sans le type).</summary>
 public sealed record TotauxSorties(int NbSorties, int NbEquipements, IReadOnlyList<CompteTypeSortie> ParType);
+
+/// <summary>Résumé des sorties autorisées d'un équipement : texte, restreint (au moins un type interdit), aucune sortie possible.</summary>
+public sealed record ResumeAutorisation(string Texte, bool Restreint, bool Aucune);

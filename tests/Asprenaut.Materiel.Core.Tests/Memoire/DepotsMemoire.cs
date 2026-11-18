@@ -292,6 +292,7 @@ public sealed class SortieRepositoryMemoire(BaseMemoire db) : ISortieRepository
                     AdherentId = a.AdherentId,
                     AdherentNom = db.Adherents.FirstOrDefault(x => x.Id == a.AdherentId)?.NomComplet,
                     Nitrox = e.Nitrox,
+                    TypesSortieInterdits = e.TypesSortieInterdits,
                 };
             })
             .ToList());

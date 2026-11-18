@@ -328,7 +328,8 @@ public sealed class ApercuEquipement : ControleDessine
         IReadOnlyList<(string Texte, Color Couleur)> Pastilles,
         IReadOnlyList<(string Texte, bool Fait)> Points,
         string? Echeance,
-        string? DateEcheance);
+        string? DateEcheance,
+        string? Restriction = null);
 
     private Donnees _donnees = new(null, "", "", [], [], null, null);
 
@@ -368,7 +369,7 @@ public sealed class ApercuEquipement : ControleDessine
         Dessin.Texte(g, "APERÇU", Theme.PoliceGrasse(8.25f), Rectangle.Round(new RectangleF(x, E(16), largeur, E(20))), Theme.TexteSecondaire);
 
         // --- Carte : catégorie, médaille, nom, pastilles ---
-        var hCarte = E(d.Pastilles.Count > 0 ? 250 : 222);
+        var hCarte = E((d.Pastilles.Count > 0 ? 250 : 222) + (d.Restriction is null ? 0 : 30));
         var carte = new RectangleF(x, E(48), largeur, hCarte);
         var couleurCategorie = d.Categorie is { } cat ? Theme.CouleurCategorie(cat.CouleurEffective) : Theme.Accent;
         using (var chemin = Dessin.Arrondi(carte, E(18)))
@@ -427,6 +428,24 @@ public sealed class ApercuEquipement : ControleDessine
         // Nom.
         y = medaille.Bottom + E(12);
         Dessin.Texte(g, d.Nom, Theme.PoliceTitre(12f), Rectangle.Round(new RectangleF(carte.Left + E(10), y, carte.Width - E(20), E(28))), Theme.Texte, centre: true);
+
+        // Sorties autorisées restreintes : pastille jaune « Piscine uniquement » sous le nom.
+        if (d.Restriction is { } restriction)
+        {
+            y += E(34);
+            var police = Theme.PoliceGrasse(7.5f);
+            var l = Math.Min(carte.Width - E(20), TextRenderer.MeasureText(restriction, police).Width + E(38));
+            var zone = new RectangleF(carte.Left + ((carte.Width - l) / 2), y, l, E(24));
+            using (var chemin = Dessin.Arrondi(zone, zone.Height / 2))
+            using (var fond = new SolidBrush(Theme.Sur(fondColonne, Theme.Avertissement, 0.16f)))
+            {
+                g.FillPath(fond, chemin);
+            }
+
+            Icones.Dessiner(g, Icones.Interdit, new RectangleF(zone.Left + E(10), zone.Top + E(6), E(12), E(12)), Theme.Avertissement, 2.6f);
+            Dessin.Texte(g, restriction, police, Rectangle.Round(new RectangleF(zone.Left + E(26), zone.Top, zone.Width - E(32), zone.Height)), Theme.Avertissement);
+            y -= E(4);
+        }
 
         // Pastilles centrées.
         if (d.Pastilles.Count > 0)

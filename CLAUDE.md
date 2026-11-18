@@ -631,6 +631,19 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
     `ChoixTris`, `TrierPar` : même colonne = inverse, utilisations du plus grand) : codes en ordre naturel (A2 avant A10), échéance
     la plus proche, sans date et textes vides à la fin, à égalité le code. « Tout effacer » (`Effacer`) garde le tri.
 
+47. Sorties autorisées d'un équipement (migration 034, `SortiesAutoriseesTests`, `SortiesAutoriseesDepotsTests`, maquette « Ajouter
+    un équipement ») : la fiche note les types de sortie INTERDITS (`Equipement.TypesSortieInterdits` « 3;5 », vide = toutes ;
+    `TypesInterdits`, `AutoriseEn`, `LireTypesInterdits` / `EcrireTypesInterdits`) : un type créé ensuite est autorisé.
+    `CreerAsync` / `ModifierAsync` nettoient la liste (ids inconnus retirés) ; journal « sorties autorisées ». Départ
+    (`ServiceScan`) : type interdit → refusé (« A11 · … ne part pas en « Mer » : sortie non autorisée sur sa fiche. »).
+    `ServiceSortie.ModifierAsync` refuse un nouveau type interdit au matériel déjà scanné (`LigneSortie.TypesSortieInterdits`).
+    Fenêtre : section 4 « Sorties autorisées » (`Controles/ChoixSortiesAutorisees` : un bouton par type de
+    `TypesPourAutorisationAsync` — proposés + masqués déjà interdits —, couleur `Theme.CouleurTypeSortie`, interdit = pointillés,
+    barré, croix rouge ; « Tout autoriser »), pastille de section (`SectionFormulaire.PastilleDroite`) et aperçu
+    (`ApercuEquipement.Donnees.Restriction`) d'après `ServiceInventaire.ResumerAutorisation` : « Toutes les sorties » (vert),
+    « Piscine uniquement » / « Piscine et Fosse uniquement », « Interdit : Lac, Mer », « Aucune sortie » + avertissement jaune.
+    L'import Excel garde la restriction ; pas encore dans les exports CSV.
+
 Réglages : `Core/Modeles/Reglages` (instance unique injectée dans les services), modifiés via `ServiceReglages`
 (validation + enregistrement par `IStockageReglages` → `parametres.json`). Avec `--base`, `parametres.json` est lu et écrit
 à côté de la base d'essai : les essais ne touchent jamais les réglages réels. Préfixe des étiquettes : `CodeScanne.Nettoyer(brut, prefixe)`.
@@ -711,11 +724,12 @@ Cycle d'une sortie : `EnPreparation` (scan départ) → `ValiderDepart` → `EnC
   031 : adherent.niveau_obtenu (dernier niveau obtenu, null = non renseigné ; règle 31).
   032 : adherent.autres_brevets (« PA40; RIFAP », null = aucun) ; un niveau_obtenu hors Débutant / Niveau 1 à 4 y est déplacé.
   033 : equipement.marque_octopus, modele_manometre, numero_manometre (texte, vide par défaut) ; numero_manometre repris de composant.
+  034 : equipement.types_sortie_interdits (ids de type_sortie « 3;5 », vide = toutes les sorties ; règle 47).
 - Horodatages en texte ISO 8601 UTC `yyyy-MM-ddTHH:mm:ss.fffZ` ; dates seules `yyyy-MM-dd`. Énumérations stockées par leur nom (CHECK en SQL).
 - **Piège Dapper** : en paramètre, Dapper ignore les TypeHandler pour les enums et pour DateTime. Toujours passer
   `enum.ToString()` et `FormatIso.Ecrire(date)` dans les objets de paramètres (voir `Parametres(...)` dans les dépôts).
   En lecture, les handlers et la conversion texte → enum fonctionnent. Les tests Data vérifient le format brut stocké.
-- Nouvelle migration : ajouter `Migrations/034_xxx.sql`, sans jamais modifier un script déjà livré
+- Nouvelle migration : ajouter `Migrations/035_xxx.sql`, sans jamais modifier un script déjà livré
   (et mettre à jour `SchemaTests` : liste des scripts et des tables).
 - Sauvegarde automatique au démarrage (avant les migrations) : `Sauvegardes\materiel_AAAA-MM-JJ_HHMM.db` à côté de la base,
   via l'API backup SQLite, 20 conservées.

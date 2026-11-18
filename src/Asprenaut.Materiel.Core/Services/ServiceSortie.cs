@@ -284,6 +284,20 @@ public sealed class ServiceSortie(
             return erreurType;
         }
 
+        // Nouveau type : le matériel déjà scanné doit y être autorisé (« Sorties autorisées » de sa fiche).
+        if (typeId != sortie.TypeId && typeId is { } nouveauType)
+        {
+            var refuses = (await sorties.ListerLignesAsync(sortieId, ct))
+                .Where(l => !Equipement.AutoriseEn(l.TypesSortieInterdits, nouveauType)).Select(l => l.Code).ToList();
+            if (refuses.Count > 0)
+            {
+                var nomType = types is not null && await types.ObtenirAsync(nouveauType, ct) is { } t ? $"« {t.Nom} »" : "ce type de sortie";
+                return ResultatOperation.Echec(refuses.Count == 1
+                    ? $"{refuses[0]} n'est pas autorisé en {nomType} (fiche de l'équipement). Retirez-le d'abord de la sortie."
+                    : $"{string.Join(", ", refuses)} ne sont pas autorisés en {nomType} (fiche de l'équipement). Retirez-les d'abord de la sortie.");
+            }
+        }
+
         // Sans valeur donnée : la sortie garde la sienne, ou prend celle du nouveau type si le type change.
         // Une autre valeur (compteur changé à la main) demande le mode gestion.
         var attendues = typeId != sortie.TypeId ? utilisationsDuType : sortie.Utilisations;

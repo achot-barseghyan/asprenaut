@@ -14,7 +14,8 @@ public sealed partial class ServiceInventaire(
     Reglages reglages,
     ServiceGestion? gestion = null,
     ISortieRepository? sorties = null,
-    IRevisionRepository? revisions = null)
+    IRevisionRepository? revisions = null,
+    ITypeSortieRepository? typesSortie = null)
 {
     public Task<Equipement?> ObtenirAsync(long id, CancellationToken ct = default) => equipements.ObtenirAsync(id, ct);
 
@@ -94,6 +95,7 @@ public sealed partial class ServiceInventaire(
         var taille = string.IsNullOrWhiteSpace(modifie.Taille) ? null : modifie.Taille.Trim();
         var requalification = ServiceRevisions.EstBloc(categorie.Nom) ? modifie.DateRequalification : null;
         var fiche = Fiche(modifie, categorie.Nom);
+        fiche.TypesSortieInterdits = await TypesInterditsConnusAsync(modifie.TypesSortieInterdits, ct);
         Noter("code", actuel.Code, code);
         Noter("nom", actuel.Libelle, modifie.Libelle.Trim());
         Noter("catégorie", actuel.CategorieId, modifie.CategorieId);
@@ -103,6 +105,7 @@ public sealed partial class ServiceInventaire(
         Noter("notes", actuel.Notes, (modifie.Notes ?? "").Trim());
         Noter("fiche", ResumeFiche(actuel), ResumeFiche(fiche));
         Noter(fiche.Nitrox ? "nitrox" : "plus nitrox", actuel.Nitrox, fiche.Nitrox);
+        Noter("sorties autorisées", Equipement.EcrireTypesInterdits(actuel.TypesInterdits), fiche.TypesSortieInterdits);
         Noter($"état : {Libelles.De(modifie.Etat).ToLower(Libelles.Culture)}", actuel.Etat, modifie.Etat);
         if (nouvelleRevision is { } dateRevision)
         {
@@ -171,6 +174,61 @@ public sealed partial class ServiceInventaire(
             Details = $"{equipement.Code} · {equipement.Libelle} supprimé (jamais utilisé)",
         }, ct);
         return ResultatOperation.Ok($"{equipement.Code} · {equipement.Libelle} supprimé.");
+    }
+
+    // ---------------------------------------------------------------- Sorties autorisées
+
+    /// <summary>Types interdits nettoyés (« 5;3;3 » → « 3;5 ») ; ids de types qui n'existent plus retirés.</summary>
+    private async Task<string> TypesInterditsConnusAsync(string? texte, CancellationToken ct)
+    {
+        var ids = Equipement.LireTypesInterdits(texte);
+        if (ids.Count > 0 && typesSortie is not null)
+        {
+            var connus = (await typesSortie.ListerAsync(ct)).Select(t => t.Id).ToHashSet();
+            ids = ids.Where(connus.Contains).ToList();
+        }
+
+        return Equipement.EcrireTypesInterdits(ids);
+    }
+
+    /// <summary>
+    /// Types proposés dans « Sorties autorisées » de la fiche, dans l'ordre d'affichage : les types proposés, plus un type
+    /// masqué que la fiche interdit déjà (pour pouvoir le réautoriser).
+    /// </summary>
+    public async Task<IReadOnlyList<TypeDeSortie>> TypesPourAutorisationAsync(Equipement? equipement = null, CancellationToken ct = default)
+    {
+        if (typesSortie is null)
+        {
+            return [];
+        }
+
+        var interdits = equipement?.TypesInterdits ?? [];
+        return (await typesSortie.ListerAsync(ct)).Where(t => t.Actif || interdits.Contains(t.Id)).ToList();
+    }
+
+    /// <summary>
+    /// Résumé de la section « Sorties autorisées » (pastille et aperçu) : « Toutes les sorties », « Aucune sortie »,
+    /// « Piscine uniquement », « Piscine et Fosse uniquement », sinon les interdits : « Interdit : Lac, Mer ».
+    /// </summary>
+    public static ResumeAutorisation ResumerAutorisation(IReadOnlyList<TypeDeSortie> types, IEnumerable<long> interdits)
+    {
+        var refuses = interdits.ToHashSet();
+        var autorises = types.Where(t => !refuses.Contains(t.Id)).Select(t => t.Nom).ToList();
+        var interditsNoms = types.Where(t => refuses.Contains(t.Id)).Select(t => t.Nom).ToList();
+        if (interditsNoms.Count == 0)
+        {
+            return new ResumeAutorisation("Toutes les sorties", false, false);
+        }
+
+        if (autorises.Count == 0)
+        {
+            return new ResumeAutorisation("Aucune sortie", true, true);
+        }
+
+        var texte = autorises.Count <= 2
+            ? $"{string.Join(" et ", autorises)} uniquement"
+            : $"Interdit : {string.Join(", ", interditsNoms)}";
+        return new ResumeAutorisation(texte, true, false);
     }
 
     // ---------------------------------------------------------------- Fiche matériel
@@ -468,6 +526,7 @@ public sealed partial class ServiceInventaire(
             ModeleManometre = detendeur ? C(e.ModeleManometre) : "",
             NumeroManometre = detendeur ? C(e.NumeroManometre) : "",
             Nitrox = PeutEtreNitrox(categorie) && e.Nitrox,
+            TypesSortieInterdits = Equipement.EcrireTypesInterdits(e.TypesInterdits),
         };
     }
 
@@ -488,6 +547,7 @@ public sealed partial class ServiceInventaire(
         cible.ModeleManometre = source.ModeleManometre;
         cible.NumeroManometre = source.NumeroManometre;
         cible.Nitrox = source.Nitrox;
+        cible.TypesSortieInterdits = source.TypesSortieInterdits;
     }
 
     private static string ResumeFiche(Equipement e) => string.Join("|",
@@ -897,7 +957,9 @@ public sealed partial class ServiceInventaire(
             return ResultatOperation.Echec("Une date de prochain contrôle est déjà passée. Vérifiez-la.");
         }
 
+        var interdits = await TypesInterditsConnusAsync(nouveau.TypesSortieInterdits, ct);
         CopierFiche(Fiche(nouveau, categorie.Nom), nouveau);
+        nouveau.TypesSortieInterdits = interdits;
         nouveau.DateProchaineRevision = prochaine;
         nouveau.Code = code;
         nouveau.Libelle = nouveau.Libelle.Trim();

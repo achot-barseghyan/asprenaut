@@ -181,7 +181,7 @@ public sealed class SortieRepository(FabriqueConnexion fabrique) : ISortieReposi
         const string sql = """
             SELECT se.id AS ligne_id, se.sortie_id, se.equipement_id, e.code, e.libelle, c.nom AS categorie,
                    e.taille, e.date_prochaine_revision, e.date_requalification, e.nitrox, se.statut, se.scanne_depart_le, se.scanne_retour_le,
-                   se.adherent_id, TRIM(ad.prenom || ' ' || ad.nom) AS adherent_nom
+                   se.adherent_id, TRIM(ad.prenom || ' ' || ad.nom) AS adherent_nom, e.types_sortie_interdits
             FROM sortie_equipement se
             JOIN equipement e ON e.id = se.equipement_id
             JOIN categorie c ON c.id = e.categorie_id
