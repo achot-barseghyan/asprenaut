@@ -236,6 +236,14 @@ public sealed class ListeDeroulante : ComboBox
 
     protected override void WndProc(ref Message m)
     {
+        // La molette ne change pas le choix (on voulait faire défiler la page) : liste fermée, elle passe au parent.
+        const int WmMouseWheel = 0x020A;
+        if (m.Msg == WmMouseWheel && !DroppedDown && Parent is { IsHandleCreated: true } parent)
+        {
+            m.Result = SendMessage(parent.Handle, m.Msg, m.WParam, m.LParam);
+            return;
+        }
+
         base.WndProc(ref m);
         const int WmPaint = 0x000F;
         if (m.Msg == WmPaint && IsHandleCreated)
@@ -244,6 +252,9 @@ public sealed class ListeDeroulante : ComboBox
             PeindreCadre(g);
         }
     }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 
     /// <summary>
     /// Par-dessus le dessin de Windows (cadre et bouton clairs en style Flat) : coins arrondis, bordure du thème,
