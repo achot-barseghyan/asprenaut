@@ -222,6 +222,11 @@ public static class Theme
 
     public static readonly Color TexteSurAvatar = Hex("#061A2E");
 
+    // --- Médaille de l'aperçu « Ajouter un équipement » : métal clair, code foncé, mêmes couleurs dans les deux thèmes ---
+    public static readonly Color MedailleClair = Hex("#E9F3F8");
+    public static readonly Color MedailleFonce = Hex("#8FA9B9");
+    public static readonly Color TexteSurMedaille = Hex("#1C2C38");
+
     /// <summary>
     /// Couleur de la pastille d'une classe (clé de <see cref="Moniteur.CouleursClasse"/>), fixe dans les deux thèmes comme les
     /// avatars : abréviation en <see cref="TexteSurAvatar"/> (contraste ≥ 7:1 sur chacune).

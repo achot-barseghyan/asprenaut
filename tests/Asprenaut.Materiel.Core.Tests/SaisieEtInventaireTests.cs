@@ -184,6 +184,11 @@ public class InventaireTests
         _ctx.Equipement("E03", categorie: "Détendeurs");
         Assert.Equal("A25", await _ctx.Inventaire.ProposerCodeAsync(detendeurs)); // Même forme : pas de tiret, 2 chiffres.
 
+        // « Pour : Adulte | Enfant » du formulaire : numéro suivant de la série choisie.
+        Assert.Equal("E04", await _ctx.Inventaire.ProposerCodeAsync(detendeurs, "E"));
+        Assert.Equal("A25", await _ctx.Inventaire.ProposerCodeAsync(detendeurs, "a"));
+        Assert.Equal("E01", await _ctx.Inventaire.ProposerCodeAsync(gilets, "E")); // Aucun code E : premier de la série.
+
         Assert.Equal("Détendeur adulte A24", ServiceInventaire.NomPropose("A24"));
         Assert.Equal("Détendeur enfant E03", ServiceInventaire.NomPropose("E03"));
         Assert.Equal("Gilet stabilisateur S12", ServiceInventaire.NomPropose("S12"));

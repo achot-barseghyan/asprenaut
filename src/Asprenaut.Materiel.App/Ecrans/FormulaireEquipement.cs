@@ -9,18 +9,23 @@ namespace Asprenaut.Materiel.App.Ecrans;
 
 /// <summary>
 /// Fenêtres « Ajouter un équipement » (inventaire, ou départ après un code scanné inconnu) et « Modifier l'équipement »
-/// (inventaire). Fiche des registres du club : marque, modèle, n° de série, et pour un détendeur le premier étage, le
-/// montage, le deuxième étage, D.S, manomètre et octopus. La validation est faite par <see cref="ServiceInventaire"/>.
+/// (maquette « Inventaire · Ajouter équipements (formulaire) ») : catégorie, puis sections numérotées et aperçu à droite.
+/// Détendeur : 1 Identification (Pour adulte / enfant, code de la médaille, nom), 2 Composition (premier étage avec
+/// raccord et D.S, deuxième étage, octopus et manomètre à interrupteur), 3 Révision et usage (dernière révision, à réviser
+/// avant, nitrox, notes). Autres catégories : 2 Fiche (marque, modèle, taille, n° de série). La validation est faite par
+/// <see cref="ServiceInventaire"/>.
 /// </summary>
 public static class FormulaireEquipement
 {
-    // Fenêtre large et aérée : la fiche compte beaucoup de champs, deux par rangée.
-    private const int Largeur = 760;
-    private const int Marge = 44;
+    private const int Largeur = 1120;
+    private const int Marge = 28;
+    private const int LargeurApercu = 290;
+    private const int EcartColonnes = 20;
 
     /// <summary>
     /// Ouvre la fenêtre d'ajout. <paramref name="code"/> pré-remplit le code (étiquette scannée) ; sinon un code est proposé
-    /// selon la catégorie. Retourne le code créé, ou null si l'utilisateur a annulé.
+    /// selon la catégorie, et « Ajouter et en créer un autre » permet d'en saisir plusieurs à la suite.
+    /// Retourne le dernier code créé, ou null si rien n'a été créé.
     /// </summary>
     public static async Task<string?> OuvrirAsync(IWin32Window? proprietaire, ServiceInventaire inventaire, string? code = null, long? categorieId = null, string? type = null)
     {
@@ -30,335 +35,580 @@ public static class FormulaireEquipement
             categorieId = await inventaire.DevinerCategorieAsync(code, type);
         }
 
-        var champs = await Champs.CreerAsync(inventaire, categorieId, proposerCode: true);
-        champs.Code.Valeur = code ?? champs.Code.Valeur;
-        if (code is not null && champs.Nom.Valeur.Trim().Length == 0)
+        var fiche = await Fiche.CreerAsync(inventaire, categorieId, proposerCode: code is null, modification: false);
+        if (code is not null)
         {
-            champs.Nom.Valeur = ServiceInventaire.NomPropose(Core.Saisie.CodeScanne.Nettoyer(code, null)); // E03 → Détendeur enfant E03.
+            fiche.Code.Valeur = Core.Saisie.CodeScanne.Nettoyer(code, null); // E03 → « Pour : Enfant », nom « Détendeur enfant E03 ».
         }
 
         string? cree = null;
-        using var fenetre = new FenetreFormulaire("Ajouter un équipement", "Ajouter", async () =>
+        async Task<ResultatOperation> CreerAsync()
         {
-            if (!champs.DatesValides)
+            if (!fiche.DatesValides)
             {
-                return ResultatOperation.Echec(Champs.MessageDate);
+                return ResultatOperation.Echec(Fiche.MessageDate);
             }
 
-            var resultat = await inventaire.CreerAsync(champs.Lire(new Equipement()), champs.DerniereRevision.Date);
+            var resultat = await inventaire.CreerAsync(fiche.Lire(new Equipement()), fiche.DerniereRevision.Date);
             if (resultat.Reussi)
             {
-                cree = Core.Saisie.CodeScanne.Nettoyer(champs.Code.Valeur, null);
+                cree = Core.Saisie.CodeScanne.Nettoyer(fiche.Code.Valeur, null);
             }
 
             return resultat;
-        }, Largeur, Marge);
-        champs.Placer(fenetre, etat: false);
-        fenetre.Shown += (_, _) => champs.Nom.Champ.Focus();
+        }
 
-        return fenetre.ShowDialog(proprietaire) == DialogResult.OK ? cree : null;
+        using var fenetre = new FenetreFormulaire("Ajouter un équipement", "Ajouter", CreerAsync, Largeur, Marge);
+        fenetre.EnTete("Il apparaîtra dans l'inventaire avec sa fiche EPI.", icone: Icones.Plus);
+        if (code is null)
+        {
+            fenetre.BoutonEnPlus("Ajouter et en créer un autre", async () =>
+            {
+                var resultat = await CreerAsync();
+                if (resultat.Reussi)
+                {
+                    fenetre.Resume($"{cree} ajouté. Saisissez le suivant.", enAvant: true);
+                    await fiche.RecommencerAsync();
+                }
+
+                return resultat;
+            });
+        }
+
+        fiche.Placer(fenetre);
+        fenetre.Shown += (_, _) => (code is null ? fiche.Code.Champ : fiche.Nom.Champ).Focus();
+        fenetre.ShowDialog(proprietaire);
+        return cree;
     }
 
     /// <summary>Ouvre la fiche d'un équipement existant ; vrai s'il a été modifié.</summary>
     public static async Task<bool> ModifierAsync(IWin32Window? proprietaire, ServiceInventaire inventaire, Equipement equipement, DateOnly? derniereRevision)
     {
-        var champs = await Champs.CreerAsync(inventaire, equipement.CategorieId, proposerCode: false);
-        champs.Remplir(equipement, derniereRevision);
+        var fiche = await Fiche.CreerAsync(inventaire, equipement.CategorieId, proposerCode: false, modification: true);
+        fiche.Remplir(equipement, derniereRevision);
 
         using var fenetre = new FenetreFormulaire($"Modifier {equipement.Code}", "Enregistrer", async () =>
         {
-            if (!champs.DatesValides)
+            if (!fiche.DatesValides)
             {
-                return ResultatOperation.Echec(Champs.MessageDate);
+                return ResultatOperation.Echec(Fiche.MessageDate);
             }
 
             // Dernière révision inchangée : rien à enregistrer.
-            var revision = champs.DerniereRevision.Date == derniereRevision ? null : champs.DerniereRevision.Date;
-            return await inventaire.ModifierAsync(champs.Lire(new Equipement { Id = equipement.Id }), revision);
+            var revision = fiche.DerniereRevision.Date == derniereRevision ? null : fiche.DerniereRevision.Date;
+            return await inventaire.ModifierAsync(fiche.Lire(new Equipement { Id = equipement.Id }), revision);
         }, Largeur, Marge);
-        champs.Placer(fenetre, etat: true);
-        fenetre.Shown += (_, _) => champs.Nom.Champ.Focus();
+        fenetre.EnTete("Les changements suivent dans l'inventaire et la fiche EPI.", icone: Icones.Crayon);
+        fiche.Placer(fenetre);
+        fenetre.Shown += (_, _) => fiche.Nom.Champ.Focus();
         return fenetre.ShowDialog(proprietaire) == DialogResult.OK;
     }
 
-    /// <summary>Les champs communs aux deux fenêtres.</summary>
-    private sealed class Champs
+    /// <summary>Les champs, les sections et l'aperçu, communs aux deux fenêtres.</summary>
+    private sealed class Fiche
     {
         public const string MessageDate = "Date invalide : écrivez-la comme 08/11/2027, ou laissez le champ vide.";
 
-        /// <summary>Catégorie : pastille, nom et nombre d'équipements ; la liste permet aussi d'en ajouter ou d'en supprimer.</summary>
-        public ChoixCategorie Categorie { get; } = new();
-        public ChampSaisie Code { get; } = new() { TexteIndicatif = "BLOC-035" };
+        private ServiceInventaire _inventaire = null!;
+        private bool _proposerCode;
+        private bool _modification;
+        private string _codePropose = "";
+        private string _nomPropose = "";
+        private bool _maj;
+        private bool _detendeurAffiche;
 
-        private ServiceInventaire? _inventaire;
-
+        // --- Identification ---
+        public ChoixCategorie Categorie { get; } = new() { Margin = new Padding(0, 0, 0, 18) };
+        public Bascule Pour { get; } = new("Adulte", "Enfant") { Compact = true, Etirer = true, AccessibleName = "Pour" };
+        public ChampSaisie Code { get; } = new() { TexteIndicatif = "A01", Icone = Icones.Scanner };
         public ChampSaisie Nom { get; } = new() { TexteIndicatif = "Ex. : Bloc 12 L acier" };
         public ListeDeroulante Etat { get; } = new() { AccessibleName = "État" };
+
+        // --- Fiche (hors détendeur) ---
         public ChampSaisie Marque { get; } = new() { TexteIndicatif = "Ex. : Aqualung" };
         public ChampSaisie Modele { get; } = new() { TexteIndicatif = "Ex. : Wave" };
         public ChampSaisie Taille { get; } = new() { TexteIndicatif = "M, 42-43, 12 L…" };
-        public ChampSaisie NumeroSerie { get; } = new() { TexteIndicatif = "Ex. : BB388677" };
+        public ChampSaisie NumeroSerie { get; } = new() { TexteIndicatif = "Facultatif" };
+
+        // --- Composition (détendeur) ---
+        private readonly ChampSaisie _marquePremier = new() { TexteIndicatif = "Ex. Aqualung" };
+        private readonly ChampSaisie _modelePremier = new() { TexteIndicatif = "Ex. Legend" };
+        private readonly ChampSaisie _numeroPremier = new() { TexteIndicatif = "BB388677" };
+        private readonly ChampSaisie _marqueDeuxieme = new() { TexteIndicatif = "Ex. Scubapro" };
+        private readonly ChampSaisie _modeleDeuxieme = new() { TexteIndicatif = "Ex. R 295" };
+        private readonly ChampSaisie _numeroDeuxieme = new() { TexteIndicatif = "N° de série" };
+        private readonly ChampSaisie _modeleOctopus = new() { TexteIndicatif = "Ex. R 195" };
+        private readonly ChampSaisie _numeroOctopus = new() { TexteIndicatif = "N° de série" };
+        private readonly ChampSaisie _marqueManometre = new() { TexteIndicatif = "Ex. Aqualung" };
+        private readonly ElementComposition _octopus = new("Octopus", "source de secours", facultatif: true);
+        private readonly ElementComposition _manometre = new("Manomètre", "ou console", facultatif: true);
+        private readonly Bascule _raccord = new("—", "DIN", "Étrier") { Compact = true, AccessibleName = "Raccord" };
+        private readonly Bascule _directSystem = new("—", "Oui", "Non") { Compact = true, AccessibleName = "D.S" };
+
+        // --- Révision et usage ---
         public ChampDate DerniereRevision { get; } = new() { AccessibleName = "Date de la dernière révision" };
         public ChampDate Revision { get; } = new() { AccessibleName = "Prochaine révision" };
         public ChampDate Requalification { get; } = new() { AccessibleName = "Prochaine requalification" };
-        public ChampSaisie Notes { get; } = new() { TexteIndicatif = "Remarques…" };
+        public OptionNitrox Nitrox { get; } = new();
+        public ChampSaisie Notes { get; } = new() { TexteIndicatif = "Ex. acheté d'occasion, flexible changé en 2025" };
+        private readonly Label _aide = Ui.Libelle("", Theme.Police(9f), Theme.TexteSecondaire);
+        private readonly Label _libelleRevision = FenetreFormulaire.LibelleChamp("Prochaine révision");
 
-        /// <summary>Bloc ou détendeur nitrox (sortie nominative : adhérent certifié nitrox seulement).</summary>
-        public CaseOption Nitrox { get; } = new("Nitrox",
-            "Bloc ou détendeur pour le nitrox : lors d'une sortie avec le nom des adhérents, seul un adhérent certifié nitrox peut le prendre.")
-        {
-            Margin = new Padding(0, 4, 0, 12),
-        };
-
-        // --- Détendeurs ---
-        public ListeDeroulante Montage { get; } = new() { AccessibleName = "Étrier ou DIN" };
-        public ListeDeroulante DirectSystem { get; } = new() { AccessibleName = "D.S" };
-        public ChampSaisie MarqueDeuxiemeEtage { get; } = new() { TexteIndicatif = "Ex. : Scubapro" };
-        public ChampSaisie ModeleDeuxiemeEtage { get; } = new() { TexteIndicatif = "Ex. : R 295" };
-        public ChampSaisie NumeroDeuxiemeEtage { get; } = new() { TexteIndicatif = "N° de série" };
-        public ChampSaisie Manometre { get; } = new() { TexteIndicatif = "Marque (vide : sans)" };
-        public ChampSaisie Octopus { get; } = new() { TexteIndicatif = "Modèle (vide : sans)" };
-        public ChampSaisie NumeroOctopus { get; } = new() { TexteIndicatif = "N° de série" };
-
-        public Label Aide { get; } = Ui.Libelle("", Theme.Police(9.75f), Theme.TexteSecondaire);
-
-        /// <summary>Rangées propres au détendeur (masquées pour les autres catégories) et rangées aux libellés changeants.</summary>
-        private readonly List<TableLayoutPanel> _rangeesDetendeur = [];
-        private TableLayoutPanel? _rangeeModele;
-        private TableLayoutPanel? _rangeeTaille;
-        private TableLayoutPanel? _rangeeDates;
-        private TableLayoutPanel? _rangeeRequalif;
+        // --- Mise en page ---
+        private readonly ApercuEquipement _apercu = new();
+        private readonly RangeeChamps _identite = new();
+        private readonly RangeeChamps _dates = new();
+        private SectionFormulaire _composition = null!;
+        private SectionFormulaire _sectionFiche = null!;
         private bool _nitroxPossible;
 
         public bool DatesValides => Revision.Valide && Requalification.Valide && DerniereRevision.Valide;
 
         private string NomCategorie => Categorie.NomCategorie;
 
-        public static async Task<Champs> CreerAsync(ServiceInventaire inventaire, long? categorieId, bool proposerCode)
-        {
-            var c = new Champs { _inventaire = inventaire };
+        private bool EstDetendeur => ServiceInventaire.EstDetendeur(NomCategorie);
 
+        public static async Task<Fiche> CreerAsync(ServiceInventaire inventaire, long? categorieId, bool proposerCode, bool modification)
+        {
+            var f = new Fiche { _inventaire = inventaire, _proposerCode = proposerCode, _modification = modification };
             foreach (var etat in Enum.GetValues<EtatEquipement>())
             {
-                c.Etat.Items.Add(new Choix<EtatEquipement>(etat, Libelles.De(etat)));
+                f.Etat.Items.Add(new Choix<EtatEquipement>(etat, Libelles.De(etat)));
             }
 
-            c.Montage.Items.Add(new Choix<MontageDetendeur?>(null, "—"));
-            foreach (var m in Enum.GetValues<MontageDetendeur>())
-            {
-                c.Montage.Items.Add(new Choix<MontageDetendeur?>(m, Libelles.De(m)));
-            }
-
-            c.DirectSystem.Items.Add(new Choix<bool?>(null, "—"));
-            c.DirectSystem.Items.Add(new Choix<bool?>(true, "Oui"));
-            c.DirectSystem.Items.Add(new Choix<bool?>(false, "Non"));
-            c.Montage.SelectedIndex = c.DirectSystem.SelectedIndex = 0;
-
-            c.Code.Champ.Font = Theme.PoliceCode(11.25f);
-            c.Code.Champ.CharacterCasing = CharacterCasing.Upper;
-            c.Code.Champ.AccessibleName = "Code de l'étiquette";
+            f.Code.Champ.Font = Theme.PoliceCode(12f);
+            f.Code.Champ.ForeColor = Theme.AccentClair;
+            f.Code.Champ.CharacterCasing = CharacterCasing.Upper;
+            f.Code.Champ.AccessibleName = "Code de la médaille";
+            f._numeroPremier.Champ.Font = f._numeroDeuxieme.Champ.Font = f._numeroOctopus.Champ.Font = f.NumeroSerie.Champ.Font = Theme.PoliceCode(10.5f);
             foreach (var (champ, nom) in new[]
             {
-                (c.Nom, "Nom"), (c.Marque, "Marque"), (c.Modele, "Modèle"), (c.Taille, "Taille"), (c.NumeroSerie, "Numéro de série"),
-                (c.Notes, "Notes"), (c.MarqueDeuxiemeEtage, "Marque du deuxième étage"), (c.ModeleDeuxiemeEtage, "Deuxième étage"),
-                (c.NumeroDeuxiemeEtage, "Numéro du deuxième étage"), (c.Manometre, "Manomètre"), (c.Octopus, "Octopus"), (c.NumeroOctopus, "Numéro de l'octopus"),
+                (f.Nom, "Nom affiché"), (f.Marque, "Marque"), (f.Modele, "Modèle"), (f.Taille, "Taille"), (f.NumeroSerie, "Numéro de série"),
+                (f.Notes, "Notes"), (f._marquePremier, "Premier étage · marque"), (f._modelePremier, "Premier étage · modèle"),
+                (f._numeroPremier, "Premier étage · numéro de série"), (f._marqueDeuxieme, "Deuxième étage · marque"),
+                (f._modeleDeuxieme, "Deuxième étage · modèle"), (f._numeroDeuxieme, "Deuxième étage · numéro de série"),
+                (f._modeleOctopus, "Octopus · modèle"), (f._numeroOctopus, "Octopus · numéro de série"), (f._marqueManometre, "Manomètre · marque"),
             })
             {
                 champ.Champ.AccessibleName = nom;
+                champ.Champ.TextChanged += (_, _) => f.Actualiser();
             }
-
-            c.Aide.MaximumSize = new Size(Largeur - 2 * Marge, 0);
 
             // Dernière révision tapée (ou choisie dans le calendrier) : la prochaine est calculée tout de suite.
-            c.DerniereRevision.DateChangee += (_, _) => c.CalculerProchaineRevision();
-
-            // Changement de catégorie : nouveau code proposé (ajout, si l'utilisateur ne l'a pas tapé), champs et libellés adaptés.
-            var dernierePropose = "";
-            async Task CategorieChangeeAsync()
+            f.DerniereRevision.DateChangee += (_, _) =>
             {
-                if (c.Categorie.CategorieId is not { } id)
+                f.CalculerProchaineRevision();
+                f.Actualiser();
+            };
+            f.Revision.DateChangee += (_, _) => f.Actualiser();
+            f.Requalification.DateChangee += (_, _) => f.Actualiser();
+            f.Nitrox.CheckedChanged += (_, _) => f.Actualiser();
+            f._raccord.Changement += (_, _) => f.Actualiser();
+            f._directSystem.Changement += (_, _) => f.Actualiser();
+            foreach (var element in new[] { f._octopus, f._manometre })
+            {
+                element.Presence!.CheckedChanged += (_, _) =>
                 {
-                    return;
-                }
-
-                c.Adapter();
-                if (proposerCode && (c.Code.Valeur.Trim().Length == 0 || c.Code.Valeur == dernierePropose))
-                {
-                    dernierePropose = await inventaire.ProposerCodeAsync(id);
-                    c.Code.Valeur = dernierePropose;
-                }
+                    f.AdapterComposants();
+                    f.Actualiser();
+                };
             }
 
-            c.Categorie.Changement += async (_, _) =>
+            // Code tapé : « Pour » suit la lettre (E03 → Enfant) et le nom proposé suit le code tant qu'il n'a pas été tapé.
+            f.Code.Champ.TextChanged += (_, _) => f.CodeChange();
+            f.Pour.Changement += async (_, _) =>
             {
                 try
                 {
-                    await CategorieChangeeAsync();
+                    await f.PourChangeAsync();
                 }
                 catch (Exception ex)
                 {
-                    Erreurs.Signaler(c.Categorie.FindForm(), ex);
+                    Erreurs.Signaler(f.Pour.FindForm(), ex);
                 }
             };
-            await c.Categorie.ChargerAsync(inventaire, categorieId); // Choisit la catégorie : Adapter et code proposé suivent.
-            return c;
+
+            // Changement de catégorie : nouveau code proposé (ajout, si l'utilisateur ne l'a pas tapé), champs et libellés adaptés.
+            f.Categorie.Changement += async (_, _) =>
+            {
+                try
+                {
+                    f.Adapter();
+                    await f.ProposerCodeAsync();
+                }
+                catch (Exception ex)
+                {
+                    Erreurs.Signaler(f.Categorie.FindForm(), ex);
+                }
+            };
+            await f.Categorie.ChargerAsync(inventaire, categorieId);
+            return f;
+        }
+
+        /// <summary>Code proposé (ajout) si le champ est vide ou garde le dernier code proposé ; « E » si « Pour : Enfant ».</summary>
+        private async Task ProposerCodeAsync()
+        {
+            if (!_proposerCode || Categorie.CategorieId is not { } id || (Code.Valeur.Trim().Length > 0 && Code.Valeur != _codePropose))
+            {
+                return;
+            }
+
+            var prefixe = EstDetendeur ? (Pour.SelectedIndex == 1 ? "E" : "A") : null;
+            _codePropose = await _inventaire.ProposerCodeAsync(id, prefixe);
+            Code.Valeur = _codePropose;
+        }
+
+        private async Task PourChangeAsync()
+        {
+            if (_maj)
+            {
+                return;
+            }
+
+            await ProposerCodeAsync();
+            ProposerNom();
+            Actualiser();
+        }
+
+        private void CodeChange()
+        {
+            if (EstDetendeur && !_modification)
+            {
+                // A24 / E03 : la lettre de la médaille choisit adulte ou enfant.
+                var code = Code.Valeur.Trim();
+                var enfant = ServiceBilan.EstDetendeurEnfant(code, null);
+                var adulte = code.Length > 1 && char.ToUpperInvariant(code[0]) == 'A' && code.Skip(1).All(char.IsAsciiDigit);
+                if (enfant || adulte)
+                {
+                    _maj = true;
+                    Pour.SelectedIndex = enfant ? 1 : 0;
+                    _maj = false;
+                }
+            }
+
+            ProposerNom();
+            Actualiser();
+        }
+
+        /// <summary>Nom proposé d'après le code (A24 → « Détendeur adulte A24 ») tant que l'utilisateur ne l'a pas tapé.</summary>
+        private void ProposerNom()
+        {
+            if (_modification || (Nom.Valeur.Trim().Length > 0 && Nom.Valeur != _nomPropose))
+            {
+                return;
+            }
+
+            var propose = ServiceInventaire.NomPropose(Core.Saisie.CodeScanne.Nettoyer(Code.Valeur, null));
+            _nomPropose = propose;
+            Nom.Valeur = propose;
+        }
+
+        /// <summary>« Ajouter et en créer un autre » : même catégorie, marque et modèle ; code suivant, nom, numéros et notes vidés.</summary>
+        public async Task RecommencerAsync()
+        {
+            Code.Valeur = "";
+            Nom.Valeur = "";
+            foreach (var champ in new[] { NumeroSerie, _numeroPremier, _numeroDeuxieme, _numeroOctopus, Notes })
+            {
+                champ.Valeur = "";
+            }
+
+            await ProposerCodeAsync();
+            ProposerNom();
+            Actualiser();
+            Code.Champ.Focus();
+            Code.Champ.SelectAll();
         }
 
         /// <summary>
-        /// Selon la catégorie : rangées du détendeur visibles ou non, libellés du premier étage, requalification (blocs),
-        /// dernière révision (pas pour les blocs, qui passent par la TIV), aide.
+        /// Selon la catégorie : composition (détendeur) ou fiche, « Pour », requalification (blocs), dernière révision (pas pour
+        /// les blocs, qui passent par la TIV), nitrox, libellés et aide. Les valeurs tapées passent de la fiche à la composition.
         /// </summary>
         private void Adapter()
         {
             var categorie = NomCategorie;
-            var detendeur = ServiceInventaire.EstDetendeur(categorie);
+            var detendeur = EstDetendeur;
             var bloc = ServiceRevisions.EstBloc(categorie);
-            Requalification.Enabled = bloc;
+
+            if (detendeur != _detendeurAffiche)
+            {
+                var (de, vers) = detendeur
+                    ? (new[] { Marque, Modele, NumeroSerie }, new[] { _marquePremier, _modelePremier, _numeroPremier })
+                    : (new[] { _marquePremier, _modelePremier, _numeroPremier }, new[] { Marque, Modele, NumeroSerie });
+                for (var i = 0; i < de.Length; i++)
+                {
+                    vers[i].Valeur = de[i].Valeur;
+                }
+
+                _detendeurAffiche = detendeur;
+            }
+
+            if (_composition is not null)
+            {
+                _composition.Visible = detendeur;
+                _sectionFiche.Visible = !detendeur;
+            }
+
+            _identite.Montrer(Pour, detendeur);
+            Nom.TexteIndicatif = detendeur ? (Pour.SelectedIndex == 1 ? "Détendeur enfant" : "Détendeur adulte") : $"Ex. : {categorie.TrimEnd('s')}";
+            _dates.Montrer(DerniereRevision, !bloc);
+            _dates.Montrer(Requalification, bloc);
             if (!bloc)
             {
                 Requalification.Date = null;
             }
-
-            DerniereRevision.Enabled = !bloc;
-            if (bloc)
+            else
             {
                 DerniereRevision.Date = null;
             }
 
             _nitroxPossible = ServiceInventaire.PeutEtreNitrox(categorie);
-            Nitrox.Visible = _nitroxPossible;
+            _dates.Montrer(Nitrox, _nitroxPossible);
             if (!_nitroxPossible)
             {
                 Nitrox.Checked = false;
             }
 
-            foreach (var r in _rangeesDetendeur)
-            {
-                r.Visible = detendeur;
-            }
+            _libelleRevision.Text = bloc ? "Prochaine TIV" : detendeur ? "À réviser avant" : "Prochaine révision";
 
-            if (_rangeeModele is { } modele)
-            {
-                var (marque, mod) = FenetreFormulaire.Libelles(modele);
-                marque.Text = detendeur ? "Marque (premier étage)" : "Marque";
-                mod.Text = detendeur ? "Premier étage" : "Modèle";
-            }
-
-            if (_rangeeTaille is { } taille)
-            {
-                // Pas de taille pour un détendeur : la case reste vide, le n° de série du premier étage à droite.
-                var (lTaille, lSerie) = FenetreFormulaire.Libelles(taille);
-                lSerie.Text = detendeur ? "N° premier étage" : "N° de série";
-                lTaille.Text = detendeur ? "" : "Taille";
-                Taille.Visible = Taille.Enabled = !detendeur;
-            }
-
-            if (_rangeeRequalif is { } requalif)
-            {
-                FenetreFormulaire.Libelles(requalif).Gauche.Text = bloc ? "Prochaine requalification" : "Requalification (blocs)";
-            }
-
-            if (_rangeeDates is { } dates)
-            {
-                FenetreFormulaire.Libelles(dates).Droite.Text = bloc ? "Prochaine TIV" : detendeur ? "À réviser avant" : "Prochaine révision";
-            }
-
-            var delai = _inventaire?.DelaiRevision(categorie) ?? 0;
+            var delai = _inventaire.DelaiRevision(categorie);
             var duree = delai % 12 == 0 ? (delai == 12 ? "chaque année" : $"tous les {delai / 12} ans") : $"tous les {delai} mois";
-            Aide.Text = bloc
-                ? "Bloc : indiquez la date de la prochaine TIV et celle de la prochaine requalification, si vous les connaissez."
+            _aide.Text = bloc
+                ? "Bloc : indiquez la prochaine TIV et la prochaine requalification, si vous les connaissez."
                 : delai > 0
-                    ? $"Révision {duree}. Indiquez la date de la dernière révision : « {(detendeur ? "À réviser avant" : "Prochaine révision")} » est calculée."
+                    ? $"Révision {duree} : « {_libelleRevision.Text} » est calculée d'après la dernière révision (modifiable)."
                     : ServiceInventaire.EstGilet(categorie)
-                        ? "Stab : pas de date de révision obligatoire. Notez la dernière révision si elle a été faite ; la prochaine se tape à la main si besoin."
+                        ? "Stab : pas de date de révision obligatoire. Notez la dernière révision si elle a été faite."
                         : "Pas de délai de révision pour cette catégorie : tapez la prochaine révision à la main si elle existe.";
             CalculerProchaineRevision();
+            AdapterComposants();
+            Actualiser();
+        }
+
+        /// <summary>Octopus et manomètre absents : leurs cases sont grisées (et enregistrées vides).</summary>
+        private void AdapterComposants()
+        {
+            _modeleOctopus.Enabled = _numeroOctopus.Enabled = _octopus.Present;
+            _marqueManometre.Enabled = _manometre.Present;
         }
 
         /// <summary>« Prochaine révision » = dernière révision + délai de la catégorie (même calcul qu'à l'enregistrement).</summary>
-        public void CalculerProchaineRevision()
+        private void CalculerProchaineRevision()
         {
-            if (_inventaire is { } inventaire && DerniereRevision.Date is { } derniere
-                && inventaire.ProchaineRevisionCalculee(NomCategorie, derniere) is { } prochaine)
+            if (DerniereRevision.Date is { } derniere && _inventaire.ProchaineRevisionCalculee(NomCategorie, derniere) is { } prochaine)
             {
                 Revision.Date = prochaine;
             }
         }
 
+        /// <summary>Aperçu de droite d'après la saisie.</summary>
+        private void Actualiser()
+        {
+            var detendeur = EstDetendeur;
+            var code = Core.Saisie.CodeScanne.Nettoyer(Code.Valeur, null);
+            var nom = Nom.Valeur.Trim().Length > 0 ? Nom.Valeur.Trim() : detendeur ? Nom.TexteIndicatif : "Nouvel équipement";
+
+            var pastilles = new List<(string, Color)>();
+            var points = new List<(string, bool)>();
+            static bool Rempli(params ChampSaisie[] champs) => champs.Any(c => c.Valeur.Trim().Length > 0);
+            if (detendeur)
+            {
+                var raccord = _raccord.SelectedIndex switch { 1 => "DIN", 2 => "Étrier", _ => "" };
+                var ds = _directSystem.SelectedIndex switch { 1 => "D.S Oui", 2 => "D.S Non", _ => "" };
+                var texte = string.Join(" · ", new[] { raccord, ds }.Where(t => t.Length > 0));
+                if (texte.Length > 0)
+                {
+                    pastilles.Add((texte, Theme.AccentClair));
+                }
+
+                var etages = Rempli(_marquePremier, _modelePremier) && Rempli(_marqueDeuxieme, _modeleDeuxieme);
+                points.Add((etages ? "Premier et deuxième étage" : "Premier et deuxième étage à renseigner", etages));
+                points.Add((_octopus.Present ? "Octopus" : "Sans octopus", _octopus.Present));
+                points.Add((_manometre.Present ? "Manomètre" : "Sans manomètre", _manometre.Present));
+            }
+            else
+            {
+                if (Taille.Valeur.Trim().Length > 0)
+                {
+                    pastilles.Add(($"Taille {Taille.Valeur.Trim()}", Theme.AccentClair));
+                }
+
+                points.Add((Rempli(Marque, Modele) ? "Marque et modèle" : "Marque et modèle à renseigner", Rempli(Marque, Modele)));
+                points.Add((Rempli(NumeroSerie) ? "N° de série" : "Sans n° de série", Rempli(NumeroSerie)));
+            }
+
+            if (_nitroxPossible && Nitrox.Checked)
+            {
+                pastilles.Add(("Nitrox", Theme.Nitrox));
+            }
+
+            var bloc = ServiceRevisions.EstBloc(NomCategorie);
+            if (bloc)
+            {
+                points.Add((Requalification.Date is { } q ? $"Requalification {q:dd/MM/yyyy}" : "Requalification non renseignée", Requalification.Date is not null));
+            }
+            else
+            {
+                points.Add((DerniereRevision.Date is { } d ? $"Dernière révision {d:dd/MM/yyyy}" : "Révision non renseignée", DerniereRevision.Date is not null));
+            }
+
+            _apercu.Afficher(new ApercuEquipement.Donnees(
+                Categorie.CategorieChoisie,
+                code,
+                nom,
+                pastilles,
+                points,
+                Revision.Date is null ? null : bloc ? "Prochaine TIV" : "Prochaine révision",
+                Revision.Date?.ToString("dd/MM/yyyy", Libelles.Culture)));
+        }
+
         public void Remplir(Equipement e, DateOnly? derniereRevision)
         {
+            _maj = true;
+            Pour.SelectedIndex = ServiceBilan.EstDetendeurEnfant(e.Code, e.Libelle) ? 1 : 0;
+            _maj = false;
             Code.Valeur = e.Code;
             Nom.Valeur = e.Libelle;
             Taille.Valeur = e.Taille ?? "";
-            Marque.Valeur = e.Marque;
-            Modele.Valeur = e.Modele;
-            NumeroSerie.Valeur = e.NumeroSerie;
+            Marque.Valeur = _marquePremier.Valeur = e.Marque;
+            Modele.Valeur = _modelePremier.Valeur = e.Modele;
+            NumeroSerie.Valeur = _numeroPremier.Valeur = e.NumeroSerie;
             DerniereRevision.Date = derniereRevision;
             Revision.Date = e.DateProchaineRevision;
             Requalification.Date = e.DateRequalification;
             Notes.Valeur = e.Notes;
             Etat.SelectedItem = Etat.Items.OfType<Choix<EtatEquipement>>().First(x => x.Valeur == e.Etat);
-            Montage.SelectedItem = Montage.Items.OfType<Choix<MontageDetendeur?>>().First(x => x.Valeur == e.Montage);
-            DirectSystem.SelectedItem = DirectSystem.Items.OfType<Choix<bool?>>().First(x => x.Valeur == e.DirectSystem);
-            MarqueDeuxiemeEtage.Valeur = e.MarqueDeuxiemeEtage;
-            ModeleDeuxiemeEtage.Valeur = e.ModeleDeuxiemeEtage;
-            NumeroDeuxiemeEtage.Valeur = e.NumeroDeuxiemeEtage;
-            Manometre.Valeur = e.Manometre;
-            Octopus.Valeur = e.Octopus;
-            NumeroOctopus.Valeur = e.NumeroOctopus;
+            _raccord.SelectedIndex = e.Montage switch { MontageDetendeur.Din => 1, MontageDetendeur.Etrier => 2, _ => 0 };
+            _directSystem.SelectedIndex = e.DirectSystem switch { true => 1, false => 2, _ => 0 };
+            _marqueDeuxieme.Valeur = e.MarqueDeuxiemeEtage;
+            _modeleDeuxieme.Valeur = e.ModeleDeuxiemeEtage;
+            _numeroDeuxieme.Valeur = e.NumeroDeuxiemeEtage;
+            _marqueManometre.Valeur = e.Manometre;
+            _modeleOctopus.Valeur = e.Octopus;
+            _numeroOctopus.Valeur = e.NumeroOctopus;
+            _octopus.Presence!.Checked = e.Octopus.Trim().Length > 0 || e.NumeroOctopus.Trim().Length > 0;
+            _manometre.Presence!.Checked = e.Manometre.Trim().Length > 0;
             Nitrox.Checked = e.Nitrox;
+            AdapterComposants();
+            Actualiser();
         }
 
         public Equipement Lire(Equipement e)
         {
+            var detendeur = EstDetendeur;
             e.Code = Code.Valeur;
             e.Libelle = Nom.Valeur;
             e.CategorieId = Categorie.CategorieId ?? 0;
-            e.Taille = Taille.Enabled ? Taille.Valeur : null;
-            e.Marque = Marque.Valeur;
-            e.Modele = Modele.Valeur;
-            e.NumeroSerie = NumeroSerie.Valeur;
+            e.Taille = detendeur ? null : Taille.Valeur;
+            e.Marque = detendeur ? _marquePremier.Valeur : Marque.Valeur;
+            e.Modele = detendeur ? _modelePremier.Valeur : Modele.Valeur;
+            e.NumeroSerie = detendeur ? _numeroPremier.Valeur : NumeroSerie.Valeur;
             e.DateProchaineRevision = Revision.Date;
             e.DateRequalification = Requalification.Date;
             e.Notes = Notes.Valeur;
-            e.Etat = (Etat.SelectedItem as Choix<EtatEquipement>)?.Valeur ?? EtatEquipement.EnService;
-            e.Montage = (Montage.SelectedItem as Choix<MontageDetendeur?>)?.Valeur;
-            e.DirectSystem = (DirectSystem.SelectedItem as Choix<bool?>)?.Valeur;
-            e.MarqueDeuxiemeEtage = MarqueDeuxiemeEtage.Valeur;
-            e.ModeleDeuxiemeEtage = ModeleDeuxiemeEtage.Valeur;
-            e.NumeroDeuxiemeEtage = NumeroDeuxiemeEtage.Valeur;
-            e.Manometre = Manometre.Valeur;
-            e.Octopus = Octopus.Valeur;
-            e.NumeroOctopus = NumeroOctopus.Valeur;
+            e.Etat = _modification ? (Etat.SelectedItem as Choix<EtatEquipement>)?.Valeur ?? EtatEquipement.EnService : EtatEquipement.EnService;
+            e.Montage = _raccord.SelectedIndex switch { 1 => MontageDetendeur.Din, 2 => MontageDetendeur.Etrier, _ => null };
+            e.DirectSystem = _directSystem.SelectedIndex switch { 1 => true, 2 => false, _ => null };
+            e.MarqueDeuxiemeEtage = _marqueDeuxieme.Valeur;
+            e.ModeleDeuxiemeEtage = _modeleDeuxieme.Valeur;
+            e.NumeroDeuxiemeEtage = _numeroDeuxieme.Valeur;
+            e.Manometre = _manometre.Present ? _marqueManometre.Valeur : "";
+            e.Octopus = _octopus.Present ? _modeleOctopus.Valeur : "";
+            e.NumeroOctopus = _octopus.Present ? _numeroOctopus.Valeur : "";
             e.Nitrox = _nitroxPossible && Nitrox.Checked;
             return e;
         }
 
-        public void Placer(FenetreFormulaire fenetre, bool etat)
+        public void Placer(FenetreFormulaire fenetre)
         {
-            // Catégorie (maquette « Ajouter un équipement ») : liste avec recherche, ajout et suppression intégrés.
-            fenetre.Champ("Catégorie", Categorie, Categorie.Height);
-            if (etat)
+            fenetre.Separations = true;
+            fenetre.Valider.Icone = Icones.Coche;
+            fenetre.Note("obligatoire");
+
+            // Catégorie (liste avec recherche, ajout et suppression intégrés).
+            var libelleCategorie = Ui.LibelleChamp("Catégorie");
+
+            // 1 Identification.
+            var identification = new SectionFormulaire(1, "Identification");
+            _identite.Ajouter("Pour", Pour, 200);
+            _identite.Ajouter("Code de la médaille *", Code, 220);
+            _identite.Ajouter("Nom affiché *", Nom);
+            identification.Ajouter(_identite);
+            if (_modification)
             {
-                fenetre.DeuxChamps("Code de l'étiquette", Code, "État", Etat);
-                fenetre.Champ("Nom", Nom);
-            }
-            else
-            {
-                fenetre.DeuxChamps("Code de l'étiquette", Code, "Nom", Nom);
+                var etat = new RangeeChamps();
+                etat.Ajouter("État", Etat, 260);
+                identification.Ajouter(etat);
             }
 
-            _rangeeModele = fenetre.DeuxChamps("Marque", Marque, "Modèle", Modele);
-            _rangeeTaille = fenetre.DeuxChamps("Taille", Taille, "N° de série", NumeroSerie);
-            _rangeesDetendeur.Add(fenetre.DeuxChamps("Étrier / DIN", Montage, "D.S", DirectSystem));
-            _rangeesDetendeur.Add(fenetre.DeuxChamps("Marque deuxième étage", MarqueDeuxiemeEtage, "Deuxième étage", ModeleDeuxiemeEtage));
-            _rangeesDetendeur.Add(fenetre.DeuxChamps("N° deuxième étage", NumeroDeuxiemeEtage, "Mano", Manometre));
-            _rangeesDetendeur.Add(fenetre.DeuxChamps("Octopus", Octopus, "N° octopus", NumeroOctopus));
-            _rangeeDates = fenetre.DeuxChamps("Date de la dernière révision", DerniereRevision, "Prochaine révision", Revision);
-            _rangeeRequalif = fenetre.DeuxChamps("Prochaine requalification", Requalification, "Notes (facultatif)", Notes);
-            fenetre.Ajouter(Nitrox);
-            fenetre.Ajouter(Aide);
+            // 2 Composition (détendeur).
+            _composition = new SectionFormulaire(2, "Composition");
+            var grille = new GrilleComposition();
+            grille.Element(new ElementComposition("Premier étage", "obligatoire", facultatif: false), _marquePremier, _modelePremier, _numeroPremier);
+            var libelleRaccord = Ui.Libelle("Raccord", Theme.PoliceTitre(9f), Theme.TexteSecondaire);
+            var libelleDs = Ui.Libelle("D.S", Theme.PoliceTitre(9f), Theme.TexteSecondaire);
+            libelleRaccord.Anchor = libelleDs.Anchor = _raccord.Anchor = _directSystem.Anchor = AnchorStyles.Left;
+            libelleRaccord.Margin = new Padding(0, 0, 10, 0);
+            libelleDs.Margin = new Padding(24, 0, 10, 0);
+            var reglages = Ui.Rangee(true, libelleRaccord, _raccord, libelleDs, _directSystem);
+            grille.SousLigne(reglages);
+            grille.Element(new ElementComposition("Deuxième étage", "obligatoire", facultatif: false), _marqueDeuxieme, _modeleDeuxieme, _numeroDeuxieme);
+            grille.Element(_octopus, null, _modeleOctopus, _numeroOctopus);
+            grille.Element(_manometre, _marqueManometre, null, null);
+            _composition.Ajouter(grille);
+
+            // 2 Fiche (autres catégories).
+            _sectionFiche = new SectionFormulaire(2, "Fiche");
+            var marqueModele = new RangeeChamps();
+            marqueModele.Ajouter("Marque", Marque);
+            marqueModele.Ajouter("Modèle", Modele);
+            var tailleSerie = new RangeeChamps();
+            tailleSerie.Ajouter("Taille", Taille);
+            tailleSerie.Ajouter("N° de série", NumeroSerie);
+            _sectionFiche.Ajouter(marqueModele);
+            _sectionFiche.Ajouter(tailleSerie);
+
+            // 3 Révision et usage.
+            var revision = new SectionFormulaire(3, "Révision et usage");
+            _dates.Ajouter("Dernière révision", DerniereRevision);
+            _dates.Ajouter(_libelleRevision, Revision);
+            _dates.Ajouter("Prochaine requalification", Requalification);
+            _dates.Ajouter(FenetreFormulaire.LibelleChamp(" "), Nitrox);
+            _dates.Margin = new Padding(0, 0, 0, 8);
+            revision.Ajouter(_dates);
+            _aide.Margin = new Padding(0, 0, 0, 14);
+            revision.Ajouter(_aide);
+            revision.Champ("Notes · facultatif", Notes);
+
+            var gauche = FormulaireSortie.Pile(libelleCategorie, Categorie, identification, _composition, _sectionFiche, revision);
+            fenetre.Ajouter(Corps(gauche, _apercu));
             Adapter();
+        }
+
+        /// <summary>Formulaire à gauche, aperçu à droite (de la hauteur du formulaire).</summary>
+        private static TableLayoutPanel Corps(Control gauche, Control apercu)
+        {
+            var largeurGauche = Largeur - (2 * Marge) - LargeurApercu - EcartColonnes;
+            var corps = new TableLayoutPanel
+            {
+                ColumnCount = 2,
+                RowCount = 1,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                BackColor = Color.Transparent,
+                Margin = Padding.Empty,
+            };
+            corps.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, largeurGauche));
+            corps.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, LargeurApercu + EcartColonnes));
+            corps.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            apercu.Margin = new Padding(EcartColonnes, 0, 0, 14);
+            corps.Controls.Add(gauche, 0, 0);
+            corps.Controls.Add(apercu, 1, 0);
+            gauche.Dock = DockStyle.None;
+            gauche.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            apercu.Dock = DockStyle.None;
+            apercu.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            return corps;
         }
     }
 }

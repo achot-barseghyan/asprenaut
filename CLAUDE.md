@@ -162,6 +162,12 @@ tests/…Data.Tests                              Dépôts et schéma sur base SQ
    (BLOC-034 → BLOC-035, A24 → A25). Étiquettes QR du club, sans tiret : A = détendeur adulte, E = détendeur enfant,
    S = gilet stab (A24, E03, S12) ; catégorie vide → A01 / S01 ; `DevinerCategorieAsync` reconnaît A/E → Détendeurs,
    S → Gilets (DET, GIL encore acceptés) ; `NomPropose` pré-remplit le nom (« Détendeur enfant E03 »). Données de démo : A01, S01, E01.
+   Fenêtre (`Ecrans/FormulaireEquipement`, maquette « Inventaire · Ajouter équipements (formulaire) », 1120 px) : catégorie, sections
+   1 Identification (`RangeeChamps` : Pour Adulte | Enfant pour un détendeur → `ProposerCodeAsync(id, "E")`, code lu → Pour suit la
+   lettre, nom proposé tant qu'il n'est pas tapé ; État en modification), 2 Composition (détendeur, `GrilleComposition` +
+   `ElementComposition` : interrupteurs octopus / manomètre, cases que la fiche ne garde pas = « — » ; raccord et D.S en `Bascule`)
+   ou 2 Fiche, 3 Révision et usage (`OptionNitrox`, notes) ; aperçu `ApercuEquipement` à droite (médaille `Theme.Medaille…`) ;
+   « Ajouter et en créer un autre » (`FenetreFormulaire.BoutonEnPlus`, ajout depuis l'inventaire : code suivant, numéros et notes vidés).
 5. Retour d'un équipement absent de la sortie → avertir sans rien modifier ; s'il est dehors ailleurs →
    `ActionProposee.RentrerDansAutreSortie` (l'écran rescanne alors dans `AutreSortieId`).
 6. Retrait possible seulement en préparation (`StatutSortie.EnPreparation`).

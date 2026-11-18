@@ -77,7 +77,7 @@ public sealed class FenetreFormulaire : Form, IFondDessine
         CancelButton = annuler;
         AcceptButton = _valider;
 
-        var boutons = Ui.Rangee(false, _valider, annuler);
+        var boutons = _boutons = Ui.Rangee(false, _valider, annuler);
         boutons.Margin = Padding.Empty;
         boutons.Anchor = AnchorStyles.Right;
         // Bas de la fenêtre : note facultative à gauche (« * champs obligatoires »), boutons à droite.
@@ -240,6 +240,47 @@ public sealed class FenetreFormulaire : Form, IFondDessine
 
     /// <summary>Texte du bouton de validation.</summary>
     public BoutonArrondi Valider => _valider;
+
+    private FlowLayoutPanel _boutons = null!;
+
+    /// <summary>
+    /// Bouton entre « Annuler » et le bouton de validation (« Ajouter et en créer un autre ») : <paramref name="action"/> passe
+    /// par un service ; la fenêtre reste ouverte. En cas d'échec, le message s'affiche comme pour la validation.
+    /// </summary>
+    public BoutonArrondi BoutonEnPlus(string texte, Func<Task<ResultatOperation>> action)
+    {
+        var bouton = new BoutonArrondi(texte, StyleBouton.Secondaire) { Margin = new Padding(12, 0, 0, 0) };
+        bouton.Click += async (_, _) =>
+        {
+            bouton.Enabled = _valider.Enabled = false;
+            try
+            {
+                var resultat = await action();
+                Message(resultat.Reussi ? "" : resultat.Message);
+            }
+            catch (Exception ex)
+            {
+                Erreurs.Signaler(this, ex);
+            }
+            finally
+            {
+                if (!IsDisposed)
+                {
+                    bouton.Enabled = _valider.Enabled = true;
+                }
+            }
+        };
+        _boutons.Controls.Add(bouton);
+        _boutons.Controls.SetChildIndex(bouton, 1); // De droite à gauche : validation, ce bouton, Annuler.
+        return bouton;
+    }
+
+    /// <summary>Message sous les champs (erreur), ou vide pour l'effacer.</summary>
+    public void Message(string texte)
+    {
+        _message.Text = texte;
+        _message.Visible = texte.Length > 0;
+    }
 
     /// <summary>Ajoute un champ : libellé au-dessus, contrôle pleine largeur.</summary>
     public T Champ<T>(string libelle, T controle, int hauteur = Theme.HauteurChamp)

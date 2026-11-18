@@ -40,7 +40,10 @@ public sealed class ChoixCategorie : ControleDessine
     /// <summary>Nom de la catégorie choisie (« » si aucune).</summary>
     public string NomCategorie => Choisie?.Categorie.Nom ?? "";
 
-    private CategorieUsage? Choisie => _categories.FirstOrDefault(c => c.Categorie.Id == CategorieId);
+    /// <summary>Catégorie choisie (pictogramme et couleur de l'aperçu), ou null.</summary>
+    public Categorie? CategorieChoisie => Choisie?.Categorie;
+
+    private CategorieUsage? Choisie =>_categories.FirstOrDefault(c => c.Categorie.Id == CategorieId);
 
     private bool Ouvert => _menu is { Visible: true };
 

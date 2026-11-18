@@ -692,11 +692,19 @@ public sealed partial class ServiceInventaire(
     /// et le numéro suivant, dans la même forme (BLOC-034 → BLOC-035, A24 → A25). Catégorie vide : forme par défaut
     /// (A01 pour les détendeurs, S01 pour les gilets, BLOC-001…).
     /// </summary>
-    public async Task<string> ProposerCodeAsync(long categorieId, CancellationToken ct = default)
+    public Task<string> ProposerCodeAsync(long categorieId, CancellationToken ct = default) =>
+        ProposerCodeAsync(categorieId, null, ct);
+
+    /// <summary>
+    /// Comme <see cref="ProposerCodeAsync(long, CancellationToken)"/>, limité à un préfixe (« E » : détendeur enfant
+    /// E04 après E03 ; aucun code E encore : E01).
+    /// </summary>
+    public async Task<string> ProposerCodeAsync(long categorieId, string? prefixeVoulu, CancellationToken ct = default)
     {
+        prefixeVoulu = string.IsNullOrWhiteSpace(prefixeVoulu) ? null : prefixeVoulu.Trim().ToUpperInvariant();
         var codes = (await equipements.ListerInventaireAsync(null, categorieId, ct))
             .Select(l => DecouperCode(l.Code))
-            .Where(c => c is not null)
+            .Where(c => c is not null && (prefixeVoulu is null || c.Value.Prefixe == prefixeVoulu))
             .Select(c => c!.Value)
             .ToList();
         var tous = (await equipements.ListerInventaireAsync(null, null, ct)).Select(l => l.Code).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -716,7 +724,7 @@ public sealed partial class ServiceInventaire(
         else
         {
             var nom = (await categories.ListerAsync(ct)).FirstOrDefault(c => c.Id == categorieId)?.Nom ?? "";
-            prefixe = PrefixeDeCategorie(nom);
+            prefixe = prefixeVoulu ?? PrefixeDeCategorie(nom);
             var club = prefixe.Length == 1; // Étiquettes du club : A01, E01, S01.
             separateur = club ? "" : "-";
             suivant = 1;
